@@ -67,22 +67,28 @@ class BaseFalsa:
                 return self._con_totales(t)
         return None
 
+    PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio")
+
     def crear_trabajador(self, cedula, nombre, fecha_ingreso, saldo_inicial=None,
-                         fecha_saldo_inicial=None):
+                         fecha_saldo_inicial=None, perfil=None):
         if self.trabajador_por_cedula(cedula):
             raise RuntimeError("duplicate key value violates unique constraint")
         id_ = self._id()
+        perfil = perfil or {}
         self.trab[id_] = {"id": id_, "cedula": cedula, "nombre": nombre,
                           "fecha_ingreso": fecha_ingreso, "activo": True,
                           "fecha_salida": None, "saldo_inicial": saldo_inicial,
-                          "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now()}
+                          "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now(),
+                          **{k: perfil.get(k) for k in self.PERFIL}}
         return id_
 
     def poner_saldo_inicial(self, id_, saldo, fecha):
         self.trab[id_].update(saldo_inicial=saldo, fecha_saldo_inicial=fecha)
 
-    def editar_trabajador(self, id_, cedula, nombre, fecha_ingreso):
+    def editar_trabajador(self, id_, cedula, nombre, fecha_ingreso, perfil=None):
         self.trab[id_].update(cedula=cedula, nombre=nombre, fecha_ingreso=fecha_ingreso)
+        if perfil is not None:
+            self.trab[id_].update({k: perfil.get(k) for k in self.PERFIL})
 
     def dar_de_baja(self, id_, fecha_salida):
         self.trab[id_].update(activo=False, fecha_salida=fecha_salida)
@@ -95,14 +101,15 @@ class BaseFalsa:
         # el test la pruebe contra una base de verdad-de-mentira.
         nuevos = actualizados = 0
         for f in filas:
+            perfil = {k: f.get(k) for k in self.PERFIL}
             ex = self.trabajador_por_cedula(f["cedula"])
             if ex:
-                self.editar_trabajador(ex["id"], f["cedula"], f["nombre"], f["fecha_ingreso"])
+                self.editar_trabajador(ex["id"], f["cedula"], f["nombre"], f["fecha_ingreso"], perfil)
                 actualizados += 1
                 continue
             saldo = f.get("saldo")
             self.crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
-                                  saldo, hoy if saldo is not None else None)
+                                  saldo, hoy if saldo is not None else None, perfil)
             nuevos += 1
         return {"nuevos": nuevos, "actualizados": actualizados}
 

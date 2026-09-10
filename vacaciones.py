@@ -12,6 +12,9 @@ cada uno antes de que existiera: contabilidad carga cuántos le quedan HOY y
 desde ahí la cuenta sigue sola. Sin saldo al arrancar, se cuenta desde el
 ingreso.
 
+Si a un trabajador la empresa le da un número fijo por año (por antigüedad o
+por acuerdo), se guarda en `dias_por_anio` y manda ese en vez de la regla.
+
 El año en curso NO suma hasta que se cumple. Se muestra aparte, como
 «lleva X días del año que corre», para que el trabajador entienda por qué el
 saldo no sube todos los meses.
@@ -25,10 +28,15 @@ ANIOS_PARA_ADICIONAL = 5
 TOPE_ADICIONALES = 15
 
 
-def dias_del_anio(numero_de_anio: int) -> int:
-    """Cuántos días da el año N de trabajo (1 = el primero)."""
+def dias_del_anio(numero_de_anio: int, fijo: float | None = None) -> float:
+    """Cuántos días da el año N de trabajo (1 = el primero).
+
+    Con `fijo` (el número propio del trabajador) manda ése para todos los años.
+    """
     if numero_de_anio < 1:
         return 0
+    if fijo is not None:
+        return float(fijo)
     extra = max(0, numero_de_anio - ANIOS_PARA_ADICIONAL)
     return DIAS_BASE + min(extra, TOPE_ADICIONALES)
 
@@ -50,18 +58,18 @@ def anios_cumplidos(ingreso: date, hoy: date) -> int:
     return max(0, anios)
 
 
-def dias_ganados(ingreso: date, hoy: date) -> int:
+def dias_ganados(ingreso: date, hoy: date, fijo: float | None = None) -> float:
     """Suma de los días de cada año COMPLETO trabajado."""
-    return sum(dias_del_anio(k) for k in range(1, anios_cumplidos(ingreso, hoy) + 1))
+    return sum(dias_del_anio(k, fijo) for k in range(1, anios_cumplidos(ingreso, hoy) + 1))
 
 
-def dias_ganados_desde(ingreso: date, desde: date, hoy: date) -> int:
+def dias_ganados_desde(ingreso: date, desde: date, hoy: date, fijo: float | None = None) -> float:
     """Los días de los aniversarios que cayeron DESPUÉS de `desde` y hasta hoy.
 
     Es lo que se suma encima del saldo al arrancar: el aniversario del mismo
     día del arranque ya está adentro de ese saldo, así que no cuenta.
     """
-    return sum(dias_del_anio(k) for k in range(1, anios_cumplidos(ingreso, hoy) + 1)
+    return sum(dias_del_anio(k, fijo) for k in range(1, anios_cumplidos(ingreso, hoy) + 1)
                if _aniversario(ingreso, k) > desde)
 
 
@@ -69,7 +77,7 @@ def proximo_aniversario(ingreso: date, hoy: date) -> date:
     return _aniversario(ingreso, anios_cumplidos(ingreso, hoy) + 1)
 
 
-def dias_en_curso(ingreso: date, hoy: date) -> float:
+def dias_en_curso(ingreso: date, hoy: date, fijo: float | None = None) -> float:
     """Lo que lleva acumulado del año que todavía no cumplió (proporcional).
 
     Es informativo: no entra en el saldo hasta el aniversario.
@@ -81,7 +89,7 @@ def dias_en_curso(ingreso: date, hoy: date) -> float:
     hasta = _aniversario(ingreso, anios + 1)
     largo = (hasta - desde).days or 365
     pasados = (hoy - desde).days
-    return round(dias_del_anio(anios + 1) * pasados / largo, 1)
+    return round(dias_del_anio(anios + 1, fijo) * pasados / largo, 1)
 
 
 def dias_entre(desde: date, hasta: date) -> int:
@@ -96,12 +104,14 @@ def dias_entre(desde: date, hasta: date) -> int:
 
 
 def resumen(ingreso: date, tomados: float, ajustes: float, hoy: date,
-            saldo_inicial: float | None = None, fecha_saldo: date | None = None) -> dict:
+            saldo_inicial: float | None = None, fecha_saldo: date | None = None,
+            dias_por_anio: float | None = None) -> dict:
+    fijo = float(dias_por_anio) if dias_por_anio is not None else None
     if saldo_inicial is not None and fecha_saldo is not None:
-        ganados = dias_ganados_desde(ingreso, fecha_saldo, hoy)
+        ganados = dias_ganados_desde(ingreso, fecha_saldo, hoy, fijo)
         inicial = float(saldo_inicial)
     else:
-        ganados = dias_ganados(ingreso, hoy)
+        ganados = dias_ganados(ingreso, hoy, fijo)
         inicial = 0.0
     return {
         "anios": anios_cumplidos(ingreso, hoy),
@@ -111,7 +121,8 @@ def resumen(ingreso: date, tomados: float, ajustes: float, hoy: date,
         "ajustes": ajustes,
         "tomados": tomados,
         "saldo": inicial + ganados + ajustes - tomados,
-        "en_curso": dias_en_curso(ingreso, hoy),
+        "en_curso": dias_en_curso(ingreso, hoy, fijo),
         "proximo_aniversario": proximo_aniversario(ingreso, hoy),
-        "dias_proximo_anio": dias_del_anio(anios_cumplidos(ingreso, hoy) + 1),
+        "dias_proximo_anio": dias_del_anio(anios_cumplidos(ingreso, hoy) + 1, fijo),
+        "fijo": fijo,
     }

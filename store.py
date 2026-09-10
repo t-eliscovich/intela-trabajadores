@@ -106,8 +106,20 @@ ESQUEMA = """
         -- ahí en adelante la cuenta sigue sola. NULL = contar desde el ingreso.
         saldo_inicial        numeric(6,1),
         fecha_saldo_inicial  date,
+        -- El perfil. Todo opcional.
+        area              text,
+        fecha_nacimiento  date,
+        celular           text,
+        -- Días de vacaciones por año FIJOS para este trabajador (si la empresa
+        -- le da más que la ley, o distinto). NULL = la regla de la ley.
+        dias_por_anio     numeric(4,1),
         creado_en      timestamptz NOT NULL DEFAULT now()
     );
+    -- Columnas que se agregaron después del primer deploy (la tabla ya existía).
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS area text;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS fecha_nacimiento date;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS celular text;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS dias_por_anio numeric(4,1);
 
     -- Cada período de vacaciones tomado. `dias` se propone como los días
     -- corridos entre las dos fechas y contabilidad lo puede corregir.
@@ -189,20 +201,35 @@ def trabajador_por_cedula(cedula: str) -> dict | None:
     return _uno(_TRABAJADOR_CON_TOTALES + " WHERE t.cedula = %s", (cedula,))
 
 
+PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio")
+
+
 def crear_trabajador(cedula: str, nombre: str, fecha_ingreso: date,
                      saldo_inicial: float | None = None,
-                     fecha_saldo_inicial: date | None = None) -> int:
+                     fecha_saldo_inicial: date | None = None,
+                     perfil: dict | None = None) -> int:
+    perfil = perfil or {}
     fila = _ejecutar(
         "INSERT INTO trabajadores.trabajador "
-        "(cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial) "
-        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial))
+        "(cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial, "
+        " area, fecha_nacimiento, celular, dias_por_anio) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        (cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial,
+         *(perfil.get(k) for k in PERFIL)))
     return fila["id"]
 
 
-def editar_trabajador(id_: int, cedula: str, nombre: str, fecha_ingreso: date) -> None:
-    _ejecutar("UPDATE trabajadores.trabajador SET cedula=%s, nombre=%s, fecha_ingreso=%s "
-              "WHERE id=%s", (cedula, nombre, fecha_ingreso, id_))
+def editar_trabajador(id_: int, cedula: str, nombre: str, fecha_ingreso: date,
+                      perfil: dict | None = None) -> None:
+    """Datos básicos y, si viene `perfil`, también los del perfil (los cuatro:
+    lo que no venga queda en NULL — el formulario los manda siempre todos)."""
+    if perfil is None:
+        _ejecutar("UPDATE trabajadores.trabajador SET cedula=%s, nombre=%s, fecha_ingreso=%s "
+                  "WHERE id=%s", (cedula, nombre, fecha_ingreso, id_))
+    else:
+        _ejecutar("UPDATE trabajadores.trabajador SET cedula=%s, nombre=%s, fecha_ingreso=%s, "
+                  "area=%s, fecha_nacimiento=%s, celular=%s, dias_por_anio=%s WHERE id=%s",
+                  (cedula, nombre, fecha_ingreso, *(perfil.get(k) for k in PERFIL), id_))
 
 
 def poner_saldo_inicial(id_: int, saldo: float | None, fecha: date | None) -> None:
@@ -224,19 +251,20 @@ def cargar_lote(filas: list[dict], hoy: date) -> dict:
     """La carga masiva inicial. Cada fila: cedula, nombre, fecha_ingreso y,
     opcional, `saldo` (los días que le quedan HOY).
 
-    Si la cédula ya existe se actualizan nombre y fecha; el saldo sólo se
-    carga a los NUEVOS, para no pisarlo si se pega la planilla dos veces.
+    Si la cédula ya existe se actualizan nombre, fecha y perfil; el saldo sólo
+    se carga a los NUEVOS, para no pisarlo si se pega la planilla dos veces.
     """
     nuevos = actualizados = 0
     for f in filas:
+        perfil = {k: f.get(k) for k in PERFIL}
         existente = trabajador_por_cedula(f["cedula"])
         if existente:
-            editar_trabajador(existente["id"], f["cedula"], f["nombre"], f["fecha_ingreso"])
+            editar_trabajador(existente["id"], f["cedula"], f["nombre"], f["fecha_ingreso"], perfil)
             actualizados += 1
             continue
         saldo = f.get("saldo")
         crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
-                         saldo, hoy if saldo is not None else None)
+                         saldo, hoy if saldo is not None else None, perfil)
         nuevos += 1
     return {"nuevos": nuevos, "actualizados": actualizados}
 

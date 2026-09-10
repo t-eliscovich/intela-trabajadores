@@ -4,10 +4,10 @@
 <h1>Cargar la planilla <small>copiá las filas del Excel y pegalas acá</small></h1>
 
 <div class="bloque">
-  <div class="titulo"><h2>Pegá las filas</h2><p>Columnas, en este orden: <b>cédula · nombre · fecha de ingreso · días que ya tiene</b> (la última es opcional).</p></div>
+  <div class="titulo"><h2>Pegá las filas</h2><p>Columnas, en este orden: <b>cédula · nombre · fecha de ingreso · días que le quedan hoy · área · fecha de nacimiento · celular · días por año</b> (de la cuarta en adelante, opcionales).</p></div>
   <div class="relleno">
     <form method="POST">
-      <textarea name="texto" rows="8" placeholder="1712345678	Juan Pérez	25/03/2019	12
+      <textarea name="texto" rows="8" placeholder="1712345678	Juan Pérez	25/03/2019	12	Tejeduría	12/08/1990	0991234567	20
 0912345678	María López	01/08/2023">{{ texto }}</textarea>
       <p class="ayuda">Si la primera fila son los títulos, se salta sola. Los que ya están cargados se actualizan (nombre y fecha); el saldo sólo se carga a los nuevos. «Días que ya tiene» es el saldo de HOY: de ahí en adelante la cuenta sigue sola.</p>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
@@ -23,12 +23,13 @@
   <div class="titulo"><h2>Entran ({{ buenas|length }})</h2></div>
   <div class="desliza">
   <table>
-    <thead><tr><th>Fila</th><th>Cédula</th><th>Nombre</th><th>Ingreso</th><th class="der">Días que ya tiene</th><th></th></tr></thead>
+    <thead><tr><th>Fila</th><th>Cédula</th><th>Nombre</th><th>Ingreso</th><th class="der">Le quedan hoy</th><th>Área</th><th>Nacimiento</th><th>Celular</th><th class="der">Por año</th><th></th></tr></thead>
     <tbody>
     {% for b in buenas %}
       <tr>
         <td class="tenue">{{ b.fila }}</td><td>{{ b.cedula }}</td><td><b>{{ b.nombre }}</b></td>
         <td>{{ b.fecha_ingreso|fecha }}</td><td class="der">{% if b.saldo is not none %}{{ b.saldo|num(1) }}{% endif %}</td>
+        <td class="tenue">{{ b.area or '' }}</td><td class="tenue">{{ b.fecha_nacimiento|fecha if b.fecha_nacimiento else '' }}</td><td class="tenue">{{ b.celular or '' }}</td><td class="der tenue">{{ b.dias_por_anio|num(1) if b.dias_por_anio is not none else '' }}</td>
         <td>{% if b.cedula in existentes %}<span class="etiqueta">ya estaba · se actualiza</span>{% else %}<span class="etiqueta" style="background:#e8f8ee;color:#15803d">nuevo</span>{% endif %}</td>
       </tr>
     {% endfor %}

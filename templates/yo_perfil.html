@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titulo %}Perfil · {{ t.nombre }}{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block contenido %}
+{% include "_pestanas_yo.html" %}
+
+<div class="bloque">
+  <div class="titulo"><h2>{{ t.nombre }}</h2><p>{{ t.area or '' }}</p></div>
+  <table>
+    <tbody>
+      <tr><td class="tenue">Cédula</td><td><b>{{ t.cedula }}</b></td></tr>
+      {% if t.area %}<tr><td class="tenue">Área</td><td>{{ t.area }}</td></tr>{% endif %}
+      <tr><td class="tenue">En Intela desde</td><td>{{ t.fecha_ingreso|fecha }} <span class="chico">{{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }} cumplidos</span></td></tr>
+      <tr><td class="tenue">Vacaciones por año</td><td><b>{{ v.dias_proximo_anio|num(1) }}</b> días <span class="chico">{% if v.fijo is not none %}número fijo acordado{% else %}por ley: 15, y uno más por año desde el sexto{% endif %}</span></td></tr>
+      <tr><td class="tenue">Próximo aniversario</td><td>{{ v.proximo_aniversario|fecha }}</td></tr>
+      {% if t.fecha_nacimiento %}<tr><td class="tenue">Nacimiento</td><td>{{ t.fecha_nacimiento|fecha }}</td></tr>{% endif %}
+      {% if t.celular %}<tr><td class="tenue">Celular</td><td>{{ t.celular }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+  <div class="nota">Si algo está mal, avisale a contabilidad.</div>
+</div>
+{% endblock %}

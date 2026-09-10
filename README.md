@@ -9,6 +9,7 @@ con su cédula.
 **El trabajador** entra a `trabajadores.intela.com.ec`, pone su cédula y ve:
 
 - en la pestaña Vacaciones, cuántos días le quedan, cuándo se le suman los próximos y los períodos que tomó;
+- en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por año, sus datos;
 - primero, su calendario de comidas del mes: toca A (almuerzo) o C (cena) y queda marcado. Puede
   corregir los últimos 3 días; más atrás lo arregla contabilidad.
 
@@ -18,7 +19,8 @@ con su cédula.
 - la ficha de cada uno: cargar los períodos tomados, ajustes, el saldo con el
   que arrancó, editar datos, dar de baja;
 - **Cargar planilla**: pegar las filas del Excel (cédula · nombre · fecha de
-  ingreso · días que le quedan hoy) y cargar a todos de una vez;
+  ingreso · días que le quedan hoy · área · fecha de nacimiento · celular ·
+  días por año) y cargar a todos de una vez;
 - **Comidas del mes**: el cuadro trabajador × día, almuerzos y cenas por separado, que es lo
   que se le paga a la cafetería. Se imprime;
 - **Usuarios**: quién más entra a esta parte.
@@ -27,7 +29,8 @@ con su cédula.
 
 Código del Trabajo de Ecuador, art. 69: 15 días por cada año **completo**;
 desde el sexto año, un día más por cada año que pase de cinco (tope 30). El
-año en curso se muestra pero no suma hasta cumplirse.
+año en curso se muestra pero no suma hasta cumplirse. Si a alguien la empresa
+le da un número fijo por año (`dias_por_anio`), manda ése.
 
 Como el programa no sabe cuántos días tomó cada uno antes de existir,
 contabilidad carga el **saldo al arrancar** (los días que le quedan hoy) y de

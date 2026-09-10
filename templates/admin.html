@@ -11,9 +11,13 @@
       <div style="grid-column:span 2"><label class="campo">Nombre y apellido</label><input name="nombre" required></div>
       <div><label class="campo">Fecha de ingreso</label><input name="fecha_ingreso" placeholder="25/03/2024" required></div>
       <div><label class="campo">Días que le quedan hoy</label><input name="saldo" placeholder="vacío = contar desde el ingreso"></div>
+      <div><label class="campo">Área</label><input name="area" placeholder="tejeduría, tintorería…"></div>
+      <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" placeholder="12/08/1990"></div>
+      <div><label class="campo">Celular</label><input name="celular" placeholder="0991234567"></div>
+      <div><label class="campo">Días por año</label><input name="dias_por_anio" placeholder="vacío = por ley"></div>
       <div><button class="btn" type="submit">Agregar</button></div>
     </form>
-    <p class="ayuda" style="margin-top:8px">Si ya trabajaba, poné cuántos días de vacaciones le quedan hoy. De ahí en adelante la cuenta sigue sola.</p>
+    <p class="ayuda" style="margin-top:8px">Si ya trabajaba, poné cuántos días de vacaciones le quedan hoy: de ahí en adelante la cuenta sigue sola. «Días por año» sólo si la empresa le da un número fijo distinto al de la ley.</p>
   </div>
 </div>
 
@@ -26,8 +30,8 @@
   <div class="desliza">
   <table>
     <thead><tr>
-      <th>Nombre</th><th class="oculta-chico">Cédula</th><th class="oculta-chico">Ingreso</th>
-      <th class="der">Años</th><th class="der oculta-chico">Al arrancar</th><th class="der">Ganados</th><th class="der oculta-chico">Ajustes</th>
+      <th>Nombre</th><th class="oculta-chico">Cédula</th><th class="oculta-chico">Área</th><th class="oculta-chico">Ingreso</th>
+      <th class="der">Años</th><th class="der oculta-chico">Por año</th><th class="der oculta-chico">Al arrancar</th><th class="der">Ganados</th><th class="der oculta-chico">Ajustes</th>
       <th class="der">Tomados</th><th class="der">Saldo</th>
     </tr></thead>
     <tbody>
@@ -36,8 +40,10 @@
         <td><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
             {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}</td>
         <td class="oculta-chico tenue">{{ f.cedula }}</td>
+        <td class="oculta-chico tenue">{{ f.area or '' }}</td>
         <td class="oculta-chico tenue">{{ f.fecha_ingreso|fecha }}</td>
         <td class="der">{{ f.v.anios }}</td>
+        <td class="der oculta-chico tenue">{{ f.v.dias_proximo_anio|num(1) }}{% if f.v.fijo is not none %} <span class="chico">fijo</span>{% endif %}</td>
         <td class="der oculta-chico tenue">{% if f.v.fecha_saldo %}{{ f.v.inicial|num(1) }} <span class="chico">{{ f.v.fecha_saldo|fecha }}</span>{% endif %}</td>
         <td class="der">{{ f.v.ganados|num }}</td>
         <td class="der oculta-chico tenue">{{ f.v.ajustes|num(1) if f.v.ajustes else '' }}</td>
@@ -48,7 +54,7 @@
     </tbody>
   </table>
   </div>
-  <div class="nota">15 días por cada año cumplido; desde el sexto año, uno más por año (tope 30). Saldo = al arrancar + ganados desde entonces + ajustes − tomados.</div>
+  <div class="nota">15 días por cada año cumplido; desde el sexto año, uno más por año (tope 30), salvo que el trabajador tenga un número fijo. Saldo = al arrancar + ganados desde entonces + ajustes − tomados.</div>
   {% else %}
   <div class="vacio"><h3>Todavía no hay trabajadores</h3><p>Agregá uno arriba o pegá la planilla completa.</p></div>
   {% endif %}

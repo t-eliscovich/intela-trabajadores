@@ -2,7 +2,7 @@
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block contenido %}
 <h1>{{ t.nombre }}
-  <small>cédula {{ t.cedula }} · desde el {{ t.fecha_ingreso|fecha }}</small>
+  <small>cédula {{ t.cedula }}{% if t.area %} · {{ t.area }}{% endif %} · desde el {{ t.fecha_ingreso|fecha }}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
   {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
 </h1>
 
@@ -17,7 +17,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
   <div class="bloque">
-    <div class="titulo"><h2>Vacaciones tomadas</h2><p>El {{ v.proximo_aniversario|fecha }} gana {{ v.dias_proximo_anio }} días más.</p></div>
+    <div class="titulo"><h2>Vacaciones tomadas</h2><p>El {{ v.proximo_aniversario|fecha }} gana {{ v.dias_proximo_anio|num(1) }} días más{% if v.fijo is not none %} (número fijo){% endif %}.</p></div>
     <div class="relleno">
       <form method="POST" class="formulario">
         <input type="hidden" name="accion" value="vacacion">
@@ -87,7 +87,12 @@
           <div><label class="campo">Cédula</label><input name="cedula" value="{{ t.cedula }}" required></div>
           <div style="grid-column:span 2"><label class="campo">Nombre</label><input name="nombre" value="{{ t.nombre }}" required></div>
           <div><label class="campo">Ingreso</label><input name="fecha_ingreso" value="{{ t.fecha_ingreso|fecha }}" required></div>
+          <div><label class="campo">Área</label><input name="area" value="{{ t.area or '' }}"></div>
+          <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" value="{{ t.fecha_nacimiento|fecha if t.fecha_nacimiento else '' }}"></div>
+          <div><label class="campo">Celular</label><input name="celular" value="{{ t.celular or '' }}"></div>
+          <div><label class="campo">Días de vacaciones por año</label><input name="dias_por_anio" value="{{ t.dias_por_anio|num(1) if t.dias_por_anio is not none else '' }}" placeholder="vacío = por ley"></div>
           <div><button class="btn suave" type="submit">Guardar</button></div>
+          <p class="ayuda ancho">«Días por año» sólo si la empresa le da un número fijo (por antigüedad o acuerdo). Vacío = 15, y uno más por año desde el sexto.</p>
         </form>
       </div>
     </details>

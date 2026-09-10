@@ -23,14 +23,14 @@ A.ERROR_ARRANQUE = None
 hoy = A.hoy()
 
 # (cédula, nombre, ingreso, saldo de HOY según contabilidad; None = sin dato)
-GENTE = [("1712345678", "Juan Pérez", date(2017, 3, 25), 26),
-         ("0912345678", "María López", date(2023, 8, 1), None),
-         ("1103456789", "Carlos Andrade", date(2012, 11, 2), 21),
-         ("0603456789", "Rosa Quishpe", date(2025, 6, 16), None),
-         ("1723456789", "Luis Tipán", date(2019, 1, 7), 3)]
+GENTE = [("1712345678", "Juan Pérez", date(2017, 3, 25), 26, {"area": "Tejeduría", "fecha_nacimiento": date(1990, 8, 12), "celular": "0991234567", "dias_por_anio": 20}),
+         ("0912345678", "María López", date(2023, 8, 1), None, {"area": "Tintorería"}),
+         ("1103456789", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "Acabado", "dias_por_anio": 22}),
+         ("0603456789", "Rosa Quishpe", date(2025, 6, 16), None, {}),
+         ("1723456789", "Luis Tipán", date(2019, 1, 7), 3, {"area": "Oficina", "celular": "0987654321"})]
 ids = {}
-for ced, nom, ing, saldo in GENTE:
-    ids[nom] = base.crear_trabajador(ced, nom, ing, saldo, date(2026, 9, 1) if saldo is not None else None)
+for ced, nom, ing, saldo, perfil in GENTE:
+    ids[nom] = base.crear_trabajador(ced, nom, ing, saldo, date(2026, 9, 1) if saldo is not None else None, perfil)
 base.agregar_ajuste(ids["Carlos Andrade"], -3, "3 días pagados en plata", "conta")
 base.agregar_vacacion(ids["Juan Pérez"], date(2026, 9, 7), date(2026, 9, 13), 7, "pidió la mitad", "conta")
 base.agregar_vacacion(ids["Juan Pérez"], date(2026, 2, 2), date(2026, 2, 16), 15, "", "conta")
@@ -63,6 +63,7 @@ guardar("entrar", c.get("/").get_data(as_text=True))
 c.post("/", data={"cedula": "1712345678"})
 guardar("yo", c.get("/yo").get_data(as_text=True))
 guardar("yo_vacaciones", c.get("/yo/vacaciones").get_data(as_text=True))
+guardar("yo_perfil", c.get("/yo/perfil").get_data(as_text=True))
 
 # contabilidad
 c = A.app.test_client()

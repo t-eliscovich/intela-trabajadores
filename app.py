@@ -5,6 +5,7 @@ Para el trabajador (desde el celular, sólo con la cédula):
     /            poner la cédula
     /yo             su calendario de comidas (almuerzo y cena) — la primera pantalla
     /yo/vacaciones  cuántos días le quedan
+    /yo/perfil      quién es para la empresa: área, desde cuándo, cuántos días gana por año
 
 Para contabilidad (con usuario y clave):
 
@@ -195,7 +196,24 @@ def mes_siguiente(anio: int, mes: int) -> str:
 
 def _resumen(t: dict) -> dict:
     return vacaciones.resumen(t["fecha_ingreso"], float(t["tomados"]), float(t["ajustes"]), hoy(),
-                              t.get("saldo_inicial"), t.get("fecha_saldo_inicial"))
+                              t.get("saldo_inicial"), t.get("fecha_saldo_inicial"),
+                              t.get("dias_por_anio"))
+
+
+def leer_perfil(f) -> dict:
+    """Los cuatro datos opcionales del perfil, desde un formulario o una fila pegada.
+    Vacío → None. Lo que viene mal, avisa en castellano."""
+    area = (f.get("area") or "").strip() or None
+    nac = (f.get("fecha_nacimiento") or "").strip()
+    nac = leer_fecha(nac) if nac else None
+    if nac and (nac > hoy() or nac.year < 1920):
+        raise ValueError(f"La fecha de nacimiento no puede ser {nac.strftime('%d/%m/%Y')}.")
+    cel = re.sub(r"[^\d+]", "", f.get("celular") or "") or None
+    dpa = (f.get("dias_por_anio") or "").strip()
+    dpa = leer_decimal(dpa, "Los días por año") if dpa else None
+    if dpa is not None and not 0 < dpa <= 60:
+        raise ValueError("Los días por año tienen que estar entre 1 y 60.")
+    return {"area": area, "fecha_nacimiento": nac, "celular": cel, "dias_por_anio": dpa}
 
 
 @app.template_filter("num")
@@ -310,6 +328,14 @@ def yo_comida():
     return redirect(url_for("yo", mes=f"{fecha.year}-{fecha.month:02d}"))
 
 
+@app.route("/yo/perfil")
+def yo_perfil():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    return render_template("yo_perfil.html", t=t, v=_resumen(t))
+
+
 @app.route("/salir")
 def salir():
     session.pop("trabajador_id", None)
@@ -354,7 +380,8 @@ def admin():
             saldo = (request.form.get("saldo") or "").strip()
             saldo = leer_decimal(saldo, "El saldo") if saldo else None
             id_ = store.crear_trabajador(cedula, nombre, ingreso, saldo,
-                                         hoy() if saldo is not None else None)
+                                         hoy() if saldo is not None else None,
+                                         leer_perfil(request.form))
             flash(f"{nombre} cargado.", "ok")
             return redirect(url_for("admin_trabajador", id_=id_))
         except ValueError as exc:
@@ -398,7 +425,7 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         if otro and otro["id"] != t["id"]:
             raise ValueError(f"La cédula {cedula} ya es de {otro['nombre']}.")
         ingreso = leer_fecha(f.get("fecha_ingreso", ""))
-        store.editar_trabajador(t["id"], cedula, nombre, ingreso)
+        store.editar_trabajador(t["id"], cedula, nombre, ingreso, leer_perfil(f))
         flash("Datos guardados.", "ok")
     elif accion == "saldo_inicial":
         saldo = (f.get("saldo") or "").strip()
@@ -462,7 +489,8 @@ def _separador(linea: str) -> str:
 
 
 def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
-    """Cada fila: cédula · nombre · fecha de ingreso · [saldo de días].
+    """Cada fila: cédula · nombre · fecha de ingreso · [saldo de días] · [área]
+    · [fecha de nacimiento] · [celular] · [días por año].
 
     Devuelve (buenas, descartadas). Si la primera fila tiene letras donde va
     la cédula, es un título y se salta.
@@ -477,7 +505,7 @@ def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
         celdas = [c.strip().strip('"') for c in linea.split(sep)]
         if n == 1 and not re.search(r"\d", celdas[0]):
             continue  # la fila de títulos
-        celdas += [""] * (4 - len(celdas))
+        celdas += [""] * (8 - len(celdas))
         try:
             cedula = limpiar_cedula(celdas[0])
             nombre = celdas[1]
@@ -487,11 +515,13 @@ def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
             if ingreso > hoy():
                 raise ValueError("La fecha de ingreso es futura.")
             saldo = leer_decimal(celdas[3], "El saldo") if celdas[3] else None
+            perfil = leer_perfil({"area": celdas[4], "fecha_nacimiento": celdas[5],
+                                  "celular": celdas[6], "dias_por_anio": celdas[7]})
             if cedula in vistas:
                 raise ValueError("Cédula repetida en la planilla.")
             vistas.add(cedula)
             buenas.append({"cedula": cedula, "nombre": nombre, "fecha_ingreso": ingreso,
-                           "saldo": saldo, "fila": n})
+                           "saldo": saldo, "fila": n, **perfil})
         except ValueError as exc:
             malas.append({"fila": n, "texto": linea.strip()[:80], "motivo": str(exc)})
     return buenas, malas
