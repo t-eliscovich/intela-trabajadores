@@ -15,6 +15,11 @@ PORT = int(os.environ.get("TRABAJADORES_PORT", "5005"))
 # Después los usuarios se manejan desde /admin/usuarios y esto se puede borrar.
 ADMIN_INICIAL = os.environ.get("TRABAJADORES_ADMIN_INICIAL", "")
 
+# Cuántos días queda entrado el trabajador después de poner la cédula. Es su
+# celular: no tiene que escribirla todos los días. Contabilidad NO: su sesión
+# se cierra al cerrar el navegador.
+DIAS_SESION_TRABAJADOR = int(os.environ.get("TRABAJADORES_DIAS_SESION", "30"))
+
 # Zona horaria de la fábrica. El server está en UTC; a partir de las 19:00 de
 # Ecuador «hoy» ya es mañana en UTC, y el check del almuerzo caería en el día
 # equivocado.

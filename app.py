@@ -37,6 +37,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=config.DIAS_SESION_TRABAJADOR)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
@@ -248,6 +249,7 @@ def entrar():
             return render_template("entrar.html")
         session.clear()
         session["trabajador_id"] = t["id"]
+        session.permanent = True  # 30 días sin volver a poner la cédula
         return redirect(url_for("yo"))
     return render_template("entrar.html")
 
@@ -323,6 +325,7 @@ def admin_entrar():
         u = store.usuario_por_nombre((request.form.get("usuario") or "").strip().lower())
         if u and check_password_hash(u["clave_hash"], request.form.get("clave") or ""):
             session["usuario"] = {"id": u["id"], "usuario": u["usuario"], "nombre": u["nombre"]}
+            session.permanent = False  # contabilidad: se cierra con el navegador
             return redirect(_adonde_iba() or url_for("admin"))
         flash("Usuario o clave incorrectos.", "error")
     return render_template("admin_entrar.html")
