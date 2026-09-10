@@ -23,7 +23,7 @@ Invoke-WebRequest -UseBasicParsing -Uri "$raw/instalar.ps1?cb=$cb" -OutFile C:\t
 Invoke-WebRequest -UseBasicParsing -Uri "$raw/prender_auto_update.ps1?cb=$cb" -OutFile C:\trabajadores_update\prender_auto_update.ps1 -Headers @{ 'Cache-Control' = 'no-cache' }
 
 # La base: las mismas DB_* de Programa Core (variables de maquina o su .env).
-function Var($n) {
+function LeerVar($n) {
   $v = [Environment]::GetEnvironmentVariable($n, "Machine")
   if (-not $v -and (Test-Path C:\programa-core\.env)) {
     $l = Get-Content C:\programa-core\.env | Where-Object { $_ -match "^$n=" } | Select-Object -First 1
@@ -31,7 +31,7 @@ function Var($n) {
   }
   return $v
 }
-$h = Var "DB_HOST"; $d = Var "DB_NAME"; $u = Var "DB_USER"; $p = Var "DB_PASSWORD"; $port = Var "DB_PORT"
+$h = LeerVar "DB_HOST"; $d = LeerVar "DB_NAME"; $u = LeerVar "DB_USER"; $p = LeerVar "DB_PASSWORD"; $port = LeerVar "DB_PORT"
 if (-not $port) { $port = "5432" }
 if (-not ($h -and $d -and $u -and $p)) { throw "no encontre DB_HOST/DB_NAME/DB_USER/DB_PASSWORD de Programa Core" }
 $pEnc = [Uri]::EscapeDataString($p)
