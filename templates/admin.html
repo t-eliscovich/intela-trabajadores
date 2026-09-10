@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titulo %}Trabajadores{% endblock %}
+{% block contenido %}
+<h1>Trabajadores <small>{{ filas|length }} {{ 'en total' if incluir else 'activos' }}</small></h1>
+
+<div class="bloque">
+  <div class="titulo"><h2>Agregar uno</h2><p>Para cargar a muchos de una vez, <a href="{{ url_for('admin_carga') }}">pegá la planilla</a>.</p></div>
+  <div class="relleno">
+    <form method="POST" class="formulario">
+      <div><label class="campo">Cédula</label><input name="cedula" inputmode="numeric" required></div>
+      <div style="grid-column:span 2"><label class="campo">Nombre y apellido</label><input name="nombre" required></div>
+      <div><label class="campo">Fecha de ingreso</label><input name="fecha_ingreso" placeholder="25/03/2024" required></div>
+      <div><label class="campo">Días que le quedan hoy</label><input name="saldo" placeholder="vacío = contar desde el ingreso"></div>
+      <div><button class="btn" type="submit">Agregar</button></div>
+    </form>
+    <p class="ayuda" style="margin-top:8px">Si ya trabajaba, poné cuántos días de vacaciones le quedan hoy. De ahí en adelante la cuenta sigue sola.</p>
+  </div>
+</div>
+
+<div class="bloque">
+  <div class="titulo">
+    <h2>Saldo de vacaciones</h2>
+    <p>{% if incluir %}<a href="{{ url_for('admin') }}">Ver sólo activos</a>{% else %}<a href="{{ url_for('admin', todos=1) }}">Ver también los dados de baja</a>{% endif %}</p>
+  </div>
+  {% if filas %}
+  <div class="desliza">
+  <table>
+    <thead><tr>
+      <th>Nombre</th><th class="oculta-chico">Cédula</th><th class="oculta-chico">Ingreso</th>
+      <th class="der">Años</th><th class="der oculta-chico">Al arrancar</th><th class="der">Ganados</th><th class="der oculta-chico">Ajustes</th>
+      <th class="der">Tomados</th><th class="der">Saldo</th>
+    </tr></thead>
+    <tbody>
+    {% for f in filas %}
+      <tr>
+        <td><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
+            {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}</td>
+        <td class="oculta-chico tenue">{{ f.cedula }}</td>
+        <td class="oculta-chico tenue">{{ f.fecha_ingreso|fecha }}</td>
+        <td class="der">{{ f.v.anios }}</td>
+        <td class="der oculta-chico tenue">{% if f.v.fecha_saldo %}{{ f.v.inicial|num(1) }} <span class="chico">{{ f.v.fecha_saldo|fecha }}</span>{% endif %}</td>
+        <td class="der">{{ f.v.ganados|num }}</td>
+        <td class="der oculta-chico tenue">{{ f.v.ajustes|num(1) if f.v.ajustes else '' }}</td>
+        <td class="der">{{ f.v.tomados|num(1) }}</td>
+        <td class="der"><b class="{{ 'negativo' if f.v.saldo < 0 }}">{{ f.v.saldo|num(1) }}</b></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="nota">15 días por cada año cumplido; desde el sexto año, uno más por año (tope 30). Saldo = al arrancar + ganados desde entonces + ajustes − tomados.</div>
+  {% else %}
+  <div class="vacio"><h3>Todavía no hay trabajadores</h3><p>Agregá uno arriba o pegá la planilla completa.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

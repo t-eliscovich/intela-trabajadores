@@ -1,0 +1,59 @@
+{# El calendario de comidas de un mes. Cada día tiene dos botones, A (almuerzo)
+   y C (cena): tocarlo marca o desmarca. Se usa dos veces: en la pantalla del
+   trabajador (`accion_url` es /yo/comida y sólo se pueden tocar los últimos
+   días) y en la ficha de contabilidad (se puede tocar cualquier día).
+   Variables: semanas, marcados (set de (fecha, tipo)), totales, anio, mes,
+   anterior, siguiente, accion_url, desde_cuando (o none) #}
+<div class="bloque">
+  <div class="titulo">
+    <h2>Comidas</h2>
+    <p>{{ MESES[mes]|capitalize }}: <b>{{ totales.almuerzo }}</b> almuerzos · <b>{{ totales.cena }}</b> cenas</p>
+  </div>
+  <div class="relleno">
+    <div class="mes-nav" style="margin-bottom:8px">
+      <a href="?mes={{ anterior }}">‹</a>
+      <b>{{ MESES[mes]|capitalize }} {{ anio }}</b>
+      <a href="?mes={{ siguiente }}">›</a>
+    </div>
+    <table class="calendario">
+      <thead><tr>{% for d in DIAS_CORTOS %}<th>{{ d }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for semana in semanas %}
+        <tr>
+        {% for d in semana %}
+          <td>
+          {% if d %}
+            {% set puede = d <= hoy and (desde_cuando is none or d >= desde_cuando) %}
+            <div class="dia {{ 'hoy' if d == hoy }} {{ 'fuera' if not puede }} {{ 'finde' if d.weekday() >= 5 }}">
+              <span class="numero">{{ d.day }}</span>
+              {% for tipo, letra in TIPOS_COMIDA %}
+                {% set marcado = (d, tipo) in marcados %}
+                {% if puede %}
+                <form method="POST" action="{{ accion_url }}">
+                  <input type="hidden" name="fecha" value="{{ d.isoformat() }}">
+                  <input type="hidden" name="tipo" value="{{ tipo }}">
+                  <input type="hidden" name="accion" value="{{ 'desmarcar' if marcado else 'marcar' }}">
+                  <input type="hidden" name="mes" value="{{ anio }}-{{ '%02d' % mes }}">
+                  <button type="submit" class="comida {{ 'marcado' if marcado }}"
+                          title="{{ tipo|capitalize }} del {{ d|fecha }}{{ ' · sacar' if marcado }}">{{ letra }}</button>
+                </form>
+                {% else %}
+                <span class="comida {{ 'marcado' if marcado }}">{{ letra }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endif %}
+          </td>
+        {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="leyenda" style="margin-top:8px">
+      <span><b>A</b> almuerzo · <b>C</b> cena</span>
+      <span><i class="marcado"></i> comió</span>
+      <span><i></i> no marcó</span>
+      {% if desde_cuando is not none %}<span><i class="fuera"></i> ya no se puede tocar</span>{% endif %}
+    </div>
+  </div>
+</div>

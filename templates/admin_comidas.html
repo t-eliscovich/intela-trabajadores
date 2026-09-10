@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block titulo %}Comidas {{ MESES[mes] }}{% endblock %}
+{% block contenido %}
+<h1>Comidas <small>lo que se le paga a la cafetería</small>
+  <span class="no-imprime" style="margin-left:auto;display:flex;align-items:center;gap:10px">
+    <span class="mes-nav" style="gap:10px"><a href="{{ url_for('admin_comidas', mes=anterior) }}">‹</a><b>{{ MESES[mes]|capitalize }} {{ anio }}</b><a href="{{ url_for('admin_comidas', mes=siguiente) }}">›</a></span>
+    <button class="btn suave chico" type="button" onclick="window.print()">Imprimir</button>
+  </span>
+</h1>
+
+<div class="cifras">
+  <div class="cifra"><b class="grande">{{ totales.almuerzo|num }}</b><small>Almuerzos</small></div>
+  <div class="cifra"><b class="grande">{{ totales.cena|num }}</b><small>Cenas</small></div>
+  <div class="cifra"><b>{{ totales.total|num }}</b><small>Comidas en {{ MESES[mes] }}</small></div>
+  <div class="cifra"><b>{{ filas|length }}</b><small>Personas</small></div>
+</div>
+
+<div class="bloque">
+  {% if filas %}
+  <div class="desliza">
+  <table class="cuadro">
+    <thead><tr>
+      <th>Nombre</th>
+      {% for d in dias %}<th class="{{ 'finde' if d.weekday() >= 5 }}" title="{{ d|fecha }}">{{ d.day }}<span class="chico">{{ DIAS_CORTOS[d.weekday()] }}</span></th>{% endfor %}
+      <th class="total">A</th><th class="total">C</th>
+    </tr></thead>
+    <tbody>
+    {% for f in filas %}
+      <tr>
+        <td><a href="{{ url_for('admin_trabajador', id_=f.t.id, mes=anio ~ '-' ~ '%02d' % mes) }}">{{ f.t.nombre }}</a></td>
+        {% for d in dias %}
+          <td class="{{ 'finde' if d.weekday() >= 5 }}">
+            <div class="par">
+            {% for tipo, letra in TIPOS_COMIDA %}
+              {% set si = (d, tipo) in f.marcados %}
+              <form method="POST" class="enlinea">
+                <input type="hidden" name="trabajador_id" value="{{ f.t.id }}">
+                <input type="hidden" name="fecha" value="{{ d.isoformat() }}">
+                <input type="hidden" name="tipo" value="{{ tipo }}">
+                <input type="hidden" name="mes" value="{{ anio }}-{{ '%02d' % mes }}">
+                <input type="hidden" name="accion" value="{{ 'desmarcar' if si else 'marcar' }}">
+                <button class="celda {{ 'si' if si }}" title="{{ f.t.nombre }} · {{ tipo }} · {{ d|fecha }}">{{ letra }}</button>
+              </form>
+            {% endfor %}
+            </div>
+          </td>
+        {% endfor %}
+        <td class="total">{{ f.totales.almuerzo }}</td>
+        <td class="total">{{ f.totales.cena }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <td class="total">Por día <span class="chico">A / C</span></td>
+      {% for d in dias %}<td class="total {{ 'finde' if d.weekday() >= 5 }}"><span class="pordia">{{ por_dia[d].almuerzo or '' }}</span><span class="pordia tenue">{{ por_dia[d].cena or '' }}</span></td>{% endfor %}
+      <td class="total">{{ totales.almuerzo }}</td><td class="total">{{ totales.cena }}</td>
+    </tr></tfoot>
+  </table>
+  </div>
+  <div class="nota">A = almuerzo, C = cena. Tocá una celda para marcar o sacar. Lo que marca cada trabajador desde su celular aparece acá al instante.</div>
+  {% else %}
+  <div class="vacio"><h3>No hay nadie para mostrar en {{ MESES[mes] }}</h3></div>
+  {% endif %}
+</div>
+{% endblock %}

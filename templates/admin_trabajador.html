@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block titulo %}{{ t.nombre }}{% endblock %}
+{% block contenido %}
+<h1>{{ t.nombre }}
+  <small>cédula {{ t.cedula }} · desde el {{ t.fecha_ingreso|fecha }}</small>
+  {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
+</h1>
+
+<div class="cifras">
+  <div class="cifra"><b class="grande {{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b><small>Saldo</small></div>
+  {% if v.fecha_saldo %}<div class="cifra"><b>{{ v.inicial|num(1) }}</b><small>Al arrancar ({{ v.fecha_saldo|fecha }})</small></div>{% endif %}
+  <div class="cifra"><b>{{ v.ganados|num }}</b><small>Ganados{% if v.fecha_saldo %} desde entonces{% else %} ({{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }}){% endif %}</small></div>
+  <div class="cifra"><b>{{ v.ajustes|num(1) }}</b><small>Ajustes</small></div>
+  <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados</small></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
+<div>
+  <div class="bloque">
+    <div class="titulo"><h2>Vacaciones tomadas</h2><p>El {{ v.proximo_aniversario|fecha }} gana {{ v.dias_proximo_anio }} días más.</p></div>
+    <div class="relleno">
+      <form method="POST" class="formulario">
+        <input type="hidden" name="accion" value="vacacion">
+        <div><label class="campo">Desde</label><input name="desde" placeholder="01/02/2026" required></div>
+        <div><label class="campo">Hasta</label><input name="hasta" placeholder="15/02/2026" required></div>
+        <div><label class="campo">Días</label><input name="dias" placeholder="se calculan solos"></div>
+        <div style="grid-column:span 2"><label class="campo">Nota</label><input name="nota"></div>
+        <div><button class="btn" type="submit">Cargar</button></div>
+      </form>
+      <p class="ayuda" style="margin-top:8px">Los días se cuentan corridos, con el fin de semana. Si fue distinto, escribí el número.</p>
+    </div>
+    {% if vacaciones %}
+    <table>
+      <thead><tr><th>Desde</th><th>Hasta</th><th class="der">Días</th><th>Nota</th><th></th></tr></thead>
+      <tbody>
+      {% for x in vacaciones %}
+        <tr>
+          <td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td>
+          <td class="der"><b>{{ x.dias|num(1) }}</b></td>
+          <td class="tenue">{{ x.nota or '' }}{% if v.fecha_saldo and x.desde < v.fecha_saldo %} <span class="etiqueta">antes del arranque · ya descontado</span>{% endif %} <span class="chico">cargó {{ x.cargado_por }}</span></td>
+          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="vacacion_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" title="Borrar este período">×</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="nota">Todavía no tomó vacaciones.</div>{% endif %}
+  </div>
+
+  <div class="bloque">
+    <div class="titulo"><h2>Ajustes</h2><p>Días que suman o restan sin ser un período: saldo viejo, días pagados, correcciones.</p></div>
+    <div class="relleno">
+      <form method="POST" class="formulario">
+        <input type="hidden" name="accion" value="ajuste">
+        <div><label class="campo">Días (− para restar)</label><input name="dias" placeholder="-3" required></div>
+        <div style="grid-column:span 2"><label class="campo">Motivo</label><input name="motivo" required></div>
+        <div><button class="btn suave" type="submit">Cargar ajuste</button></div>
+      </form>
+    </div>
+    {% if ajustes %}
+    <table>
+      <tbody>
+      {% for x in ajustes %}
+        <tr>
+          <td class="der" style="width:70px"><b>{{ '+' if x.dias > 0 }}{{ x.dias|num(1) }}</b></td>
+          <td>{{ x.motivo }} <span class="chico">{{ x.creado_en|fecha }} · {{ x.cargado_por }}</span></td>
+          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="ajuste_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" title="Borrar este ajuste">×</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<div>
+  {% with accion_url=url_for('admin_trabajador', id_=t.id), desde_cuando=none %}
+    {% include "_calendario.html" %}
+  {% endwith %}
+  <div class="nota" style="margin:-8px 0 12px;background:none;border:0;padding:0 4px">Acá se puede tocar cualquier día. El trabajador sólo los últimos días.</div>
+
+  <div class="bloque">
+    <details>
+      <summary>Editar los datos</summary>
+      <div class="relleno">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="editar">
+          <div><label class="campo">Cédula</label><input name="cedula" value="{{ t.cedula }}" required></div>
+          <div style="grid-column:span 2"><label class="campo">Nombre</label><input name="nombre" value="{{ t.nombre }}" required></div>
+          <div><label class="campo">Ingreso</label><input name="fecha_ingreso" value="{{ t.fecha_ingreso|fecha }}" required></div>
+          <div><button class="btn suave" type="submit">Guardar</button></div>
+        </form>
+      </div>
+    </details>
+    <details>
+      <summary>Saldo al arrancar</summary>
+      <div class="relleno">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="saldo_inicial">
+          <div><label class="campo">Días que le quedaban</label><input name="saldo" value="{{ t.saldo_inicial|num(1) if t.saldo_inicial is not none else '' }}"></div>
+          <div><label class="campo">Ese día</label><input name="fecha" value="{{ (t.fecha_saldo_inicial or hoy)|fecha }}"></div>
+          <div><button class="btn suave" type="submit">Guardar</button></div>
+          <p class="ayuda ancho">Los días que tenía cuando se lo cargó al programa. Desde esa fecha la cuenta sigue sola; los períodos anteriores no se restan. Vacío = contar desde el ingreso.</p>
+        </form>
+      </div>
+    </details>
+    <details>
+      <summary>{{ 'Volver a activar' if not t.activo else 'Dar de baja' }}</summary>
+      <div class="relleno">
+        {% if t.activo %}
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="baja">
+          <div><label class="campo">Fecha de salida</label><input name="fecha_salida" value="{{ hoy|fecha }}" required></div>
+          <div><button class="btn rojo" type="submit">Dar de baja</button></div>
+          <p class="ayuda ancho">No se borra nada: deja de poder entrar y sale de la lista. Se puede volver a activar.</p>
+        </form>
+        {% else %}
+        <form method="POST"><input type="hidden" name="accion" value="reactivar"><button class="btn suave" type="submit">Volver a activar</button></form>
+        {% endif %}
+      </div>
+    </details>
+  </div>
+</div>
+</div>
+{% endblock %}

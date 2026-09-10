@@ -1,0 +1,26 @@
+name: Tests
+
+# Corre en cada push. NO deploya: al server lo actualiza él solo tirando de
+# este repo (scripts/auto_update.ps1), así que acá no hace falta ninguna
+# credencial de AWS. Si esto falla, el auto-update igual hace su propio
+# health check y vuelve atrás si la app no levanta.
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias
+        run: pip install --quiet -r requirements.txt
+      - name: Sintaxis de Python
+        run: python -m py_compile app.py store.py vacaciones.py config.py launch.py scripts/*.py
+      - name: Tests (incluye que cada template se parsee)
+        run: python scripts/test_trabajadores.py

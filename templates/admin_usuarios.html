@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Usuarios{% endblock %}
+{% block contenido %}
+<h1>Usuarios <small>quién entra a la parte de contabilidad</small></h1>
+
+<div class="bloque">
+  <div class="titulo"><h2>Crear uno</h2></div>
+  <div class="relleno">
+    <form method="POST" class="formulario" autocomplete="off">
+      <input type="hidden" name="accion" value="crear">
+      <div><label class="campo">Usuario</label><input name="usuario" placeholder="mariana" required autocapitalize="none"></div>
+      <div><label class="campo">Nombre</label><input name="nombre" placeholder="Mariana"></div>
+      <div><label class="campo">Clave</label><input name="clave" type="password" required minlength="6"></div>
+      <div><button class="btn" type="submit">Crear</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="bloque">
+  <table>
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Estado</th><th>Nueva clave</th><th></th></tr></thead>
+    <tbody>
+    {% for u in usuarios %}
+      <tr>
+        <td><b>{{ u.usuario }}</b></td>
+        <td>{{ u.nombre }}</td>
+        <td>{% if u.activo %}activo{% else %}<span class="etiqueta baja">desactivado</span>{% endif %}</td>
+        <td>
+          <form method="POST" style="display:flex;gap:6px;max-width:300px" autocomplete="off">
+            <input type="hidden" name="accion" value="clave"><input type="hidden" name="id" value="{{ u.id }}">
+            <input name="clave" type="password" placeholder="mínimo 6" minlength="6" required style="height:30px;font-size:14px">
+            <button class="btn suave chico" type="submit">Cambiar</button>
+          </form>
+        </td>
+        <td class="der">
+          <form method="POST" class="enlinea">
+            <input type="hidden" name="accion" value="{{ 'desactivar' if u.activo else 'activar' }}"><input type="hidden" name="id" value="{{ u.id }}">
+            <button class="btn {{ 'rojo' if u.activo else 'suave' }} chico" type="submit">{{ 'Desactivar' if u.activo else 'Activar' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

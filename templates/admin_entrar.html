@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contabilidad — Trabajadores Intela</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#0f2942;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .caja{background:#fff;border-radius:12px;padding:20px;width:300px;
+        box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  h1{font-size:12px;letter-spacing:.14em;font-weight:800;color:#0f2942;margin:0 0 12px;text-align:center}
+  input{width:100%;box-sizing:border-box;height:38px;padding:0 11px;font-size:16px;border:1px solid #d1d5db;
+        border-radius:8px;margin-bottom:8px}
+  button{width:100%;height:38px;border:0;border-radius:8px;background:#2563eb;color:#fff;
+         font-size:15px;font-weight:700;cursor:pointer}
+  .flash{background:#fee2e2;color:#b91c1c;padding:8px;border-radius:8px;margin-bottom:10px;
+         font-size:13px;text-align:center}
+  .pie{font-size:12px;text-align:center;margin-top:10px}
+  .pie a{color:#64748b}
+</style>
+</head>
+<body>
+  <form class="caja" method="POST">
+    <h1>CONTABILIDAD · TRABAJADORES</h1>
+    {% with m = get_flashed_messages() %}
+      {% for x in m %}<div class="flash">{{ x }}</div>{% endfor %}
+    {% endwith %}
+    <input type="text" name="usuario" placeholder="Usuario" autofocus required autocapitalize="none">
+    <input type="password" name="clave" placeholder="Clave" required>
+    <button type="submit">Entrar</button>
+    <div class="pie"><a href="{{ url_for('entrar') }}">Soy trabajador</a></div>
+  </form>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block contenido %}
+<div class="bloque" style="margin-top:24px">
+  <div class="relleno">
+    <h1 style="margin-bottom:4px">Poné tu cédula</h1>
+    <p class="tenue" style="margin:0 0 14px">Para ver tus vacaciones y marcar tus almuerzos.</p>
+    <form method="POST" class="formulario">
+      <div class="ancho">
+        <input type="text" name="cedula" inputmode="numeric" autocomplete="off"
+               placeholder="Ej: 1712345678" autofocus required
+               style="height:48px;font-size:22px;letter-spacing:.06em;text-align:center">
+      </div>
+      <div class="ancho">
+        <button class="btn" type="submit" style="width:100%;height:48px;font-size:17px">Entrar</button>
+      </div>
+    </form>
+  </div>
+  <div class="nota">Sos de contabilidad: <a href="{{ url_for('admin_entrar') }}">entrá por acá</a>.</div>
+</div>
+{% endblock %}
