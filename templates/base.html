@@ -144,6 +144,12 @@
   .celda:hover{border-color:var(--acento)}
   .cuadro .pordia{display:block;line-height:1.2}
 
+  /* ---------- pestañas del trabajador ---------- */
+  .pestanas{display:flex;gap:6px;margin-bottom:12px}
+  .pestanas a{flex:1;text-align:center;padding:9px 12px;border-radius:999px;background:var(--papel);
+        border:1px solid var(--borde);text-decoration:none;color:var(--azul);font-weight:700;font-size:14px}
+  .pestanas a.activa{background:var(--azul);color:#fff;border-color:var(--azul)}
+
   .mensaje{padding:10px 14px;border-radius:9px;margin-bottom:11px;font-weight:600;font-size:14px}
   .mensaje.ok{background:#e8f8ee;color:#15803d}
   .mensaje.error{background:#fdeaea;color:#b91c1c}

@@ -1,29 +1,9 @@
 {% extends "base.html" %}
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block clase_hoja %}angosta{% endblock %}
-{% block barra_derecha %}<div class="quien"><a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
 {% block contenido %}
-<h1 style="margin-bottom:10px">{{ t.nombre }} <small>en Intela desde el {{ t.fecha_ingreso|fecha }}</small></h1>
-
-<div class="cifras">
-  <div class="cifra">
-    <b class="grande {{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b>
-    <small>Días de vacaciones</small>
-  </div>
-  <div class="cifra"><b>{{ (v.inicial + v.ganados)|num(1) }}</b><small>Ganados</small></div>
-  <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados</small></div>
-</div>
-
-<div class="bloque">
-  <div class="nota" style="border-top:0">
-    Llevás <b>{{ v.anios }}</b> {{ 'año' if v.anios == 1 else 'años' }} cumplidos.
-    El {{ v.proximo_aniversario|fecha }} se suman <b>{{ v.dias_proximo_anio }}</b> días más
-    (ya llevás {{ v.en_curso|num(1) }} de ese año).
-    {% if v.ajustes %}<br>Ajustes de contabilidad: {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} días.{% endif %}
-  </div>
-</div>
-
+{% include "_pestanas_yo.html" %}
 <div class="aviso">Cada día, tocá <b>A</b> si almorzaste y <b>C</b> si cenaste. Podés corregir los últimos {{ (hoy - desde_cuando).days }} días.</div>
-
 {% with accion_url=url_for('yo_comida') %}{% include "_calendario.html" %}{% endwith %}
 {% endblock %}

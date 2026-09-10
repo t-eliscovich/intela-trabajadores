@@ -62,6 +62,7 @@ c = A.app.test_client()
 guardar("entrar", c.get("/").get_data(as_text=True))
 c.post("/", data={"cedula": "1712345678"})
 guardar("yo", c.get("/yo").get_data(as_text=True))
+guardar("yo_vacaciones", c.get("/yo/vacaciones").get_data(as_text=True))
 
 # contabilidad
 c = A.app.test_client()

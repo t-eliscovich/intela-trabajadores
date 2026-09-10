@@ -8,8 +8,8 @@ con su cédula.
 
 **El trabajador** entra a `trabajadores.intela.com.ec`, pone su cédula y ve:
 
-- cuántos días de vacaciones le quedan (y cuándo se le suman los próximos);
-- su calendario de comidas del mes: toca A (almuerzo) o C (cena) y queda marcado. Puede
+- en la pestaña Vacaciones, cuántos días le quedan, cuándo se le suman los próximos y los períodos que tomó;
+- primero, su calendario de comidas del mes: toca A (almuerzo) o C (cena) y queda marcado. Puede
   corregir los últimos 3 días; más atrás lo arregla contabilidad.
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:

@@ -3,7 +3,8 @@
 Para el trabajador (desde el celular, sólo con la cédula):
 
     /            poner la cédula
-    /yo          sus vacaciones y su calendario de comidas (almuerzo y cena)
+    /yo             su calendario de comidas (almuerzo y cena) — la primera pantalla
+    /yo/vacaciones  cuántos días le quedan
 
 Para contabilidad (con usuario y clave):
 
@@ -269,10 +270,19 @@ def yo():
     marcados = store.comidas_del_mes(t["id"], anio, mes)
     h = hoy()
     return render_template(
-        "yo.html", t=t, v=_resumen(t), anio=anio, mes=mes,
+        "yo.html", t=t, anio=anio, mes=mes,
         semanas=calendario(anio, mes), marcados=marcados, totales=_totales(marcados),
         desde_cuando=h - timedelta(days=DIAS_ATRAS),
         anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
+
+
+@app.route("/yo/vacaciones")
+def yo_vacaciones():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    return render_template("yo_vacaciones.html", t=t, v=_resumen(t),
+                           vacaciones=store.vacaciones(t["id"]))
 
 
 @app.route("/yo/comida", methods=["POST"])

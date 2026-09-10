@@ -1,0 +1,4 @@
+<div class="pestanas">
+  <a href="{{ url_for('yo') }}" class="{{ 'activa' if request.endpoint == 'yo' }}">Comidas</a>
+  <a href="{{ url_for('yo_vacaciones') }}" class="{{ 'activa' if request.endpoint == 'yo_vacaciones' }}">Vacaciones</a>
+</div>
