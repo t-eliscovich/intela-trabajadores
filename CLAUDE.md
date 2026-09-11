@@ -28,8 +28,13 @@ planillas con cédulas, nada de claves.
 **La cuenta de vacaciones vive en `vacaciones.py` y tiene tests.** Cambiar una
 regla = cambiar el test primero.
 
+**Las vacaciones van por AÑO CALENDARIO, no por aniversario** (decisión
+11/09/2026, para calzar con la planilla de contabilidad: el 1 de enero se
+acredita el año entero; el año de ingreso, 1,25 por mes). La fórmula del
+Excel `clamp(2026 − añoRef − 4, 0, 15)` es la misma ley, verificado en 112 filas.
+
 **El saldo al arrancar es una foto.** `saldo_inicial` + `fecha_saldo_inicial`
-en `trabajador`. Los aniversarios anteriores a esa fecha NO suman y los
+en `trabajador`. Lo acreditado antes de esa fecha NO suma y los
 períodos anteriores NO restan: ya están adentro de ese número. No convertirlo
 en un ajuste: se probó y la lista quedaba con «231 ganados, −210 ajustes».
 
