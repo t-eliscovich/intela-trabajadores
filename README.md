@@ -27,10 +27,11 @@ con su cédula.
 
 ## La cuenta de vacaciones
 
-Código del Trabajo de Ecuador, art. 69: 15 días por cada año **completo**;
-desde el sexto año, un día más por cada año que pase de cinco (tope 30). El
-año en curso se muestra pero no suma hasta cumplirse. Si a alguien la empresa
-le da un número fijo por año (`dias_por_anio`), manda ése.
+Por año calendario, como la planilla de contabilidad: cada 1 de enero se
+acreditan los días del año — 15 (Código del Trabajo, art. 69), más uno por
+cada año de antigüedad que pase de cinco, tope 30. El año de ingreso,
+proporcional: 1,25 por mes cumplido. Si a alguien la empresa le da un número
+fijo por año (`dias_por_anio`), manda ése.
 
 Como el programa no sabe cuántos días tomó cada uno antes de existir,
 contabilidad carga el **saldo al arrancar** (los días que le quedan hoy) y de
