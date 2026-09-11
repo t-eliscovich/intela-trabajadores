@@ -12,8 +12,8 @@
       <tr><td class="tenue">Cédula</td><td><b>{{ t.cedula }}</b></td></tr>
       {% if t.area %}<tr><td class="tenue">Área</td><td>{{ t.area }}</td></tr>{% endif %}
       <tr><td class="tenue">En Intela desde</td><td>{{ t.fecha_ingreso|fecha }} <span class="chico">{{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }} cumplidos</span></td></tr>
-      <tr><td class="tenue">Vacaciones por año</td><td><b>{{ v.dias_proximo_anio|num(1) }}</b> días <span class="chico">{% if v.fijo is not none %}número fijo acordado{% else %}por ley: 15, y uno más por año desde el sexto{% endif %}</span></td></tr>
-      <tr><td class="tenue">Próximo aniversario</td><td>{{ v.proximo_aniversario|fecha }}</td></tr>
+      <tr><td class="tenue">Vacaciones este año</td><td><b>{{ v.este_anio|num(1) }}</b> días <span class="chico">{% if v.fijo is not none %}número fijo acordado{% else %}por ley: 15, y uno más por cada año de antigüedad que pase de cinco{% endif %}</span></td></tr>
+      <tr><td class="tenue">Próxima acreditación</td><td>{{ v.proxima_carga|fecha }} <span class="chico">{{ v.proxima_cantidad|num(2) }} días</span></td></tr>
       {% if t.fecha_nacimiento %}<tr><td class="tenue">Nacimiento</td><td>{{ t.fecha_nacimiento|fecha }}</td></tr>{% endif %}
       {% if t.celular %}<tr><td class="tenue">Celular</td><td>{{ t.celular }}</td></tr>{% endif %}
     </tbody>
