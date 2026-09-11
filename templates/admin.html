@@ -31,7 +31,7 @@
   <table>
     <thead><tr>
       <th>Nombre</th><th class="oculta-chico">Cédula</th><th class="oculta-chico">Área</th><th class="oculta-chico">Ingreso</th>
-      <th class="der">Años</th><th class="der oculta-chico">Por año</th><th class="der oculta-chico">Al arrancar</th><th class="der">Ganados</th><th class="der oculta-chico">Ajustes</th>
+      <th class="der">Años</th><th class="der oculta-chico">Este año</th><th class="der oculta-chico">Al arrancar</th><th class="der">Ganados</th><th class="der oculta-chico">Ajustes</th>
       <th class="der">Tomados</th><th class="der">Saldo</th>
     </tr></thead>
     <tbody>
@@ -43,7 +43,7 @@
         <td class="oculta-chico tenue">{{ f.area or '' }}</td>
         <td class="oculta-chico tenue">{{ f.fecha_ingreso|fecha }}</td>
         <td class="der">{{ f.v.anios }}</td>
-        <td class="der oculta-chico tenue">{{ f.v.dias_proximo_anio|num(1) }}{% if f.v.fijo is not none %} <span class="chico">fijo</span>{% endif %}</td>
+        <td class="der oculta-chico tenue">{{ f.v.este_anio|num(1) }}{% if f.v.fijo is not none %} <span class="chico">fijo</span>{% endif %}</td>
         <td class="der oculta-chico tenue">{% if f.v.fecha_saldo %}{{ f.v.inicial|num(1) }} <span class="chico">{{ f.v.fecha_saldo|fecha }}</span>{% endif %}</td>
         <td class="der">{{ f.v.ganados|num }}</td>
         <td class="der oculta-chico tenue">{{ f.v.ajustes|num(1) if f.v.ajustes else '' }}</td>
@@ -54,7 +54,7 @@
     </tbody>
   </table>
   </div>
-  <div class="nota">15 días por cada año cumplido; desde el sexto año, uno más por año (tope 30), salvo que el trabajador tenga un número fijo. Saldo = al arrancar + ganados desde entonces + ajustes − tomados.</div>
+  <div class="nota">Cada 1 de enero se acreditan los días del año: 15, más uno por cada año de antigüedad que pase de cinco (tope 30); el año de ingreso, 1,25 por mes. Saldo = al arrancar + acreditado desde entonces + ajustes − tomados.</div>
   {% else %}
   <div class="vacio"><h3>Todavía no hay trabajadores</h3><p>Agregá uno arriba o pegá la planilla completa.</p></div>
   {% endif %}
