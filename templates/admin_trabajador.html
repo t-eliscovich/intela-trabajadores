@@ -9,7 +9,7 @@
 <div class="cifras">
   <div class="cifra"><b class="grande {{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b><small>Saldo</small></div>
   {% if v.fecha_saldo %}<div class="cifra"><b>{{ v.inicial|num(1) }}</b><small>Al arrancar ({{ v.fecha_saldo|fecha }})</small></div>{% endif %}
-  <div class="cifra"><b>{{ v.ganados|num }}</b><small>Ganados{% if v.fecha_saldo %} desde entonces{% else %} ({{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }}){% endif %}</small></div>
+  <div class="cifra"><b>{{ v.ganados|num }}</b><small>Acreditados{% if v.fecha_saldo %} desde entonces{% else %} desde el ingreso{% endif %}</small></div>
   <div class="cifra"><b>{{ v.ajustes|num(1) }}</b><small>Ajustes</small></div>
   <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados</small></div>
 </div>
@@ -17,7 +17,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
   <div class="bloque">
-    <div class="titulo"><h2>Vacaciones tomadas</h2><p>El {{ v.proximo_aniversario|fecha }} gana {{ v.dias_proximo_anio|num(1) }} días más{% if v.fijo is not none %} (número fijo){% endif %}.</p></div>
+    <div class="titulo"><h2>Vacaciones tomadas</h2><p>Este año le tocan {{ v.este_anio|num(1) }}{% if v.fijo is not none %} (fijo){% endif %}. El {{ v.proxima_carga|fecha }} se acreditan {{ v.proxima_cantidad|num(2) }} más.</p></div>
     <div class="relleno">
       <form method="POST" class="formulario">
         <input type="hidden" name="accion" value="vacacion">
@@ -92,7 +92,7 @@
           <div><label class="campo">Celular</label><input name="celular" value="{{ t.celular or '' }}"></div>
           <div><label class="campo">Días de vacaciones por año</label><input name="dias_por_anio" value="{{ t.dias_por_anio|num(1) if t.dias_por_anio is not none else '' }}" placeholder="vacío = por ley"></div>
           <div><button class="btn suave" type="submit">Guardar</button></div>
-          <p class="ayuda ancho">«Días por año» sólo si la empresa le da un número fijo (por antigüedad o acuerdo). Vacío = 15, y uno más por año desde el sexto.</p>
+          <p class="ayuda ancho">«Días por año» sólo si la empresa le da un número fijo (por antigüedad o acuerdo). Vacío = por ley: 15, y uno más por cada año de antigüedad que pase de cinco.</p>
         </form>
       </div>
     </details>
