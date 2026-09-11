@@ -74,4 +74,5 @@ guardar("admin_trabajador", c.get(f"/admin/trabajador/{ids['Juan Pérez']}").get
 guardar("admin_comidas", c.get("/admin/comidas").get_data(as_text=True))
 r = c.post("/admin/carga", data={"texto": "Cédula\tNombre\tIngreso\tSaldo\n1712345678\tJuan Pérez\t25/03/2017\t4\n1801234567\tAna Yánez\t03/02/2020\t2\nabc\tSin cédula\t01/01/2020", "confirmar": "0"})
 guardar("admin_carga", r.get_data(as_text=True))
+guardar("admin_carga_vacaciones", c.post("/admin/carga?que=vacaciones", data={"texto": "1712345678\t02/02/2026\t16/02/2026\n1712345678\t19/02/2026\t19/02/2026\t1\tpermiso\n0000000000\t01/01/2026\t02/01/2026", "confirmar": "0"}).get_data(as_text=True))
 guardar("admin_usuarios", c.get("/admin/usuarios").get_data(as_text=True))
