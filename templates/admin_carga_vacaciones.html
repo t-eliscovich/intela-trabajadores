@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titulo %}Cargar vacaciones tomadas{% endblock %}
+{% block contenido %}
+<h1>Cargar vacaciones tomadas <small>la historia, de una vez</small></h1>
+<div class="pestanas" style="max-width:520px">
+  <a href="{{ url_for('admin_carga') }}">Trabajadores</a>
+  <a href="{{ url_for('admin_carga', que='vacaciones') }}" class="activa">Vacaciones tomadas</a>
+</div>
+
+<div class="bloque">
+  <div class="titulo"><h2>Pegá las filas</h2><p>Columnas, en este orden: <b>cédula · desde · hasta · días · nota</b> (días y nota, opcionales).</p></div>
+  <div class="relleno">
+    <form method="POST" action="{{ url_for('admin_carga', que='vacaciones') }}">
+      <textarea name="texto" rows="8" placeholder="1712345678	02/02/2026	16/02/2026	15
+1712345678	19/02/2026	19/02/2026	1	permiso">{{ texto }}</textarea>
+      <p class="ayuda">Sin días, se cuentan corridos entre las dos fechas. Un período que ya está cargado (mismo trabajador, desde y hasta) se saltea: se puede pegar dos veces sin duplicar. Los períodos anteriores al saldo al arrancar quedan como historia y no se restan.</p>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn suave" type="submit" name="confirmar" value="0">Ver qué entendí</button>
+        {% if buenas %}<button class="btn" type="submit" name="confirmar" value="1">Cargar {{ buenas|length }} {{ 'período' if buenas|length == 1 else 'períodos' }}</button>{% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if buenas %}
+<div class="bloque">
+  <div class="titulo"><h2>Entran ({{ buenas|length }})</h2><p>{{ buenas|map(attribute='dias')|sum|num(1) }} días en total</p></div>
+  <div class="desliza">
+  <table>
+    <thead><tr><th>Fila</th><th>Cédula</th><th>Nombre</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th>Nota</th></tr></thead>
+    <tbody>
+    {% for b in buenas %}
+      <tr><td class="tenue">{{ b.fila }}</td><td>{{ b.cedula }}</td><td><b>{{ b.nombre }}</b></td><td>{{ b.desde|fecha }}</td><td>{{ b.hasta|fecha }}</td><td class="der">{{ b.dias|num(1) }}</td><td class="tenue">{{ b.nota }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% if malas %}
+<div class="bloque">
+  <div class="titulo"><h2>Quedan afuera ({{ malas|length }})</h2><p>Arreglalas y volvé a pegar.</p></div>
+  <table>
+    <tbody>
+    {% for m in malas %}
+      <tr><td class="tenue" style="width:50px">{{ m.fila }}</td><td><code>{{ m.texto }}</code></td><td class="negativo">{{ m.motivo }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

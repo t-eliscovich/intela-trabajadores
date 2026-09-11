@@ -527,12 +527,70 @@ def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
     return buenas, malas
 
 
+def leer_pegado_vacaciones(texto: str, por_cedula: dict) -> tuple[list[dict], list[dict]]:
+    """Períodos tomados, para cargar la historia de una vez. Cada fila:
+    cédula · desde · hasta · [días] · [nota]. Los días, si no vienen, son los
+    corridos entre las dos fechas."""
+    lineas = [ln for ln in (texto or "").splitlines() if ln.strip()]
+    if not lineas:
+        return [], []
+    sep = _separador(lineas[0])
+    buenas, malas = [], []
+    for n, linea in enumerate(lineas, start=1):
+        celdas = [c.strip().strip('"') for c in linea.split(sep)]
+        if n == 1 and not re.search(r"\d", celdas[0]):
+            continue
+        celdas += [""] * (5 - len(celdas))
+        try:
+            cedula = limpiar_cedula(celdas[0])
+            t = por_cedula.get(cedula)
+            if not t:
+                raise ValueError("No hay ningún trabajador con esa cédula.")
+            desde, hasta = leer_fecha(celdas[1]), leer_fecha(celdas[2])
+            propuesto = vacaciones.dias_entre(desde, hasta)
+            dias = leer_decimal(celdas[3], "Los días") if celdas[3] else float(propuesto)
+            if dias <= 0:
+                raise ValueError("Los días tienen que ser más que cero.")
+            buenas.append({"fila": n, "cedula": cedula, "trabajador_id": t["id"], "nombre": t["nombre"],
+                           "desde": desde, "hasta": hasta, "dias": dias, "nota": celdas[4][:120]})
+        except ValueError as exc:
+            malas.append({"fila": n, "texto": linea.strip()[:80], "motivo": str(exc)})
+    return buenas, malas
+
+
+def cargar_vacaciones_lote(filas: list[dict], quien: str) -> dict:
+    """Carga los períodos que no estén ya (mismo trabajador, desde y hasta)."""
+    nuevos = repetidos = 0
+    ya: dict[int, set] = {}
+    for f in filas:
+        tid = f["trabajador_id"]
+        if tid not in ya:
+            ya[tid] = {(v["desde"], v["hasta"]) for v in store.vacaciones(tid)}
+        if (f["desde"], f["hasta"]) in ya[tid]:
+            repetidos += 1
+            continue
+        store.agregar_vacacion(tid, f["desde"], f["hasta"], f["dias"], f["nota"], quien)
+        ya[tid].add((f["desde"], f["hasta"]))
+        nuevos += 1
+    return {"nuevos": nuevos, "repetidos": repetidos}
+
+
 @app.route("/admin/carga", methods=["GET", "POST"])
 @requiere_admin
 def admin_carga():
+    que = request.values.get("que", "trabajadores")
     texto = request.form.get("texto", "") if request.method == "POST" else ""
+    confirmar = request.method == "POST" and request.form.get("confirmar") == "1"
+    if que == "vacaciones":
+        por_cedula = {t["cedula"]: t for t in store.trabajadores(incluir_inactivos=True)}
+        buenas, malas = leer_pegado_vacaciones(texto, por_cedula) if texto else ([], [])
+        if confirmar and buenas:
+            r = cargar_vacaciones_lote(buenas, g.usuario["usuario"])
+            flash(f"Listo: {r['nuevos']} períodos cargados, {r['repetidos']} ya estaban.", "ok")
+            return redirect(url_for("admin"))
+        return render_template("admin_carga_vacaciones.html", texto=texto, buenas=buenas, malas=malas)
     buenas, malas = leer_pegado(texto) if texto else ([], [])
-    if request.method == "POST" and request.form.get("confirmar") == "1" and buenas:
+    if confirmar and buenas:
         r = store.cargar_lote(buenas, hoy())
         flash(f"Listo: {r['nuevos']} nuevos, {r['actualizados']} actualizados.", "ok")
         return redirect(url_for("admin"))

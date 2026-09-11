@@ -2,6 +2,10 @@
 {% block titulo %}Cargar planilla{% endblock %}
 {% block contenido %}
 <h1>Cargar la planilla <small>copiá las filas del Excel y pegalas acá</small></h1>
+<div class="pestanas" style="max-width:520px">
+  <a href="{{ url_for('admin_carga') }}" class="activa">Trabajadores</a>
+  <a href="{{ url_for('admin_carga', que='vacaciones') }}">Vacaciones tomadas</a>
+</div>
 
 <div class="bloque">
   <div class="titulo"><h2>Pegá las filas</h2><p>Columnas, en este orden: <b>cédula · nombre · fecha de ingreso · días que le quedan hoy · área · fecha de nacimiento · celular · días por año</b> (de la cuarta en adelante, opcionales).</p></div>

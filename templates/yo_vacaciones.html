@@ -17,8 +17,7 @@
 <div class="bloque">
   <div class="nota" style="border-top:0">
     En Intela desde el {{ t.fecha_ingreso|fecha }}: <b>{{ v.anios }}</b> {{ 'año' if v.anios == 1 else 'años' }} cumplidos.<br>
-    El {{ v.proximo_aniversario|fecha }} se suman <b>{{ v.dias_proximo_anio }}</b> días más
-    (ya llevás {{ v.en_curso|num(1) }} de ese año).
+    Este año te tocan <b>{{ v.este_anio|num(1) }}</b> días. El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.
     {% if v.ajustes %}<br>Ajustes de contabilidad: {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} días.{% endif %}
   </div>
 </div>
