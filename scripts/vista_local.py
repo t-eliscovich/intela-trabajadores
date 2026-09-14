@@ -26,7 +26,7 @@ hoy = A.hoy()
 GENTE = [("1712345678", "Juan Pérez", date(2017, 3, 25), 26, {"area": "Tejeduría", "fecha_nacimiento": date(1990, 8, 12), "celular": "0991234567", "dias_por_anio": 20}),
          ("0912345678", "María López", date(2023, 8, 1), None, {"area": "Tintorería"}),
          ("1103456789", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "Acabado", "dias_por_anio": 22}),
-         ("0603456789", "Rosa Quishpe", date(2025, 6, 16), None, {}),
+         ("0603456789", "Rosa Quishpe", date(2026, 3, 16), None, {}),
          ("1723456789", "Luis Tipán", date(2019, 1, 7), 3, {"area": "Oficina", "celular": "0987654321"})]
 ids = {}
 for ced, nom, ing, saldo, perfil in GENTE:

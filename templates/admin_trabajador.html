@@ -18,7 +18,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
   <div class="bloque">
-    <div class="titulo"><h2>Días tomados</h2><p>Este año le tocan {{ v.este_anio|num(1) }}{% if v.fijo is not none %} (fijo){% endif %}. El {{ v.proxima_carga|fecha }} se acreditan {{ v.proxima_cantidad|num(2) }} más.</p></div>
+    <div class="titulo"><h2>Días tomados</h2><p>Este año le tocan {{ v.este_anio|num(1) }}{% if v.fijo is not none %} (fijo){% endif %}. El {{ v.proxima_carga|fecha }}{% if v.proxima_tipo == 'aniversario' %} (cumple el año){% endif %} se acreditan {{ v.proxima_cantidad|num(2) }} más.</p></div>
     <div class="relleno">
       <form method="POST" class="formulario">
         <input type="hidden" name="accion" value="vacacion">

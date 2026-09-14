@@ -7,8 +7,8 @@ Cuántos días da el año Y (Código del Trabajo de Ecuador, art. 69):
   * 15 días.
   * Más 1 por cada año de antigüedad que pase de cinco: extra = Y − año de
     ingreso − 5, entre 0 y 15 (tope 30 en total).
-  * El año en que ingresó, proporcional: 1,25 días por cada mes cumplido
-    (15 / 12), que se van acreditando mes a mes.
+  * El primer año no suma nada. Al cumplir el año se acreditan los 15 de una
+    (sin prorrateo: decisión de Tamara, 14/09/2026). Después, cada 1 de enero.
 
 Saldo = saldo al arrancar + días acreditados desde entonces + ajustes − tomados.
 
@@ -18,11 +18,11 @@ desde ahí la cuenta sigue sola. Sin saldo al arrancar, se cuenta desde el
 ingreso como si nunca hubiera tomado.
 
 Si a un trabajador la empresa le da un número fijo por año (`dias_por_anio`),
-manda ése en vez de la regla (también para el proporcional del primer año).
+manda ése en vez de la regla (también al cumplir el primer año).
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 DIAS_BASE = 15
 ANIOS_PARA_ADICIONAL = 5
@@ -34,7 +34,7 @@ def dias_del_periodo(ingreso: date, anio: int, fijo: float | None = None) -> flo
     """Cuántos días da el año calendario `anio` a alguien que ingresó en `ingreso`.
 
     Es el año COMPLETO (para el año de ingreso, lo que daría entero: el
-    proporcional lo calcula `acreditado_hasta`).
+    primer año lo maneja `acreditado_hasta`: nada hasta el aniversario).
     """
     if anio < ingreso.year:
         return 0.0
@@ -44,35 +44,25 @@ def dias_del_periodo(ingreso: date, anio: int, fijo: float | None = None) -> flo
     return float(min(TOPE_TOTAL, DIAS_BASE + extra))
 
 
-def meses_cumplidos(desde: date, hasta: date) -> int:
-    """Meses enteros entre dos fechas (el día del mes tiene que llegar)."""
-    if hasta < desde:
-        return 0
-    meses = (hasta.year - desde.year) * 12 + (hasta.month - desde.month)
-    if hasta.day < desde.day:
-        meses -= 1
-    return max(0, meses)
+def primer_aniversario(ingreso: date) -> date:
+    try:
+        return date(ingreso.year + 1, ingreso.month, ingreso.day)
+    except ValueError:  # 29 de febrero
+        return date(ingreso.year + 1, 3, 1)
 
 
 def acreditado_hasta(ingreso: date, fecha: date, fijo: float | None = None) -> float:
     """Todo lo acreditado desde el ingreso hasta `fecha` inclusive.
 
-    Años enteros posteriores al de ingreso: el 1 de enero se acredita el año
-    completo. El año de ingreso: 1,25 (o fijo/12) por cada mes cumplido, hasta
-    el 31/12 de ese año como máximo.
+    El primer año no suma nada: el día que cumple el año se acreditan los 15
+    (o el fijo) DE UNA (decisión Tamara 14/09/2026, sin prorrateo). De ahí en
+    adelante, cada 1 de enero el año completo, empezando por el año siguiente
+    al del aniversario (el año del aniversario ya quedó cubierto por esos 15).
     """
-    if fecha < ingreso:
+    if fecha < primer_aniversario(ingreso):
         return 0.0
-    total = 0.0
-    # el año de ingreso, mes a mes
-    # Un mes se da por cumplido al terminar el día anterior a la misma fecha
-    # del mes siguiente: así el que entró el 1 de mayo tiene los 8 meses el
-    # 31 de diciembre, y no el 1 de enero (que ya es otro año).
-    fin_primer_anio = min(fecha, date(ingreso.year, 12, 31)) + timedelta(days=1)
-    por_mes = dias_del_periodo(ingreso, ingreso.year, fijo) / 12
-    total += round(por_mes * meses_cumplidos(ingreso, fin_primer_anio), 2)
-    # los años siguientes, enteros el 1 de enero
-    for anio in range(ingreso.year + 1, fecha.year + 1):
+    total = dias_del_periodo(ingreso, ingreso.year + 1, fijo)
+    for anio in range(ingreso.year + 2, fecha.year + 1):
         total += dias_del_periodo(ingreso, anio, fijo)
     return round(total, 2)
 
@@ -97,15 +87,11 @@ def anios_cumplidos(ingreso: date, hoy: date) -> int:
 
 
 def proxima_carga(ingreso: date, hoy: date) -> tuple[date, float, str]:
-    """Cuándo y cuánto es lo próximo que se acredita, y de qué tipo
-    ('anio' = el 1 de enero, 'mes' = el proporcional del primer año)."""
-    if hoy.year == ingreso.year and hoy >= ingreso:
-        m = meses_cumplidos(ingreso, hoy) + 1
-        anio, mes = ingreso.year + (ingreso.month + m - 1) // 12, (ingreso.month + m - 1) % 12 + 1
-        if anio == ingreso.year:
-            dia = min(ingreso.day, [31, 29 if anio % 4 == 0 and (anio % 100 != 0 or anio % 400 == 0) else 28,
-                                    31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mes - 1])
-            return date(anio, mes, dia), round(dias_del_periodo(ingreso, ingreso.year) / 12, 2), "mes"
+    """Cuándo y cuánto es lo próximo que se acredita: el primer aniversario
+    (15 de una) si todavía no cumplió el año; si no, el 1 de enero."""
+    primero = primer_aniversario(ingreso)
+    if hoy < primero:
+        return primero, dias_del_periodo(ingreso, ingreso.year + 1), "aniversario"
     return date(hoy.year + 1, 1, 1), dias_del_periodo(ingreso, hoy.year + 1), "anio"
 
 
@@ -146,7 +132,7 @@ def resumen(ingreso: date, tomados: float, ajustes: float, hoy: date,
         inicial = 0.0
     cuando, cuanto, tipo = proxima_carga(ingreso, hoy)
     if fijo is not None:
-        cuanto = fijo if tipo == "anio" else round(fijo / 12, 2)
+        cuanto = fijo
     saldo = round(inicial + ganados + ajustes - tomados, 2)
     este_anio = dias_del_periodo(ingreso, hoy.year, fijo)
     disponible_anio = round(saldo + tomados_anio, 2)

@@ -18,16 +18,15 @@
   <div class="nota" style="border-top:0;font-size:14px;color:var(--tinta)">
     {% if v.primer_anio %}
       Entraste a Intela el {{ t.fecha_ingreso|fecha }}: todavía no cumplís un año.
-      Cuando lo cumplas, el <b>{{ v.aniversario|fecha }}</b>, vas a poder tomar vacaciones.
-      Hasta entonces los días se van juntando de a {{ (v.este_anio / 12)|num(2) }} por mes:
-      llevás <b>{{ v.saldo|num(1) }}</b>.
+      El día que lo cumplas, el <b>{{ v.aniversario|fecha }}</b>, se te suman <b>{{ v.proxima_cantidad|num }}</b> días de vacaciones de una.
+      {% if v.saldo %}Por ahora tenés <b>{{ v.saldo|num(1) }}</b>.{% endif %}
     {% else %}
       Este año te tocan <b>{{ v.este_anio|num(1) }}</b> días{% if v.fijo is none %} (15 por ley{% if v.este_anio > 15 %}, más {{ (v.este_anio - 15)|num }} por tus {{ v.anios }} años en Intela{% endif %}){% endif %}{% if v.arrastre > 0 %},
-      más <b>{{ v.arrastre|num(1) }}</b> que tenías acumulados de años anteriores{% elif v.arrastre < 0 %},
-      menos <b>{{ (-v.arrastre)|num(1) }}</b> que debías de años anteriores{% endif %}: <b>{{ v.disponible_anio|num(1) }}</b>.
+      más <b>{{ v.arrastre|num(1) }}</b> que tenías acumulados de años anteriores: <b>{{ v.disponible_anio|num(1) }}</b>{% elif v.arrastre < 0 %},
+      menos <b>{{ (-v.arrastre)|num(1) }}</b> que debías de años anteriores: <b>{{ v.disponible_anio|num(1) }}</b>{% endif %}.
       Tomaste <b>{{ v.tomados_anio|num(1) }}</b>. Te quedan <b>{{ v.saldo|num(1) }}</b>.
     {% endif %}
-    <br>El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.
+    {% if not v.primer_anio %}<br>El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.{% endif %}
     {% if v.ajustes %}<br>Ajustes de contabilidad: {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} días.{% endif %}
   </div>
 </div>
