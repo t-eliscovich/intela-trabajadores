@@ -159,17 +159,17 @@ galleta = next((h for h in r.headers.getlist("Set-Cookie") if h.startswith("sess
 check("y queda entrada (cookie con vencimiento)", "Expires=" in galleta or "Max-Age=" in galleta)
 check("pero no entra a contabilidad", k.get("/admin").status_code == 302 and "/cafeteria" in k.get("/admin").headers["Location"])
 html = k.get("/cafeteria").get_data(as_text=True)
-check("la pantalla pide la cédula y dice qué comida es", "Escribí tu cédula" in html and ("Almuerzo" in html or "Cena" in html))
+check("la pantalla pide la cédula y dice qué comida es", "Escriba su cédula" in html and ("Almuerzo" in html or "Cena" in html))
 check("el corte es a las 15", A.HORA_CENA == 15)
 r = k.post("/cafeteria?tipo=almuerzo", data={"cedula": "1712345678"})
 html = r.get_data(as_text=True)
-check("con la cédula muestra el nombre y pregunta", "Juan Pérez" in html and "¿Sos vos?" in html and "Almuerzo" in html and (juan, HOY, "almuerzo") not in base.alm)
+check("con la cédula muestra el nombre y pregunta", "Juan Pérez" in html and "¿Es usted?" in html and "Almuerzo" in html and (juan, HOY, "almuerzo") not in base.alm)
 r = k.post("/cafeteria/confirmar", data={"cedula": "1712345678", "tipo": "almuerzo"})
 check("con Sí queda marcado el almuerzo de hoy, por la tablet", (juan, HOY, "almuerzo") in base.alm and "Buen provecho" in r.get_data(as_text=True))
 r = k.post("/cafeteria?tipo=almuerzo", data={"cedula": "1712345678"})
 check("si vuelve, le dice que ya marcó", "Ya marcó el almuerzo" in r.get_data(as_text=True))
 r = k.post("/cafeteria?tipo=cena", data={"cedula": "1712345678"})
-check("la cena es aparte", "¿Sos vos?" in r.get_data(as_text=True) and "Cena" in r.get_data(as_text=True))
+check("la cena es aparte", "¿Es usted?" in r.get_data(as_text=True) and "Cena" in r.get_data(as_text=True))
 r = k.post("/cafeteria", data={"cedula": "0000000000"})
 check("cédula desconocida avisa", "No encontramos" in r.get_data(as_text=True))
 r = k.post("/cafeteria", data={"cedula": "12"})
@@ -344,13 +344,13 @@ r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": pid, "dias": "
 check("con celular ofrece el WhatsApp con el mensaje", "wa.me/593991234567" in r.get_data(as_text=True))
 antes = base.trabajador(maria)["tomados"]
 r = w.post("/yo/pedido/cancelar", data={"id": pid}, follow_redirects=True)
-check("el trabajador cancela un aprobado que no empezó y los días vuelven", base.solicitud(pid)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 1 and "vuelven a tu saldo" in r.get_data(as_text=True))
+check("el trabajador cancela un aprobado que no empezó y los días vuelven", base.solicitud(pid)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 1 and "vuelven a su saldo" in r.get_data(as_text=True))
 check("el período cancelado quedó en el historial", any(f["id"] == base.solicitud(pid)["vacacion_id"] for f in base.historial()))
 w.post("/yo/pedir", data={"tipo": "permiso", "desde": (HOY - timedelta(days=3)).isoformat(), "hasta": (HOY - timedelta(days=2)).isoformat()})
 viejo = [p["id"] for p in base.solicitudes_pendientes()][0]
 c.post("/admin/solicitudes", data={"accion": "aprobar", "id": viejo, "dias": "2"})
 r = w.post("/yo/pedido/cancelar", data={"id": viejo}, follow_redirects=True)
-check("un aprobado que ya empezó no se cancela solo", base.solicitud(viejo)["estado"] == "aprobada" and "hablá con contabilidad" in r.get_data(as_text=True))
+check("un aprobado que ya empezó no se cancela solo", base.solicitud(viejo)["estado"] == "aprobada" and "hable con contabilidad" in r.get_data(as_text=True))
 antes = base.trabajador(maria)["tomados"]
 r = c.post("/admin/solicitudes", data={"accion": "deshacer", "id": viejo, "respuesta": "se cambió la fecha"}, follow_redirects=True)
 check("contabilidad deshace un aprobado", base.solicitud(viejo)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 2 and "se sacó de la ficha" in r.get_data(as_text=True))
@@ -385,7 +385,7 @@ check("crea el usuario de la cafetería", base.usuario_por_nombre("mesa")["rol"]
 check("contabilidad también puede abrir la cafetería", c.get("/cafeteria").status_code == 200)
 yo_id = base.usuario_por_nombre("conta")["id"]
 r = c.post("/admin/usuarios", data={"accion": "desactivar", "id": yo_id}, follow_redirects=True)
-check("no se puede desactivar a sí mismo", "vos mismo" in r.get_data(as_text=True))
+check("no se puede desactivar a sí mismo", "su propio usuario" in r.get_data(as_text=True))
 ana_id = base.usuario_por_nombre("ana")["id"]
 c.post("/admin/usuarios", data={"accion": "desactivar", "id": ana_id})
 check("desactivado no puede entrar", base.usuario_por_nombre("ana") is None)
@@ -399,6 +399,18 @@ r = c.get("/healthz")
 check("healthz cuenta trabajadores y usuarios", r.get_json()["trabajadores_activos"] == len(base.trabajadores()) and r.get_json()["hay_usuarios"])
 check("404 en castellano", "no existe" in c.get("/no-existe").get_data(as_text=True))
 check("/admin sin login manda a entrar", A.app.test_client().get("/admin/comidas").status_code == 302)
+
+import re as _re  # noqa: E402
+_voseo = _re.compile(r"\b(vos|sos|tenés|podés|querés|sabés|hacés|cumplís|pedís|acá|escribí|poné|pegá|probá|agregá|tocá|hablá|preguntá|avisale|volvé|marcá|pasalos|entrá|tomaste|entraste|te tocan|te quedan|tu cédula|tus pedidos)\b", _re.I)
+for f in sorted(os.listdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates"))):
+    texto = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates", f)).read()
+    texto = _re.sub(r"<style>.*?</style>", "", texto, flags=_re.S)
+    m = _voseo.search(texto)
+    check(f"sin voseo en {f}" + (f" («{m.group(0)}»)" if m else ""), m is None)
+_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app.py")).read()
+_msgs = " ".join(_re.findall(r'(?:flash|ValueError)\((?:f)?"([^"]*)"', _src))
+m = _voseo.search(_msgs)
+check("sin voseo en los mensajes de app.py" + (f" («{m.group(0)}»)" if m else ""), m is None)
 
 from jinja2 import Environment, FileSystemLoader  # noqa: E402
 env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")))

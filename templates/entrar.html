@@ -4,8 +4,8 @@
 {% block contenido %}
 <div class="bloque" style="margin-top:24px">
   <div class="relleno">
-    <h1 style="margin-bottom:4px">Poné tu cédula</h1>
-    <p class="tenue" style="margin:0 0 14px">Para ver tus vacaciones y marcar tus almuerzos.</p>
+    <h1 style="margin-bottom:4px">Escriba su cédula</h1>
+    <p class="tenue" style="margin:0 0 14px">Para ver sus vacaciones y pedir días.</p>
     <form method="POST" class="formulario">
       <div class="ancho">
         <input type="text" name="cedula" inputmode="numeric" autocomplete="off"
@@ -17,6 +17,6 @@
       </div>
     </form>
   </div>
-  <div class="nota">Sos de contabilidad: <a href="{{ url_for('admin_entrar') }}">entrá por acá</a>.</div>
+  <div class="nota">Contabilidad y cafetería: <a href="{{ url_for('admin_entrar') }}">entrar por aquí</a>.</div>
 </div>
 {% endblock %}

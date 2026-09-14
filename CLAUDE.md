@@ -72,9 +72,13 @@ ninguna ruta pública recibe un id por la URL.
 **El esquema corre UNA SENTENCIA POR TRANSACCIÓN** y la que falla queda en
 `store.AVISOS_ESQUEMA` (se ve en `/healthz`). No juntarlas.
 
-**En pantalla: castellano simple, una idea por línea.** Ver la skill
-`textos-de-pantalla-intela`. «Mantenimiento», no «service»; «cuadro», no
-«dashboard».
+**En pantalla: español de ECUADOR, de USTED. Nunca voseo ni argentinismos**
+(regla de Tamara, 14/09/2026: «no quiero volver a ver argentino»). «Escriba su
+cédula», «¿Es usted?», «le tocan», «tomó», «aquí» — no «escribí», «sos vos»,
+«te tocan», «tomaste», «acá». Vale para el trabajador, la tablet y contabilidad.
+Antes de commitear un texto nuevo: `grep -rnE "vos\b|sos\b|tenés|podés|acá\b|á\b" templates`.
+Castellano simple, una idea por línea. Ver la skill `textos-de-pantalla-intela`.
+«Mantenimiento», no «service»; «cuadro», no «dashboard».
 
 **Importar la app como la importa Waitress.** `scripts/_falso.py` reemplaza
 las funciones de `store` una por una, no el módulo entero.

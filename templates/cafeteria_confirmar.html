@@ -8,7 +8,7 @@
     <b>{{ t.nombre }}</b>
     <span>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</span>
   </div>
-  <p class="kiosco-pregunta">¿Sos vos?</p>
+  <p class="kiosco-pregunta">¿Es usted?</p>
   <div class="kiosco-botones">
     <form method="POST" action="{{ url_for('cafeteria_confirmar') }}">
       <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">

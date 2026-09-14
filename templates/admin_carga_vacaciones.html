@@ -8,7 +8,7 @@
 </div>
 
 <div class="bloque">
-  <div class="titulo"><h2>Pegá las filas</h2><p>Columnas, en este orden: <b>cédula · desde · hasta · días · nota</b> (días y nota, opcionales).</p></div>
+  <div class="titulo"><h2>Pegue las filas</h2><p>Columnas, en este orden: <b>cédula · desde · hasta · días · nota</b> (días y nota, opcionales).</p></div>
   <div class="relleno">
     <form method="POST" action="{{ url_for('admin_carga', que='vacaciones') }}">
       <textarea name="texto" rows="8" placeholder="1712345678	02/02/2026	16/02/2026	15
@@ -40,7 +40,7 @@
 
 {% if malas %}
 <div class="bloque">
-  <div class="titulo"><h2>Quedan afuera ({{ malas|length }})</h2><p>Arreglalas y volvé a pegar.</p></div>
+  <div class="titulo"><h2>Quedan afuera ({{ malas|length }})</h2><p>Arréglelas y vuelva a pegar.</p></div>
   <table>
     <tbody>
     {% for m in malas %}

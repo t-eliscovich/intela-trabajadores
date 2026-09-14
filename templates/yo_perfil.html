@@ -17,11 +17,11 @@
       {% if t.fecha_nacimiento %}<tr><td class="tenue">Nacimiento</td><td>{{ t.fecha_nacimiento|fecha }}</td></tr>{% endif %}
     </tbody>
   </table>
-  <div class="nota">Si algo de esto está mal, avisale a contabilidad.</div>
+  <div class="nota">Si algo de esto está mal, avise en contabilidad.</div>
 </div>
 
 <div class="bloque">
-  <div class="titulo"><h2>Tus datos de contacto</h2><p>Estos los podés corregir vos.</p></div>
+  <div class="titulo"><h2>Sus datos de contacto</h2><p>Estos los puede corregir usted.</p></div>
   <div class="relleno">
     <form method="POST" class="formulario">
       <div class="ancho"><label class="campo">Celular</label><input name="celular" inputmode="tel" value="{{ t.celular or '' }}" placeholder="0991234567"></div>

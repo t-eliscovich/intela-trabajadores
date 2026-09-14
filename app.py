@@ -167,7 +167,7 @@ def leer_fecha(texto: str) -> date:
             return datetime.strptime(texto, fmt).date()
         except ValueError:
             continue
-    raise ValueError(f"No entiendo la fecha «{texto}». Escribila como 25/03/2024.")
+    raise ValueError(f"No entiendo la fecha «{texto}». Escríbala como 25/03/2024.")
 
 
 def leer_decimal(texto: str, nombre: str = "El número") -> float:
@@ -310,7 +310,7 @@ def entrar():
             flash(str(exc), "error")
             return render_template("entrar.html")
         if not t or not t["activo"]:
-            flash("No encontramos esa cédula. Preguntá en contabilidad.", "error")
+            flash("No encontramos esa cédula. Pregunte en contabilidad.", "error")
             return render_template("entrar.html")
         session.clear()
         session["trabajador_id"] = t["id"]
@@ -360,14 +360,14 @@ def yo_pedir():
         h = hoy()
         if desde < h - timedelta(days=DIAS_ATRAS_PEDIDO):
             raise ValueError(f"Sólo se puede pedir hasta {DIAS_ATRAS_PEDIDO} días para atrás. "
-                             "Para algo más viejo, hablá con contabilidad.")
+                             "Para algo más viejo, hable con contabilidad.")
         if dias > 60:
-            raise ValueError("Son más de 60 días. Hablá con contabilidad.")
+            raise ValueError("Son más de 60 días. Hable con contabilidad.")
         for p in store.solicitudes(t["id"]):
             if p["estado"] == "pendiente" and p["desde"] <= hasta and desde <= p["hasta"]:
-                raise ValueError("Ya tenés un pedido pendiente para esos días.")
+                raise ValueError("Ya tiene un pedido pendiente para esos días.")
         store.crear_solicitud(t["id"], tipo, desde, hasta, dias, (f.get("nota") or "").strip()[:200])
-        flash("Pedido enviado. Contabilidad lo va a responder acá.", "ok")
+        flash("Pedido enviado. Contabilidad le responde aquí mismo.", "ok")
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("yo_vacaciones"))
@@ -384,9 +384,9 @@ def yo_pedido_cancelar():
         flash("Pedido cancelado.", "ok")
     elif p and p["trabajador_id"] == t["id"] and p["estado"] == "aprobada" and p["desde"] > hoy():
         store.cancelar_solicitud_aprobada(p["id"], "cancelado por el trabajador", "trabajador")
-        flash("Pedido cancelado. Los días vuelven a tu saldo.", "ok")
+        flash("Pedido cancelado. Los días vuelven a su saldo.", "ok")
     elif p and p["trabajador_id"] == t["id"] and p["estado"] == "aprobada":
-        flash("Ese pedido ya empezó: para cancelarlo hablá con contabilidad.", "error")
+        flash("Ese pedido ya empezó: para cancelarlo hable con contabilidad.", "error")
     return redirect(url_for("yo_vacaciones"))
 
 
@@ -445,7 +445,7 @@ def cafeteria():
             return render_template("cafeteria.html", tipo=tipo, error=str(exc)), 200
         t = store.trabajador_por_cedula(cedula)
         if not t or not t["activo"]:
-            return render_template("cafeteria.html", tipo=tipo, error="No encontramos esa cédula. Preguntá en contabilidad.", cedula=cedula)
+            return render_template("cafeteria.html", tipo=tipo, error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
             return render_template("cafeteria.html", tipo=tipo, listo=t, ya_estaba=True)
         return render_template("cafeteria_confirmar.html", t=t, tipo=tipo, fecha=h)
@@ -595,7 +595,7 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         dias = leer_decimal(f.get("dias", ""), "Los días")
         motivo = (f.get("motivo") or "").strip()
         if not motivo:
-            raise ValueError("Escribí el motivo del ajuste.")
+            raise ValueError("Escriba el motivo del ajuste.")
         store.agregar_ajuste(t["id"], dias, motivo, quien)
         flash("Ajuste cargado.", "ok")
     elif accion == "ajuste_borrar":
@@ -772,7 +772,7 @@ def admin_solicitudes():
             elif accion == "rechazar":
                 motivo = (f.get("respuesta") or "").strip()
                 if not motivo:
-                    raise ValueError("Escribí por qué se rechaza: el trabajador lo va a leer.")
+                    raise ValueError("Escriba por qué se rechaza: el trabajador lo va a leer.")
                 store.responder_solicitud(p["id"], "rechazada", motivo, quien)
                 flash(f"Rechazado el pedido de {p['nombre']}.", "ok")
             else:
@@ -799,10 +799,10 @@ def _texto_aviso(p: dict) -> str:
     que = store.TIPOS_AUSENCIA[p["tipo"]][0].lower()
     cuando = f"del {p['desde'].strftime('%d/%m')} al {p['hasta'].strftime('%d/%m')}"
     if p["estado"] == "aprobada":
-        return f"Hola {nombre}, tu pedido de {que} {cuando} está aprobado. Saludos, Intela."
+        return f"Hola {nombre}, su pedido de {que} {cuando} está aprobado. Saludos, Intela."
     if p["estado"] == "cancelada":
-        return f"Hola {nombre}, tu pedido de {que} {cuando} quedó cancelado ({p['respuesta']}). Saludos, Intela."
-    return f"Hola {nombre}, tu pedido de {que} {cuando} no se pudo aprobar: {p['respuesta']}. Saludos, Intela."
+        return f"Hola {nombre}, su pedido de {que} {cuando} quedó cancelado ({p['respuesta']}). Saludos, Intela."
+    return f"Hola {nombre}, su pedido de {que} {cuando} no se pudo aprobar: {p['respuesta']}. Saludos, Intela."
 
 
 @app.route("/admin/historial", methods=["GET", "POST"])
@@ -890,7 +890,7 @@ def admin_usuarios():
             elif accion in ("activar", "desactivar"):
                 id_ = int(f.get("id", 0))
                 if accion == "desactivar" and id_ == g.usuario["id"]:
-                    raise ValueError("No podés desactivarte a vos mismo.")
+                    raise ValueError("No puede desactivar su propio usuario.")
                 store.activar_usuario(id_, accion == "activar")
                 flash("Listo.", "ok")
         except ValueError as exc:

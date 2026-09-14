@@ -16,7 +16,7 @@
   {% if error %}<div class="kiosco-error">{{ error }}</div>{% endif %}
 
   <form method="POST" action="{{ url_for('cafeteria') }}" autocomplete="off">
-    <label class="kiosco-label" for="cedula">Escribí tu cédula</label>
+    <label class="kiosco-label" for="cedula">Escriba su cédula</label>
     <input id="cedula" name="cedula" inputmode="numeric" pattern="[0-9]*" autofocus required
            placeholder="1712345678" value="{{ cedula or '' }}" class="kiosco-cedula">
     <button class="btn kiosco-btn" type="submit">Seguir</button>
