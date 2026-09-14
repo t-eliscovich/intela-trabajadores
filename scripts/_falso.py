@@ -216,6 +216,13 @@ class BaseFalsa:
             self.borrar_vacacion(s["vacacion_id"], quien)
         s.update(estado="cancelada", respuesta=respuesta, respondido_por=quien, respondido_en=datetime.now())
 
+    def borrar_solicitud(self, id_):
+        s = self.sol.get(id_)
+        if s and s["estado"] in ("rechazada", "cancelada"):
+            del self.sol[id_]
+            return True
+        return False
+
     def responder_solicitud(self, id_, estado, respuesta, quien, vacacion_id=None):
         s = self.sol[id_]
         if s["estado"] == "pendiente":

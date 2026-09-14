@@ -723,6 +723,12 @@ def admin_solicitudes():
             if accion == "visto":
                 store.marcar_cambio_visto(int(f.get("id", 0)))
                 return redirect(url_for("admin_solicitudes"))
+            if accion == "borrar":
+                if store.borrar_solicitud(int(f.get("id", 0) or 0)):
+                    flash("Pedido borrado.", "ok")
+                else:
+                    raise ValueError("Sólo se borra un pedido rechazado o cancelado.")
+                return redirect(url_for("admin_solicitudes"))
             if accion == "deshacer":
                 p = store.solicitud(int(f.get("id", 0) or 0))
                 if not p or p["estado"] != "aprobada":

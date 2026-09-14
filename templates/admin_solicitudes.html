@@ -65,7 +65,9 @@
         <td class="der">
           {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>
             <form method="POST" class="enlinea"><input type="hidden" name="accion" value="deshacer"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit" title="Cancela el pedido y saca el período de la ficha">Deshacer</button></form>
-          {% elif p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
+          {% else %}{% if p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
+            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ p.id }}"><button class="borrar-fila" type="submit" title="Borrar este pedido">×</button></form>
+          {% endif %}
           <span class="chico">{{ p.respondido_por or '' }} {{ p.respondido_en|fecha if p.respondido_en else '' }}</span>
         </td>
       </tr>

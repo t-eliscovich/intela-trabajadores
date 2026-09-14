@@ -460,6 +460,14 @@ def cancelar_solicitud_aprobada(id_: int, respuesta: str, quien: str) -> None:
               "respondido_en=now() WHERE id=%s", (respuesta, quien, id_))
 
 
+def borrar_solicitud(id_: int) -> bool:
+    """Sólo un pedido rechazado o cancelado (no tiene período atrás): desaparece
+    de la lista del trabajador y de la de contabilidad."""
+    fila = _ejecutar("DELETE FROM trabajadores.solicitud WHERE id=%s "
+                     "AND estado IN ('rechazada', 'cancelada') RETURNING id", (id_,))
+    return fila is not None
+
+
 def responder_solicitud(id_: int, estado: str, respuesta: str, quien: str,
                         vacacion_id: int | None = None) -> None:
     _ejecutar("UPDATE trabajadores.solicitud SET estado=%s, respuesta=%s, respondido_por=%s, "

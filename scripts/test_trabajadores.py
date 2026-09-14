@@ -350,6 +350,10 @@ antes = base.trabajador(maria)["tomados"]
 r = c.post("/admin/solicitudes", data={"accion": "deshacer", "id": viejo, "respuesta": "se cambió la fecha"}, follow_redirects=True)
 check("contabilidad deshace un aprobado", base.solicitud(viejo)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 2 and "se sacó de la ficha" in r.get_data(as_text=True))
 check("y ofrece avisarle también", "wa.me/" in r.get_data(as_text=True))
+r = c.post("/admin/solicitudes", data={"accion": "borrar", "id": ids[0]}, follow_redirects=True)
+check("un aprobado no se borra", "Sólo se borra" in r.get_data(as_text=True) and ids[0] in base.sol)
+c.post("/admin/solicitudes", data={"accion": "borrar", "id": ids[1]})
+check("un rechazado sí, y desaparece de la lista del trabajador", ids[1] not in base.sol and "falta el certificado" not in w.get("/yo/vacaciones").get_data(as_text=True))
 
 # el perfil que el trabajador corrige
 r = w.post("/yo/perfil", data={"celular": "099 111 2222", "direccion": "Av. Siempre Viva 123"}, follow_redirects=True)
