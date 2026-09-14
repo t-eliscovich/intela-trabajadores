@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block titulo %}{{ t.nombre }}{% endblock %}
-{% block clase_hoja %}angosta{% endblock %}
-{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
-{% block contenido %}
-{% include "_pestanas_yo.html" %}
-<div class="aviso">Cada día, tocá <b>A</b> si almorzaste y <b>C</b> si cenaste. Podés corregir los últimos {{ (hoy - desde_cuando).days }} días.</div>
-{% with accion_url=url_for('yo_comida') %}{% include "_calendario.html" %}{% endwith %}
-{% endblock %}

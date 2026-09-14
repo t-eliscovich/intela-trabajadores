@@ -57,6 +57,7 @@ base.dar_de_baja(base.crear_trabajador("0999999999", "Pedro Salido", date(2015, 
 from werkzeug.security import generate_password_hash  # noqa: E402
 base.crear_usuario("conta", generate_password_hash("x"), "Contabilidad")
 base.crear_usuario("tamara", generate_password_hash("x"), "Tamara")
+base.crear_usuario("tablet", generate_password_hash("x"), "Cafetería", "cafeteria")
 
 SALIDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vista")
 os.makedirs(SALIDA, exist_ok=True)
@@ -70,9 +71,15 @@ def guardar(nombre, html):
 c = A.app.test_client()
 guardar("entrar", c.get("/").get_data(as_text=True))
 c.post("/", data={"cedula": "1712345678"})
-guardar("yo", c.get("/yo").get_data(as_text=True))
 guardar("yo_vacaciones", c.get("/yo/vacaciones").get_data(as_text=True))
 guardar("yo_perfil", c.get("/yo/perfil").get_data(as_text=True))
+
+# la tablet de la cafetería
+k = A.app.test_client()
+k.post("/admin/entrar", data={"usuario": "tablet", "clave": "x"})
+guardar("cafeteria", k.get("/cafeteria?tipo=almuerzo").get_data(as_text=True))
+guardar("cafeteria_confirmar", k.post("/cafeteria?tipo=cena", data={"cedula": "0603456789"}).get_data(as_text=True))
+guardar("cafeteria_listo", k.post("/cafeteria/confirmar", data={"cedula": "1712345678", "tipo": "almuerzo"}).get_data(as_text=True))
 
 # contabilidad
 c = A.app.test_client()

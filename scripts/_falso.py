@@ -278,11 +278,18 @@ class BaseFalsa:
     def hay_usuarios(self):
         return bool(self.usu)
 
-    def crear_usuario(self, usuario, clave_hash, nombre):
+    ROLES = ("contabilidad", "cafeteria")
+
+    def crear_usuario(self, usuario, clave_hash, nombre, rol="contabilidad"):
+        if rol not in self.ROLES:
+            raise ValueError(f"No sé qué rol es «{rol}».")
         id_ = self._id()
         self.usu[id_] = {"id": id_, "usuario": usuario, "clave_hash": clave_hash, "nombre": nombre,
-                         "activo": True, "creado_en": datetime.now()}
+                         "activo": True, "rol": rol, "creado_en": datetime.now()}
         return id_
+
+    def comida_marcada(self, trabajador_id, fecha, tipo):
+        return (trabajador_id, fecha, tipo) in self.alm
 
     def cambiar_clave(self, id_, clave_hash):
         self.usu[id_]["clave_hash"] = clave_hash
@@ -301,6 +308,7 @@ def enchufar(store_modulo, base: BaseFalsa | None = None) -> BaseFalsa:
         setattr(store_modulo, n, getattr(base, n))
     store_modulo.cargar_lote = base._cargar_lote
     store_modulo.AVISOS_ESQUEMA = []
+    store_modulo.ROLES = base.ROLES
     store_modulo.TIPOS_AUSENCIA = base.TIPOS_AUSENCIA
     store_modulo.TIPOS_QUE_DESCUENTAN = base.TIPOS_QUE_DESCUENTAN
     return base

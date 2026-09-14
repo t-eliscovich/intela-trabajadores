@@ -202,15 +202,18 @@ ESQUEMA = """
     );
     CREATE INDEX IF NOT EXISTS comida_fecha_idx ON trabajadores.comida (fecha);
 
-    -- Quién entra a la parte de contabilidad.
+    -- Quién entra a la parte de contabilidad, y la tablet de la cafetería.
+    -- rol: 'contabilidad' (todo) o 'cafeteria' (sólo la pantalla de marcar comidas).
     CREATE TABLE IF NOT EXISTS trabajadores.usuario (
         id          serial PRIMARY KEY,
         usuario     text NOT NULL UNIQUE,
         clave_hash  text NOT NULL,
         nombre      text NOT NULL,
         activo      boolean NOT NULL DEFAULT true,
+        rol         text NOT NULL DEFAULT 'contabilidad',
         creado_en   timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS rol text NOT NULL DEFAULT 'contabilidad';
 """
 
 
@@ -519,6 +522,11 @@ def comidas_de_todos(anio: int, mes: int) -> dict[int, set[tuple[date, str]]]:
     return salida
 
 
+def comida_marcada(trabajador_id: int, fecha: date, tipo: str) -> bool:
+    return _uno("SELECT 1 AS x FROM trabajadores.comida WHERE trabajador_id=%s AND fecha=%s AND tipo=%s",
+                (trabajador_id, fecha, tipo)) is not None
+
+
 def marcar_comida(trabajador_id: int, fecha: date, tipo: str, marcado_por: str) -> None:
     if tipo not in TIPOS_COMIDA:
         raise ValueError(f"No sé qué comida es «{tipo}».")
@@ -535,7 +543,7 @@ def desmarcar_comida(trabajador_id: int, fecha: date, tipo: str) -> None:
 # Usuarios de contabilidad
 # --------------------------------------------------------------------------
 def usuarios() -> list[dict]:
-    return _todos("SELECT id, usuario, nombre, activo, creado_en FROM trabajadores.usuario "
+    return _todos("SELECT id, usuario, nombre, activo, rol, creado_en FROM trabajadores.usuario "
                   "ORDER BY usuario")
 
 
@@ -547,9 +555,14 @@ def hay_usuarios() -> bool:
     return _uno("SELECT 1 AS x FROM trabajadores.usuario LIMIT 1") is not None
 
 
-def crear_usuario(usuario: str, clave_hash: str, nombre: str) -> int:
-    fila = _ejecutar("INSERT INTO trabajadores.usuario (usuario, clave_hash, nombre) "
-                     "VALUES (%s,%s,%s) RETURNING id", (usuario, clave_hash, nombre))
+ROLES = ("contabilidad", "cafeteria")
+
+
+def crear_usuario(usuario: str, clave_hash: str, nombre: str, rol: str = "contabilidad") -> int:
+    if rol not in ROLES:
+        raise ValueError(f"No sé qué rol es «{rol}».")
+    fila = _ejecutar("INSERT INTO trabajadores.usuario (usuario, clave_hash, nombre, rol) "
+                     "VALUES (%s,%s,%s,%s) RETURNING id", (usuario, clave_hash, nombre, rol))
     return fila["id"]
 
 

@@ -76,11 +76,6 @@
 </div>
 
 <div>
-  {% with accion_url=url_for('admin_trabajador', id_=t.id), desde_cuando=none %}
-    {% include "_calendario.html" %}
-  {% endwith %}
-  <div class="nota" style="margin:-8px 0 12px;background:none;border:0;padding:0 4px">Acá se puede tocar cualquier día. El trabajador sólo los últimos días.</div>
-
   <div class="bloque">
     <details>
       <summary>Editar los datos</summary>

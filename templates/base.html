@@ -109,37 +109,30 @@
   details > summary::before{content:"▸ ";color:var(--gris-claro)}
   details[open] > summary::before{content:"▾ "}
 
-  /* ---------- calendario de comidas ---------- */
-  .mes-nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .mes-nav b{font-size:15px}
-  .mes-nav a{text-decoration:none;font-weight:700;padding:4px 10px;border-radius:8px;
-             border:1px solid var(--borde);background:#fff;color:var(--azul)}
-  .calendario{width:100%;border-collapse:separate;border-spacing:3px;table-layout:fixed}
-  .calendario th{background:none;border:0;text-align:center;padding:2px 0;font-size:11px}
-  .calendario td{padding:0;border:0;vertical-align:top}
-  /* Cada día: el número arriba y dos botones abajo, A y C. En un celular de
-     390 px cada casillero tiene ~50 px: los botones van uno al lado del otro
-     y tienen que ser tocables con el dedo (mín. 22 px de alto). */
-  .dia{border-radius:9px;border:1px solid var(--borde);background:#fff;padding:3px 2px 2px;
-       display:flex;flex-direction:column;align-items:center;gap:2px}
-  .dia .numero{font-weight:800;font-size:13px;line-height:1.1}
-  .dia.hoy{box-shadow:0 0 0 2px var(--acento)}
-  .dia.fuera{background:#f3f5f8;border-color:transparent}
-  .dia.fuera .numero,.dia.finde .numero{color:var(--gris-claro)}
-  .dia form{display:contents}
-  .comida{display:block;width:100%;height:22px;border-radius:5px;border:1px solid #dfe4ec;
-          background:#fff;font-family:inherit;font-size:11px;font-weight:800;color:var(--gris-claro);
-          cursor:pointer;padding:0;line-height:20px;text-align:center}
-  .comida:hover{border-color:var(--acento);color:var(--acento)}
-  .comida.marcado{background:var(--verde);border-color:var(--verde);color:#fff}
-  .dia.fuera .comida{background:transparent;border-color:transparent;cursor:default}
-  .dia.fuera .comida:not(.marcado){visibility:hidden}
-  .dia.fuera .comida.marcado{background:#a7d9b8;color:#fff}
-  .leyenda{display:flex;gap:14px;font-size:12px;color:var(--gris);flex-wrap:wrap}
-  .leyenda i{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-2px;
-             margin-right:4px;border:1px solid var(--borde);background:#fff}
-  .leyenda i.marcado{background:var(--verde);border-color:var(--verde)}
-  .leyenda i.fuera{background:#f3f5f8;border-color:transparent}
+  /* ---------- la tablet de la cafetería ---------- */
+  .hoja.cafeteria{max-width:560px}
+  .kiosco{text-align:center;padding-top:8px}
+  .kiosco-tipo{display:flex;gap:8px;margin-bottom:10px}
+  .kiosco-tipo a{flex:1;padding:14px;border-radius:14px;background:var(--papel);border:1px solid var(--borde);
+        text-decoration:none;color:var(--azul);font-weight:800;font-size:20px}
+  .kiosco-tipo a.activa{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .kiosco-fecha{font-size:17px;color:var(--gris);margin-bottom:18px}
+  .kiosco-label{display:block;font-size:22px;font-weight:700;margin-bottom:10px}
+  .kiosco-cedula{height:74px;font-size:40px;text-align:center;letter-spacing:.08em;border-radius:16px;
+        font-variant-numeric:tabular-nums}
+  .kiosco-btn{width:100%;height:72px;font-size:26px;border-radius:16px;margin-top:12px}
+  .kiosco-quien{background:var(--papel);border:1px solid var(--borde);border-radius:18px;padding:24px 16px;margin-bottom:14px}
+  .kiosco-quien b{display:block;font-size:30px;line-height:1.15;letter-spacing:-.02em}
+  .kiosco-quien span{display:block;font-size:20px;color:var(--gris);margin-top:6px}
+  .kiosco-pregunta{font-size:24px;font-weight:800;margin:6px 0 10px}
+  .kiosco-botones{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .kiosco-botones form{display:contents}
+  .kiosco-listo{background:#e8f8ee;border-radius:18px;padding:22px 16px;margin-bottom:14px;color:#15803d}
+  .kiosco-listo.ya{background:#fef6e7;color:#92400e}
+  .kiosco-listo .tilde{font-size:54px;line-height:1;font-weight:800}
+  .kiosco-listo b{display:block;font-size:26px;margin-top:6px}
+  .kiosco-listo p{margin:6px 0 0;font-size:19px}
+  .kiosco-error{background:#fdeaea;color:#b91c1c;border-radius:14px;padding:16px;font-size:20px;font-weight:700;margin-bottom:14px}
 
   /* ---------- el cuadro del mes ---------- */
   .cuadro th,.cuadro td{padding:3px 2px;text-align:center;font-size:12px}
@@ -202,12 +195,16 @@
 <header>
   <div class="barra">
     <div class="marca">TRABAJADORES <span>· INTELA</span></div>
-    {% if g.usuario %}
+    {% if g.usuario and g.usuario.rol == 'cafeteria' %}
+    <nav></nav>
+    <div class="quien">Cafetería · <a href="{{ url_for('admin_salir') }}">salir</a></div>
+    {% elif g.usuario %}
     <nav>
       <a href="{{ url_for('admin') }}" class="{{ 'activo' if request.endpoint in ('admin','admin_trabajador') }}">Trabajadores</a>
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
+      <a href="{{ url_for('cafeteria') }}" class="{{ 'activo' if request.endpoint in ('cafeteria','cafeteria_confirmar') }}">Cafetería</a>
       <a href="{{ url_for('admin_historial') }}" class="{{ 'activo' if request.endpoint=='admin_historial' }}">Historial</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>
     </nav>

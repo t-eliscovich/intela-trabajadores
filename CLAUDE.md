@@ -57,6 +57,12 @@ El trabajador siempre ve la respuesta en su pestaña Vacaciones.
 **«Hoy» es el de Ecuador**, `app.hoy()`, nunca `date.today()`: el server está
 en UTC y desde las 19:00 el check de la comida caería en el día siguiente.
 
+**Las comidas se marcan en la tablet de la cafetería (`/cafeteria`), no en la
+app del trabajador** (decisión 14/09/2026). El usuario de la tablet tiene
+`rol = 'cafeteria'`: entra por la misma pantalla que contabilidad, queda entrado
+30 días y `requiere_admin` lo rebota a /cafeteria. Almuerzo o cena por la hora
+de Ecuador (`HORA_CENA`).
+
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.
 

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}Cafetería{% endblock %}
+{% block clase_hoja %}angosta cafeteria{% endblock %}
+{% block contenido %}
+<div class="kiosco">
+  <div class="kiosco-tipo">
+    <a href="{{ url_for('cafeteria', tipo='almuerzo') }}" class="{{ 'activa' if tipo == 'almuerzo' }}">Almuerzo</a>
+    <a href="{{ url_for('cafeteria', tipo='cena') }}" class="{{ 'activa' if tipo == 'cena' }}">Cena</a>
+  </div>
+  <div class="kiosco-fecha">{{ hoy|fecha_larga }}</div>
+
+  {% if listo %}
+  <div class="kiosco-listo {{ 'ya' if ya_estaba }}">
+    <div class="tilde">{{ '✓' if not ya_estaba else '!' }}</div>
+    <b>{{ listo.nombre }}</b>
+    <p>{% if ya_estaba %}Ya marcó {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.{% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }} marcado. ¡Buen provecho!{% endif %}</p>
+  </div>
+  {% endif %}
+  {% if error %}<div class="kiosco-error">{{ error }}</div>{% endif %}
+
+  <form method="POST" action="{{ url_for('cafeteria', tipo=tipo) }}" autocomplete="off">
+    <label class="kiosco-label" for="cedula">Escribí tu cédula</label>
+    <input id="cedula" name="cedula" inputmode="numeric" pattern="[0-9]*" autofocus required
+           placeholder="1712345678" value="{{ cedula or '' }}" class="kiosco-cedula">
+    <button class="btn kiosco-btn" type="submit">Seguir</button>
+  </form>
+</div>
+<script>
+  // Después de marcar, volver solo al campo vacío a los pocos segundos.
+  {% if listo or error %}setTimeout(function(){ location.href = "{{ url_for('cafeteria', tipo=tipo) }}"; }, {{ 6000 if error else 3500 }});{% endif %}
+  document.getElementById('cedula').focus();
+</script>
+{% endblock %}

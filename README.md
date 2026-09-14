@@ -13,8 +13,10 @@ con su cédula.
   responde y él ve la respuesta ahí mismo;
 - en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por
   año; y corrige su celular y dirección;
-- primero, su calendario de comidas del mes: toca A (almuerzo) o C (cena) y queda marcado. Puede
-  corregir los últimos 3 días; más atrás lo arregla contabilidad.
+
+**La cafetería** tiene una tablet en el mostrador con `/cafeteria` abierta (entró una vez con un
+usuario de rol «cafeteria» y queda entrada): el trabajador escribe su cédula, ve su nombre y
+«Almuerzo» o «Cena» (según la hora), y toca Sí. Eso es lo que después se le paga a la cafetería.
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:
 
@@ -27,7 +29,8 @@ con su cédula.
   ingreso · días que le quedan hoy · área · fecha de nacimiento · celular ·
   días por año) y cargar a todos de una vez;
 - **Comidas del mes**: el cuadro trabajador × día, almuerzos y cenas por separado, que es lo
-  que se le paga a la cafetería. Se imprime;
+  que se le paga a la cafetería. Se imprime y se corrige ahí;
+- **Cafetería**: la misma pantalla de la tablet, por si hay que marcar desde la oficina;
 - **Historial**: lo que se borró (períodos, ajustes), con quién y cuándo; se recupera con un botón;
 - **Usuarios**: quién más entra a esta parte.
 
