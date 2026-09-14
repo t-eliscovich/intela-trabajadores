@@ -418,7 +418,7 @@ def salir():
 # ve su nombre y la comida de hoy, y confirma. Sin clave: la tablet entró una
 # vez con el usuario de rol «cafeteria» y queda entrada.
 # ==========================================================================
-HORA_CENA = 16  # desde esta hora (de Ecuador) la comida es la cena
+HORA_CENA = 15  # desde las 15:00 (de Ecuador) la comida es la cena; antes, el almuerzo
 
 
 def comida_de_ahora() -> str:

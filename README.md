@@ -16,7 +16,7 @@ con su cédula.
 
 **La cafetería** tiene una tablet en el mostrador con `/cafeteria` abierta (entró una vez con un
 usuario de rol «cafeteria» y queda entrada): el trabajador escribe su cédula, ve su nombre y
-«Almuerzo» o «Cena» (según la hora), y toca Sí. Eso es lo que después se le paga a la cafetería.
+«Almuerzo» o «Cena» (hasta las 15:00 almuerzo, después cena), y toca Sí. Eso es lo que después se le paga a la cafetería.
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:
 

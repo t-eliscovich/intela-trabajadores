@@ -14,9 +14,8 @@
       <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
       <button class="btn verde kiosco-btn" type="submit" autofocus>Sí</button>
     </form>
-    <a class="btn suave kiosco-btn" href="{{ url_for('cafeteria', tipo=tipo) }}">No</a>
+    <a class="btn suave kiosco-btn" href="{{ url_for('cafeteria') }}">No</a>
   </div>
-  <p class="ayuda" style="text-align:center;margin-top:14px">Si la comida no es esa, tocá <a href="{{ url_for('cafeteria', tipo=('cena' if tipo == 'almuerzo' else 'almuerzo')) }}">{{ 'Cena' if tipo == 'almuerzo' else 'Almuerzo' }}</a> y volvé a escribir la cédula.</p>
 </div>
-<script>setTimeout(function(){ location.href = "{{ url_for('cafeteria', tipo=tipo) }}"; }, 20000);</script>
+<script>setTimeout(function(){ location.href = "{{ url_for('cafeteria') }}"; }, 20000);</script>
 {% endblock %}
