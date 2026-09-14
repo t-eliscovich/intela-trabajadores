@@ -8,10 +8,28 @@
 <div class="cifras">
   <div class="cifra">
     <b class="grande {{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b>
-    <small>Días que te quedan</small>
+    <small>Disponibles</small>
   </div>
-  <div class="cifra"><b>{{ (v.inicial + v.ganados)|num(1) }}</b><small>Ganados</small></div>
-  <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados</small></div>
+  <div class="cifra"><b>{{ v.tomados_anio|num(1) }}</b><small>Tomados este año</small></div>
+  <div class="cifra"><b>{{ v.disponible_anio|num(1) }}</b><small>Tenías este año</small></div>
+</div>
+
+<div class="bloque">
+  <div class="nota" style="border-top:0;font-size:14px;color:var(--tinta)">
+    {% if v.primer_anio %}
+      Entraste a Intela el {{ t.fecha_ingreso|fecha }}: todavía no cumplís un año.
+      Cuando lo cumplas, el <b>{{ v.aniversario|fecha }}</b>, vas a poder tomar vacaciones.
+      Hasta entonces los días se van juntando de a {{ (v.este_anio / 12)|num(2) }} por mes:
+      llevás <b>{{ v.saldo|num(1) }}</b>.
+    {% else %}
+      Este año te tocan <b>{{ v.este_anio|num(1) }}</b> días{% if v.fijo is none %} (15 por ley{% if v.este_anio > 15 %}, más {{ (v.este_anio - 15)|num }} por tus {{ v.anios }} años en Intela{% endif %}){% endif %}{% if v.arrastre > 0 %},
+      más <b>{{ v.arrastre|num(1) }}</b> que tenías acumulados de años anteriores{% elif v.arrastre < 0 %},
+      menos <b>{{ (-v.arrastre)|num(1) }}</b> que debías de años anteriores{% endif %}: <b>{{ v.disponible_anio|num(1) }}</b>.
+      Tomaste <b>{{ v.tomados_anio|num(1) }}</b>. Te quedan <b>{{ v.saldo|num(1) }}</b>.
+    {% endif %}
+    <br>El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.
+    {% if v.ajustes %}<br>Ajustes de contabilidad: {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} días.{% endif %}
+  </div>
 </div>
 
 <div class="bloque">
@@ -21,7 +39,7 @@
       <div class="ancho"><label class="campo">Qué pedís</label>
         <select name="tipo">
           {% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}
-          <option value="{{ clave }}">{{ nombre }}{% if not descuenta %} (no descuenta días){% endif %}</option>
+          <option value="{{ clave }}">{{ nombre }}{% if clave == 'enfermedad' %} (con certificado){% endif %}{% if not descuenta %} · no descuenta días{% endif %}</option>
           {% endfor %}
         </select></div>
       <div><label class="campo">Desde</label><input type="date" name="desde" required></div>
@@ -29,7 +47,7 @@
       <div class="ancho"><label class="campo">Para qué</label><input name="nota" maxlength="200" placeholder="por ejemplo: permiso para ir al banco"></div>
       <div class="ancho"><button class="btn" type="submit" style="width:100%">Enviar el pedido</button></div>
     </form>
-    <p class="ayuda" style="margin-top:8px">Los días se cuentan corridos, con el fin de semana. Una enfermedad se puede avisar después, hasta 30 días para atrás.</p>
+    <p class="ayuda" style="margin-top:8px">Los días se cuentan corridos, con sábado y domingo. Si estuviste enfermo, lo podés avisar después.</p>
   </div>
 </div>
 
@@ -38,29 +56,22 @@
   <div class="titulo"><h2>Tus pedidos</h2></div>
   {% for p in pedidos %}
   <div class="pedido">
-    <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b> · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} {{ 'día' if p.dias == 1 else 'días' }}</div>
+    <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b> · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} {{ 'día' if p.dias == 1 else 'días' }}{% if p.nota %} · <span class="tenue">{{ p.nota }}</span>{% endif %}</div>
     {% if p.estado == 'pendiente' %}
       <span class="etiqueta pendiente">Esperando respuesta</span>
       <form method="POST" action="{{ url_for('yo_pedido_cancelar') }}" class="enlinea"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit">Cancelar</button></form>
     {% elif p.estado == 'aprobada' %}
       <span class="etiqueta ok">Aprobado</span>{% if p.respuesta %} <span class="tenue">{{ p.respuesta }}</span>{% endif %}
+      {% if p.desde > hoy %}<form method="POST" action="{{ url_for('yo_pedido_cancelar') }}" class="enlinea"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit">Cancelar</button></form>{% endif %}
     {% elif p.estado == 'rechazada' %}
       <span class="etiqueta baja">No aprobado</span> <span class="tenue">{{ p.respuesta }}</span>
     {% else %}
-      <span class="etiqueta">Cancelado</span>
+      <span class="etiqueta">Cancelado</span>{% if p.respuesta %} <span class="tenue">{{ p.respuesta }}</span>{% endif %}
     {% endif %}
   </div>
   {% endfor %}
 </div>
 {% endif %}
-
-<div class="bloque">
-  <div class="nota" style="border-top:0">
-    En Intela desde el {{ t.fecha_ingreso|fecha }}: <b>{{ v.anios }}</b> {{ 'año' if v.anios == 1 else 'años' }} cumplidos.<br>
-    Este año te tocan <b>{{ v.este_anio|num(1) }}</b> días. El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.
-    {% if v.ajustes %}<br>Ajustes de contabilidad: {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} días.{% endif %}
-  </div>
-</div>
 
 <div class="bloque">
   <div class="titulo"><h2>Días que tomaste</h2></div>

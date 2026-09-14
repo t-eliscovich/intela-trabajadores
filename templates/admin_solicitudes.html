@@ -5,7 +5,7 @@
 
 {% if avisar %}
 <div class="aviso">
-  <b>{{ avisar.nombre }}</b>: pedido {{ 'aprobado' if avisar.estado == 'aprobada' else 'rechazado' }}. Lo va a ver cuando entre al programa.
+  <b>{{ avisar.nombre }}</b>: pedido {{ {'aprobada': 'aprobado', 'rechazada': 'rechazado', 'cancelada': 'cancelado'}[avisar.estado] }}. Lo va a ver cuando entre al programa.
   {% if avisar.whatsapp %}<a class="btn verde chico" href="{{ avisar.whatsapp }}" target="_blank" rel="noopener" style="margin-left:8px">Avisarle por WhatsApp</a>{% else %}<span class="tenue">(no tiene celular cargado para avisarle por WhatsApp)</span>{% endif %}
 </div>
 {% endif %}
@@ -63,7 +63,9 @@
         <td><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a></td>
         <td>{{ TIPOS_AUSENCIA[p.tipo][0] }} · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} d<span class="chico">{{ p.respuesta or '' }}</span></td>
         <td class="der">
-          {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>{% elif p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
+          {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>
+            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="deshacer"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit" title="Cancela el pedido y saca el período de la ficha">Deshacer</button></form>
+          {% elif p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
           <span class="chico">{{ p.respondido_por or '' }} {{ p.respondido_en|fecha if p.respondido_en else '' }}</span>
         </td>
       </tr>

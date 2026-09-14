@@ -28,6 +28,7 @@ con su cédula.
   días por año) y cargar a todos de una vez;
 - **Comidas del mes**: el cuadro trabajador × día, almuerzos y cenas por separado, que es lo
   que se le paga a la cafetería. Se imprime;
+- **Historial**: lo que se borró (períodos, ajustes), con quién y cuándo; se recupera con un botón;
 - **Usuarios**: quién más entra a esta parte.
 
 ## La cuenta de vacaciones
@@ -44,7 +45,14 @@ ahí en adelante la cuenta sigue sola. Los períodos anteriores a esa fecha se
 guardan como historia pero no se restan otra vez.
 
 Cada período tiene un tipo: vacaciones y permiso descuentan del saldo; enfermedad y
-permiso sin goce se anotan pero no descuentan.
+permiso sin sueldo se anotan pero no descuentan.
+
+En pantalla se habla como en RRHH: **disponibles**, **tomados**, **acumulados**
+(nunca «ganados»). El trabajador lee «este año te tocan X, más Y acumulados,
+tomaste Z, te quedan W»; el que no cumplió el año lee cuándo lo cumple y cuánto lleva.
+
+Nada se borra de verdad: un período o ajuste borrado queda marcado (`borrado_en`,
+`borrado_por`), se ve en Historial y se puede recuperar.
 
 Todo esto vive en `vacaciones.py`, sin base ni Flask, y tiene tests.
 

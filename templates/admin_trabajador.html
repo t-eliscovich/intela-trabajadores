@@ -9,9 +9,10 @@
 <div class="cifras">
   <div class="cifra"><b class="grande {{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b><small>Saldo</small></div>
   {% if v.fecha_saldo %}<div class="cifra"><b>{{ v.inicial|num(1) }}</b><small>Al arrancar ({{ v.fecha_saldo|fecha }})</small></div>{% endif %}
-  <div class="cifra"><b>{{ v.ganados|num }}</b><small>Acreditados{% if v.fecha_saldo %} desde entonces{% else %} desde el ingreso{% endif %}</small></div>
+  <div class="cifra"><b>{{ v.ganados|num }}</b><small>Generados{% if v.fecha_saldo %} desde entonces{% else %} desde el ingreso{% endif %}</small></div>
   <div class="cifra"><b>{{ v.ajustes|num(1) }}</b><small>Ajustes</small></div>
-  <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados</small></div>
+  <div class="cifra"><b>{{ v.tomados|num(1) }}</b><small>Tomados{% if v.fecha_saldo %} desde entonces{% endif %}</small></div>
+  <div class="cifra"><b>{{ v.tomados_anio|num(1) }}</b><small>Tomados en {{ hoy.year }}</small></div>
 </div>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
@@ -21,7 +22,7 @@
     <div class="relleno">
       <form method="POST" class="formulario">
         <input type="hidden" name="accion" value="vacacion">
-        <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}">{{ nombre }}{% if not descuenta %} (no descuenta){% endif %}</option>{% endfor %}</select></div>
+        <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}">{{ nombre }}{% if not descuenta %} · no descuenta{% endif %}</option>{% endfor %}</select></div>
         <div><label class="campo">Desde</label><input name="desde" placeholder="01/02/2026" required></div>
         <div><label class="campo">Hasta</label><input name="hasta" placeholder="15/02/2026" required></div>
         <div><label class="campo">Días</label><input name="dias" placeholder="se calculan solos"></div>

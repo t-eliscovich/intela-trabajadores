@@ -208,6 +208,7 @@
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
+      <a href="{{ url_for('admin_historial') }}" class="{{ 'activo' if request.endpoint=='admin_historial' }}">Historial</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>
     </nav>
     <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>

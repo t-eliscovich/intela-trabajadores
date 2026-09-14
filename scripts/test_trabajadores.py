@@ -80,6 +80,11 @@ res = V.resumen(ing, tomados=5, ajustes=0, hoy=date(2027, 4, 1), saldo_inicial=4
 check("con saldo al arrancar: 4 + 17 − 5 = 16", res["saldo"] == 16 and res["inicial"] == 4 and res["este_anio"] == 17)
 res = V.resumen(ing, tomados=5, ajustes=0, hoy=date(2027, 4, 1), saldo_inicial=4, fecha_saldo=date(2026, 9, 11), dias_por_anio=20)
 check("con número fijo por año manda ése: 4 + 20 − 5 = 19", res["saldo"] == 19 and res["este_anio"] == 20 and res["fijo"] == 20)
+res = V.resumen(date(2001, 1, 1), tomados=0, ajustes=0, hoy=date(2026, 9, 14), saldo_inicial=84, fecha_saldo=date(2026, 9, 11), tomados_anio=39)
+check("lo que el trabajador lee: tenías 123 (30 + 93 acumulados), tomaste 39, te quedan 84", res["disponible_anio"] == 123 and res["arrastre"] == 93 and res["tomados_anio"] == 39 and res["saldo"] == 84 and not res["primer_anio"])
+res = V.resumen(date(2026, 5, 1), tomados=0, ajustes=0, hoy=date(2026, 9, 14))
+check("primer año: lleva 5 y cumple el 01/05/2027", res["primer_anio"] and res["saldo"] == 5 and res["aniversario"] == date(2027, 5, 1))
+check("aniversario con 29 de febrero", V.aniversario(date(2024, 2, 29), date(2026, 9, 14)) == date(2027, 3, 1))
 check("número fijo también en el proporcional", V.acreditado_hasta(date(2026, 5, 1), date(2026, 8, 15), 24) == 6)
 
 # --- 3. lo que se pega -------------------------------------------------------
@@ -132,7 +137,13 @@ galleta = next((h for h in r.history[0].headers.getlist("Set-Cookie") if h.start
 check("la sesión del trabajador dura 30 días (cookie con vencimiento)", "Expires=" in galleta or "Max-Age=" in galleta)
 check("y son 30 días", A.app.config["PERMANENT_SESSION_LIFETIME"].days == 30)
 r = c.get("/yo/vacaciones")
-check("la pestaña de vacaciones muestra el saldo", r.status_code == 200 and "Días que te quedan" in r.get_data(as_text=True))
+html = r.get_data(as_text=True)
+check("la pestaña de vacaciones muestra el saldo con palabras de RRHH", r.status_code == 200 and "Disponibles" in html and "Tomados este año" in html and "anados" not in html)
+check("y explica la cuenta: te tocan, tomaste, te quedan", "Este año te tocan" in html and "Te quedan" in html)
+nuevo = base.crear_trabajador("0101010101", "Recién Entrado", HOY - timedelta(days=100))
+n = A.app.test_client(); n.post("/", data={"cedula": "0101010101"})
+html = n.get("/yo/vacaciones").get_data(as_text=True)
+check("el que no cumplió el año lee cuándo lo cumple y cuánto lleva", "todavía no cumplís un año" in html and (HOY - timedelta(days=100)).replace(year=HOY.year + 1).strftime("%d/%m/%Y") in html and "llevás" in html)
 r = c.get("/yo/perfil")
 check("la pestaña de perfil abre y dice los días de este año", r.status_code == 200 and "Vacaciones este año" in r.get_data(as_text=True) and "por ley" in r.get_data(as_text=True))
 r = c.post("/yo/comida", data={"fecha": HOY.isoformat(), "tipo": "almuerzo", "accion": "marcar"}, follow_redirects=True)
@@ -199,6 +210,11 @@ check("hasta antes de desde avisa", "anterior" in r.get_data(as_text=True) and b
 vid = base.vacaciones(juan)[0]["id"]
 c.post(f"/admin/trabajador/{juan}", data={"accion": "vacacion_borrar", "id": vid})
 check("borra un período", base.trabajador(juan)["tomados"] == 15)
+html = c.get("/admin/historial").get_data(as_text=True)
+check("el período borrado queda en Historial con quién lo borró", "Juan Pérez" in html and "conta" in html and base.vac[vid]["borrado_por"] == "conta")
+c.post("/admin/historial", data={"que": "periodo", "id": vid})
+check("y se puede recuperar", base.trabajador(juan)["tomados"] == 18 and base.vac[vid]["borrado_en"] is None)
+c.post(f"/admin/trabajador/{juan}", data={"accion": "vacacion_borrar", "id": vid})
 c.post(f"/admin/trabajador/{juan}", data={"accion": "ajuste", "dias": "-2", "motivo": "pagados"})
 check("ajuste negativo resta", base.trabajador(juan)["ajustes"] == -2)
 r = c.post(f"/admin/trabajador/{juan}", data={"accion": "ajuste", "dias": "3", "motivo": ""}, follow_redirects=True)
@@ -233,6 +249,7 @@ html = c.get("/admin?q=perez").get_data(as_text=True)
 check("el buscador encuentra sin acento ni mayúsculas", "Juan Pérez" in html and "María López" not in html)
 html = c.get("/admin?q=0912").get_data(as_text=True)
 check("y por cédula", "María López" in html and "Juan Pérez" not in html)
+check("la lista dice Generados, no Ganados", "Generados" in html and "Ganados" not in html)
 check("sin resultados lo dice", "Nadie coincide" in c.get("/admin?q=zzzz").get_data(as_text=True))
 c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "1712345678", "nombre": "Juan Pérez", "fecha_ingreso": "25/03/2019", "direccion": "Calle 1"})
 check("la ficha guarda la dirección", base.trabajador(juan)["direccion"] == "Calle 1")
@@ -319,6 +336,19 @@ check("el link de WhatsApp arma el número de Ecuador", A.link_whatsapp("0991234
 base.trab[maria]["celular"] = "0991234567"
 r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": pid, "dias": "1"}, follow_redirects=True)
 check("con celular ofrece el WhatsApp con el mensaje", "wa.me/593991234567" in r.get_data(as_text=True))
+antes = base.trabajador(maria)["tomados"]
+r = w.post("/yo/pedido/cancelar", data={"id": pid}, follow_redirects=True)
+check("el trabajador cancela un aprobado que no empezó y los días vuelven", base.solicitud(pid)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 1 and "vuelven a tu saldo" in r.get_data(as_text=True))
+check("el período cancelado quedó en el historial", any(f["id"] == base.solicitud(pid)["vacacion_id"] for f in base.historial()))
+w.post("/yo/pedir", data={"tipo": "permiso", "desde": (HOY - timedelta(days=3)).isoformat(), "hasta": (HOY - timedelta(days=2)).isoformat()})
+viejo = [p["id"] for p in base.solicitudes_pendientes()][0]
+c.post("/admin/solicitudes", data={"accion": "aprobar", "id": viejo, "dias": "2"})
+r = w.post("/yo/pedido/cancelar", data={"id": viejo}, follow_redirects=True)
+check("un aprobado que ya empezó no se cancela solo", base.solicitud(viejo)["estado"] == "aprobada" and "hablá con contabilidad" in r.get_data(as_text=True))
+antes = base.trabajador(maria)["tomados"]
+r = c.post("/admin/solicitudes", data={"accion": "deshacer", "id": viejo, "respuesta": "se cambió la fecha"}, follow_redirects=True)
+check("contabilidad deshace un aprobado", base.solicitud(viejo)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 2 and "se sacó de la ficha" in r.get_data(as_text=True))
+check("y ofrece avisarle también", "wa.me/" in r.get_data(as_text=True))
 
 # el perfil que el trabajador corrige
 r = w.post("/yo/perfil", data={"celular": "099 111 2222", "direccion": "Av. Siempre Viva 123"}, follow_redirects=True)
@@ -350,10 +380,10 @@ check("desactivado no puede entrar", base.usuario_por_nombre("ana") is None)
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
 for ruta in ("/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
-             "/admin/comidas", "/admin/usuarios", "/admin/solicitudes", "/healthz"):
+             "/admin/comidas", "/admin/usuarios", "/admin/solicitudes", "/admin/historial", "/healthz"):
     check(f"{ruta} abre", c.get(ruta).status_code == 200)
 r = c.get("/healthz")
-check("healthz cuenta trabajadores y usuarios", r.get_json()["trabajadores_activos"] == 4 and r.get_json()["hay_usuarios"])
+check("healthz cuenta trabajadores y usuarios", r.get_json()["trabajadores_activos"] == 5 and r.get_json()["hay_usuarios"])
 check("404 en castellano", "no existe" in c.get("/no-existe").get_data(as_text=True))
 check("/admin sin login manda a entrar", A.app.test_client().get("/admin/comidas").status_code == 302)
 

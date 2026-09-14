@@ -42,6 +42,12 @@ en un ajuste: se probó y la lista quedaba con «231 ganados, −210 ajustes».
 SQL de `tomados` filtra por los que descuentan; agregar un tipo es agregar una
 línea ahí, y el test lo prueba contra la base falsa que repite la misma tabla.
 
+**Nunca `DELETE` en vacacion / ajuste_vacacion.** `borrar_*` marca `borrado_en`
++ `borrado_por`; toda lectura filtra `borrado_en IS NULL`; /admin/historial recupera.
+
+**En pantalla, palabras de RRHH**: disponibles, tomados, acumulados, generados
+(en contabilidad). «Ganados» no (pedido de Tamara 14/09).
+
 **Los avisos al trabajador no son automáticos**: no hay API de WhatsApp. Al
 responder un pedido, la pantalla ofrece un link `wa.me` con el mensaje armado.
 El trabajador siempre ve la respuesta en su pestaña Vacaciones.

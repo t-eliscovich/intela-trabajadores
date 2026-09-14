@@ -50,10 +50,12 @@ class BaseFalsa:
     def _con_totales(self, t):
         t = dict(t)
         corte = t["fecha_saldo_inicial"]
-        t["tomados"] = sum(v["dias"] for v in self.vac.values()
-                           if v["trabajador_id"] == t["id"] and v["tipo"] in self.TIPOS_QUE_DESCUENTAN
-                           and (corte is None or v["desde"] >= corte))
-        t["ajustes"] = sum(a["dias"] for a in self.aju.values() if a["trabajador_id"] == t["id"])
+        vivos = [v for v in self.vac.values() if v["trabajador_id"] == t["id"] and not v["borrado_en"]
+                 and v["tipo"] in self.TIPOS_QUE_DESCUENTAN]
+        t["tomados"] = sum(v["dias"] for v in vivos if corte is None or v["desde"] >= corte)
+        t["tomados_anio"] = sum(v["dias"] for v in vivos if v["desde"].year == date.today().year)
+        t["ajustes"] = sum(a["dias"] for a in self.aju.values()
+                           if a["trabajador_id"] == t["id"] and not a["borrado_en"])
         return t
 
     def trabajadores(self, incluir_inactivos=False):
@@ -72,7 +74,7 @@ class BaseFalsa:
 
     PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio", "direccion")
     TIPOS_AUSENCIA = {"vacaciones": ("Vacaciones", True), "permiso": ("Permiso", True),
-                      "enfermedad": ("Enfermedad", False), "sin_goce": ("Permiso sin goce", False)}
+                      "enfermedad": ("Enfermedad", False), "sin_goce": ("Permiso sin sueldo", False)}
     TIPOS_QUE_DESCUENTAN = ("vacaciones", "permiso")
 
     def crear_trabajador(self, cedula, nombre, fecha_ingreso, saldo_inicial=None,
@@ -141,7 +143,7 @@ class BaseFalsa:
 
     # --- vacaciones / ajustes ---
     def vacaciones(self, trabajador_id):
-        return sorted((v for v in self.vac.values() if v["trabajador_id"] == trabajador_id),
+        return sorted((v for v in self.vac.values() if v["trabajador_id"] == trabajador_id and not v["borrado_en"]),
                       key=lambda v: v["desde"], reverse=True)
 
     def agregar_vacacion(self, trabajador_id, desde, hasta, dias, nota, cargado_por, tipo="vacaciones"):
@@ -150,11 +152,28 @@ class BaseFalsa:
         id_ = self._id()
         self.vac[id_] = {"id": id_, "trabajador_id": trabajador_id, "desde": desde, "hasta": hasta,
                          "dias": dias, "nota": nota or None, "cargado_por": cargado_por, "tipo": tipo,
-                         "creado_en": datetime.now()}
+                         "creado_en": datetime.now(), "borrado_en": None, "borrado_por": None}
         return id_
 
-    def borrar_vacacion(self, id_):
-        self.vac.pop(id_, None)
+    def borrar_vacacion(self, id_, quien="?"):
+        if id_ in self.vac and not self.vac[id_]["borrado_en"]:
+            self.vac[id_].update(borrado_en=datetime.now(), borrado_por=quien)
+
+    def recuperar_vacacion(self, id_):
+        self.vac[id_].update(borrado_en=None, borrado_por=None)
+
+    def historial(self, limite=200):
+        filas = []
+        for v in self.vac.values():
+            if v["borrado_en"]:
+                t = self.trab[v["trabajador_id"]]
+                filas.append({"que": "periodo", **v, "nombre": t["nombre"], "cedula": t["cedula"]})
+        for a in self.aju.values():
+            if a["borrado_en"]:
+                t = self.trab[a["trabajador_id"]]
+                filas.append({"que": "ajuste", **a, "tipo": None, "desde": None, "hasta": None,
+                              "nota": a["motivo"], "nombre": t["nombre"], "cedula": t["cedula"]})
+        return sorted(filas, key=lambda f: f["borrado_en"], reverse=True)[:limite]
 
     # --- pedidos ---
     def _sol_con_trab(self, s):
@@ -189,6 +208,14 @@ class BaseFalsa:
                          "vacacion_id": None, "creado_en": datetime.now()}
         return id_
 
+    def cancelar_solicitud_aprobada(self, id_, respuesta, quien):
+        s = self.sol.get(id_)
+        if not s or s["estado"] != "aprobada":
+            return
+        if s["vacacion_id"]:
+            self.borrar_vacacion(s["vacacion_id"], quien)
+        s.update(estado="cancelada", respuesta=respuesta, respondido_por=quien, respondido_en=datetime.now())
+
     def responder_solicitud(self, id_, estado, respuesta, quien, vacacion_id=None):
         s = self.sol[id_]
         if s["estado"] == "pendiente":
@@ -196,16 +223,21 @@ class BaseFalsa:
                      respondido_en=datetime.now(), vacacion_id=vacacion_id)
 
     def ajustes(self, trabajador_id):
-        return [a for a in self.aju.values() if a["trabajador_id"] == trabajador_id]
+        return [a for a in self.aju.values() if a["trabajador_id"] == trabajador_id and not a["borrado_en"]]
 
     def agregar_ajuste(self, trabajador_id, dias, motivo, cargado_por):
         id_ = self._id()
         self.aju[id_] = {"id": id_, "trabajador_id": trabajador_id, "dias": dias, "motivo": motivo,
-                         "cargado_por": cargado_por, "creado_en": datetime.now()}
+                         "cargado_por": cargado_por, "creado_en": datetime.now(),
+                         "borrado_en": None, "borrado_por": None}
         return id_
 
-    def borrar_ajuste(self, id_):
-        self.aju.pop(id_, None)
+    def borrar_ajuste(self, id_, quien="?"):
+        if id_ in self.aju and not self.aju[id_]["borrado_en"]:
+            self.aju[id_].update(borrado_en=datetime.now(), borrado_por=quien)
+
+    def recuperar_ajuste(self, id_):
+        self.aju[id_].update(borrado_en=None, borrado_por=None)
 
     # --- comidas ---
     def comidas_del_mes(self, trabajador_id, anio, mes):

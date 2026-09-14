@@ -11,7 +11,8 @@ Para contabilidad (con usuario y clave):
 
     /admin                   la lista de trabajadores con el saldo de cada uno
     /admin/trabajador/N      la ficha: vacaciones tomadas, ajustes, comidas
-    /admin/solicitudes       los pedidos de los trabajadores (aprobar / rechazar)
+    /admin/solicitudes       los pedidos de los trabajadores (aprobar / rechazar / deshacer)
+    /admin/historial         lo borrado (períodos, ajustes), para recuperarlo si hizo falta
     /admin/carga             pegar la planilla para cargar a todos de una vez
     /admin/comidas           el cuadro del mes para pagarle a la cafetería
     /admin/usuarios          quién entra a esta parte
@@ -198,7 +199,7 @@ def mes_siguiente(anio: int, mes: int) -> str:
 def _resumen(t: dict) -> dict:
     return vacaciones.resumen(t["fecha_ingreso"], float(t["tomados"]), float(t["ajustes"]), hoy(),
                               t.get("saldo_inicial"), t.get("fecha_saldo_inicial"),
-                              t.get("dias_por_anio"))
+                              t.get("dias_por_anio"), float(t.get("tomados_anio") or 0))
 
 
 def leer_perfil(f) -> dict:
@@ -385,6 +386,11 @@ def yo_pedido_cancelar():
     if p and p["trabajador_id"] == t["id"] and p["estado"] == "pendiente":
         store.responder_solicitud(p["id"], "cancelada", None, "trabajador")
         flash("Pedido cancelado.", "ok")
+    elif p and p["trabajador_id"] == t["id"] and p["estado"] == "aprobada" and p["desde"] > hoy():
+        store.cancelar_solicitud_aprobada(p["id"], "cancelado por el trabajador", "trabajador")
+        flash("Pedido cancelado. Los días vuelven a tu saldo.", "ok")
+    elif p and p["trabajador_id"] == t["id"] and p["estado"] == "aprobada":
+        flash("Ese pedido ya empezó: para cancelarlo hablá con contabilidad.", "error")
     return redirect(url_for("yo_vacaciones"))
 
 
@@ -558,8 +564,8 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip(), quien, tipo)
         flash(f"{num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
     elif accion == "vacacion_borrar":
-        store.borrar_vacacion(int(f.get("id", 0)))
-        flash("Período borrado.", "ok")
+        store.borrar_vacacion(int(f.get("id", 0)), quien)
+        flash("Período borrado. Queda en Historial por si hay que recuperarlo.", "ok")
     elif accion == "ajuste":
         dias = leer_decimal(f.get("dias", ""), "Los días")
         motivo = (f.get("motivo") or "").strip()
@@ -568,8 +574,8 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         store.agregar_ajuste(t["id"], dias, motivo, quien)
         flash("Ajuste cargado.", "ok")
     elif accion == "ajuste_borrar":
-        store.borrar_ajuste(int(f.get("id", 0)))
-        flash("Ajuste borrado.", "ok")
+        store.borrar_ajuste(int(f.get("id", 0)), quien)
+        flash("Ajuste borrado. Queda en Historial por si hay que recuperarlo.", "ok")
     elif accion in ("marcar", "desmarcar"):
         fecha = leer_fecha(f.get("fecha", ""))
         tipo = leer_tipo_comida(f.get("tipo"))
@@ -717,6 +723,14 @@ def admin_solicitudes():
             if accion == "visto":
                 store.marcar_cambio_visto(int(f.get("id", 0)))
                 return redirect(url_for("admin_solicitudes"))
+            if accion == "deshacer":
+                p = store.solicitud(int(f.get("id", 0) or 0))
+                if not p or p["estado"] != "aprobada":
+                    raise ValueError("Ese pedido no está aprobado.")
+                store.cancelar_solicitud_aprobada(p["id"], (f.get("respuesta") or "").strip() or "cancelado por contabilidad",
+                                                  g.usuario["usuario"])
+                flash(f"Pedido de {p['nombre']} cancelado: el período se sacó de la ficha.", "ok")
+                return redirect(url_for("admin_solicitudes", avisar=p["id"]))
             p = store.solicitud(int(f.get("id", 0) or 0))
             if not p or p["estado"] != "pendiente":
                 raise ValueError("Ese pedido ya no está pendiente.")
@@ -749,7 +763,7 @@ def admin_solicitudes():
     id_avisar = request.args.get("avisar")
     if id_avisar and id_avisar.isdigit():
         p = store.solicitud(int(id_avisar))
-        if p and p["estado"] in ("aprobada", "rechazada"):
+        if p and p["estado"] in ("aprobada", "rechazada", "cancelada"):
             avisar = dict(p, whatsapp=link_whatsapp(p["celular"], _texto_aviso(p)))
     return render_template("admin_solicitudes.html", pendientes=pendientes,
                            respondidas=store.solicitudes_respondidas(),
@@ -762,7 +776,24 @@ def _texto_aviso(p: dict) -> str:
     cuando = f"del {p['desde'].strftime('%d/%m')} al {p['hasta'].strftime('%d/%m')}"
     if p["estado"] == "aprobada":
         return f"Hola {nombre}, tu pedido de {que} {cuando} está aprobado. Saludos, Intela."
+    if p["estado"] == "cancelada":
+        return f"Hola {nombre}, tu pedido de {que} {cuando} quedó cancelado ({p['respuesta']}). Saludos, Intela."
     return f"Hola {nombre}, tu pedido de {que} {cuando} no se pudo aprobar: {p['respuesta']}. Saludos, Intela."
+
+
+@app.route("/admin/historial", methods=["GET", "POST"])
+@requiere_admin
+def admin_historial():
+    """Lo que se borró: períodos y ajustes, con quién y cuándo. Se puede recuperar."""
+    if request.method == "POST":
+        que, id_ = request.form.get("que"), int(request.form.get("id", 0) or 0)
+        if que == "periodo":
+            store.recuperar_vacacion(id_)
+        elif que == "ajuste":
+            store.recuperar_ajuste(id_)
+        flash("Recuperado: vuelve a contar en la ficha.", "ok")
+        return redirect(url_for("admin_historial"))
+    return render_template("admin_historial.html", filas=store.historial())
 
 
 # --------------------------------------------------------------------------

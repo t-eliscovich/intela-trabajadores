@@ -140,6 +140,10 @@ ESQUEMA = """
     CREATE INDEX IF NOT EXISTS vacacion_trabajador_idx
         ON trabajadores.vacacion (trabajador_id, desde DESC);
     ALTER TABLE trabajadores.vacacion ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'vacaciones';
+    -- Nada se borra de verdad: un período o ajuste borrado queda con quién y
+    -- cuándo lo borró, se ve en Historial y se puede recuperar.
+    ALTER TABLE trabajadores.vacacion ADD COLUMN IF NOT EXISTS borrado_en timestamptz;
+    ALTER TABLE trabajadores.vacacion ADD COLUMN IF NOT EXISTS borrado_por text;
 
     -- Lo que pide el trabajador desde el celular. Contabilidad lo aprueba (y
     -- ahí nace la fila en `vacacion`) o lo rechaza con un motivo.
@@ -183,6 +187,8 @@ ESQUEMA = """
         cargado_por    text NOT NULL,
         creado_en      timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE trabajadores.ajuste_vacacion ADD COLUMN IF NOT EXISTS borrado_en timestamptz;
+    ALTER TABLE trabajadores.ajuste_vacacion ADD COLUMN IF NOT EXISTS borrado_por text;
 
     -- Un check por comida por día. Existe la fila = comió.
     -- tipo: 'almuerzo' o 'cena'.
@@ -218,7 +224,7 @@ TIPOS_AUSENCIA = {
     "vacaciones": ("Vacaciones", True),
     "permiso": ("Permiso", True),
     "enfermedad": ("Enfermedad", False),
-    "sin_goce": ("Permiso sin goce", False),
+    "sin_goce": ("Permiso sin sueldo", False),
 }
 TIPOS_QUE_DESCUENTAN = tuple(k for k, (_, d) in TIPOS_AUSENCIA.items() if d)
 
@@ -228,12 +234,20 @@ _TRABAJADOR_CON_TOTALES = f"""
            -- saldo: se guarda como historia pero no se resta dos veces.
            -- Sólo descuentan los tipos que descuentan (vacaciones, permiso).
            COALESCE((SELECT SUM(dias) FROM trabajadores.vacacion v
-                      WHERE v.trabajador_id = t.id
+                      WHERE v.trabajador_id = t.id AND v.borrado_en IS NULL
                         AND v.tipo IN {TIPOS_QUE_DESCUENTAN!r}
                         AND (t.fecha_saldo_inicial IS NULL
                              OR v.desde >= t.fecha_saldo_inicial)), 0) AS tomados,
+           -- Lo tomado en el año calendario en curso (hoy de Ecuador), incluido
+           -- lo anterior al saldo al arrancar: es lo que el trabajador ve como
+           -- «tomaste este año».
+           COALESCE((SELECT SUM(dias) FROM trabajadores.vacacion v
+                      WHERE v.trabajador_id = t.id AND v.borrado_en IS NULL
+                        AND v.tipo IN {TIPOS_QUE_DESCUENTAN!r}
+                        AND date_part('year', v.desde) =
+                            date_part('year', (now() AT TIME ZONE '{config.ZONA}')::date)), 0) AS tomados_anio,
            COALESCE((SELECT SUM(dias) FROM trabajadores.ajuste_vacacion a
-                      WHERE a.trabajador_id = t.id), 0)        AS ajustes
+                      WHERE a.trabajador_id = t.id AND a.borrado_en IS NULL), 0) AS ajustes
       FROM trabajadores.trabajador t
 """
 
@@ -352,7 +366,7 @@ def cargar_lote(filas: list[dict], hoy: date) -> dict:
 # Vacaciones y ajustes
 # --------------------------------------------------------------------------
 def vacaciones(trabajador_id: int) -> list[dict]:
-    return _todos("SELECT * FROM trabajadores.vacacion WHERE trabajador_id=%s "
+    return _todos("SELECT * FROM trabajadores.vacacion WHERE trabajador_id=%s AND borrado_en IS NULL "
                   "ORDER BY desde DESC", (trabajador_id,))
 
 
@@ -367,8 +381,29 @@ def agregar_vacacion(trabajador_id: int, desde: date, hasta: date, dias: float,
     return fila["id"]
 
 
-def borrar_vacacion(id_: int) -> None:
-    _ejecutar("DELETE FROM trabajadores.vacacion WHERE id=%s", (id_,))
+def borrar_vacacion(id_: int, quien: str = "?") -> None:
+    """No borra: marca. Se ve en Historial y se puede recuperar."""
+    _ejecutar("UPDATE trabajadores.vacacion SET borrado_en=now(), borrado_por=%s "
+              "WHERE id=%s AND borrado_en IS NULL", (quien, id_))
+
+
+def recuperar_vacacion(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.vacacion SET borrado_en=NULL, borrado_por=NULL WHERE id=%s", (id_,))
+
+
+def historial(limite: int = 200) -> list[dict]:
+    """Períodos y ajustes borrados, los más recientes primero."""
+    return _todos("""
+        SELECT 'periodo' AS que, v.id, v.trabajador_id, t.nombre, t.cedula, v.tipo, v.desde, v.hasta,
+               v.dias, v.nota, v.cargado_por, v.creado_en, v.borrado_en, v.borrado_por
+          FROM trabajadores.vacacion v JOIN trabajadores.trabajador t ON t.id = v.trabajador_id
+         WHERE v.borrado_en IS NOT NULL
+        UNION ALL
+        SELECT 'ajuste', a.id, a.trabajador_id, t.nombre, t.cedula, NULL, NULL, NULL,
+               a.dias, a.motivo, a.cargado_por, a.creado_en, a.borrado_en, a.borrado_por
+          FROM trabajadores.ajuste_vacacion a JOIN trabajadores.trabajador t ON t.id = a.trabajador_id
+         WHERE a.borrado_en IS NOT NULL
+         ORDER BY borrado_en DESC LIMIT %s""", (limite,))
 
 
 # --------------------------------------------------------------------------
@@ -413,6 +448,18 @@ def crear_solicitud(trabajador_id: int, tipo: str, desde: date, hasta: date, dia
     return fila["id"]
 
 
+def cancelar_solicitud_aprobada(id_: int, respuesta: str, quien: str) -> None:
+    """Un pedido aprobado que se cancela: el período se borra (queda en el
+    historial) y el pedido pasa a «cancelada» con quién y por qué."""
+    p = solicitud(id_)
+    if not p or p["estado"] != "aprobada":
+        return
+    if p["vacacion_id"]:
+        borrar_vacacion(p["vacacion_id"], quien)
+    _ejecutar("UPDATE trabajadores.solicitud SET estado='cancelada', respuesta=%s, respondido_por=%s, "
+              "respondido_en=now() WHERE id=%s", (respuesta, quien, id_))
+
+
 def responder_solicitud(id_: int, estado: str, respuesta: str, quien: str,
                         vacacion_id: int | None = None) -> None:
     _ejecutar("UPDATE trabajadores.solicitud SET estado=%s, respuesta=%s, respondido_por=%s, "
@@ -421,7 +468,7 @@ def responder_solicitud(id_: int, estado: str, respuesta: str, quien: str,
 
 
 def ajustes(trabajador_id: int) -> list[dict]:
-    return _todos("SELECT * FROM trabajadores.ajuste_vacacion WHERE trabajador_id=%s "
+    return _todos("SELECT * FROM trabajadores.ajuste_vacacion WHERE trabajador_id=%s AND borrado_en IS NULL "
                   "ORDER BY creado_en DESC", (trabajador_id,))
 
 
@@ -432,8 +479,13 @@ def agregar_ajuste(trabajador_id: int, dias: float, motivo: str, cargado_por: st
     return fila["id"]
 
 
-def borrar_ajuste(id_: int) -> None:
-    _ejecutar("DELETE FROM trabajadores.ajuste_vacacion WHERE id=%s", (id_,))
+def borrar_ajuste(id_: int, quien: str = "?") -> None:
+    _ejecutar("UPDATE trabajadores.ajuste_vacacion SET borrado_en=now(), borrado_por=%s "
+              "WHERE id=%s AND borrado_en IS NULL", (quien, id_))
+
+
+def recuperar_ajuste(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.ajuste_vacacion SET borrado_en=NULL, borrado_por=NULL WHERE id=%s", (id_,))
 
 
 # --------------------------------------------------------------------------

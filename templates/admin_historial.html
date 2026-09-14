@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Historial{% endblock %}
+{% block contenido %}
+<h1>Historial <small>lo que se borró</small></h1>
+<div class="bloque">
+  <div class="titulo"><h2>Períodos y ajustes borrados</h2><p>No se pierde nada: si fue un error, «Recuperar» lo vuelve a poner en la ficha.</p></div>
+  {% if filas %}
+  <div class="desliza">
+  <table>
+    <thead><tr><th>Quién</th><th>Qué</th><th class="der">Días</th><th>Lo cargó</th><th>Lo borró</th><th></th></tr></thead>
+    <tbody>
+    {% for f in filas %}
+      <tr>
+        <td><a href="{{ url_for('admin_trabajador', id_=f.trabajador_id) }}">{{ f.nombre }}</a></td>
+        <td>{% if f.que == 'periodo' %}{{ TIPOS_AUSENCIA[f.tipo][0] if f.tipo in TIPOS_AUSENCIA else f.tipo }} · {{ f.desde|fecha }} al {{ f.hasta|fecha }}{% else %}Ajuste{% endif %}{% if f.nota %} <span class="chico">{{ f.nota }}</span>{% endif %}</td>
+        <td class="der"><b>{{ f.dias|num(1) }}</b></td>
+        <td class="tenue">{{ f.cargado_por }} <span class="chico">{{ f.creado_en|fecha }}</span></td>
+        <td class="tenue">{{ f.borrado_por }} <span class="chico">{{ f.borrado_en|fecha }}</span></td>
+        <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="que" value="{{ f.que }}"><input type="hidden" name="id" value="{{ f.id }}"><button class="btn suave chico" type="submit">Recuperar</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<div class="vacio"><h3>Nada borrado</h3><p>Cuando se borre un período o un ajuste, queda acá.</p></div>{% endif %}
+</div>
+{% endblock %}

@@ -116,9 +116,27 @@ def dias_entre(desde: date, hasta: date) -> int:
     return (hasta - desde).days + 1
 
 
+def aniversario(ingreso: date, hoy: date) -> date:
+    """El próximo aniversario de ingreso (el primero, si todavía no cumplió el año)."""
+    anio = hoy.year if (hoy.month, hoy.day) < (ingreso.month, ingreso.day) else hoy.year + 1
+    try:
+        return date(anio, ingreso.month, ingreso.day)
+    except ValueError:  # 29 de febrero
+        return date(anio, 3, 1)
+
+
 def resumen(ingreso: date, tomados: float, ajustes: float, hoy: date,
             saldo_inicial: float | None = None, fecha_saldo: date | None = None,
-            dias_por_anio: float | None = None) -> dict:
+            dias_por_anio: float | None = None, tomados_anio: float = 0.0) -> dict:
+    """Los números de la pantalla. Además del saldo:
+
+    * `tomados_anio`: lo tomado en el año calendario en curso, contando también
+      lo anterior al saldo al arrancar (que no resta dos veces pero sí se tomó).
+    * `disponible_anio` = saldo + tomados_anio: con lo que arrancó el año.
+    * `arrastre` = disponible_anio − este_anio: lo acumulado de años anteriores
+      (negativo = debía días).
+    Así el trabajador lee «tenías X, tomaste Y, te quedan Z» como en la planilla.
+    """
     fijo = float(dias_por_anio) if dias_por_anio is not None else None
     if saldo_inicial is not None and fecha_saldo is not None:
         ganados = dias_ganados_desde(ingreso, fecha_saldo, hoy, fijo)
@@ -129,15 +147,23 @@ def resumen(ingreso: date, tomados: float, ajustes: float, hoy: date,
     cuando, cuanto, tipo = proxima_carga(ingreso, hoy)
     if fijo is not None:
         cuanto = fijo if tipo == "anio" else round(fijo / 12, 2)
+    saldo = round(inicial + ganados + ajustes - tomados, 2)
+    este_anio = dias_del_periodo(ingreso, hoy.year, fijo)
+    disponible_anio = round(saldo + tomados_anio, 2)
     return {
         "anios": anios_cumplidos(ingreso, hoy),
+        "primer_anio": anios_cumplidos(ingreso, hoy) == 0,
+        "aniversario": aniversario(ingreso, hoy),
+        "tomados_anio": tomados_anio,
+        "disponible_anio": disponible_anio,
+        "arrastre": round(disponible_anio - este_anio, 2),
         "inicial": inicial,
         "fecha_saldo": fecha_saldo if saldo_inicial is not None else None,
         "ganados": ganados,
         "ajustes": ajustes,
         "tomados": tomados,
-        "saldo": round(inicial + ganados + ajustes - tomados, 2),
-        "este_anio": dias_del_periodo(ingreso, hoy.year, fijo),
+        "saldo": saldo,
+        "este_anio": este_anio,
         "proxima_carga": cuando,
         "proxima_cantidad": cuanto,
         "proxima_tipo": tipo,
