@@ -38,6 +38,8 @@ class BaseFalsa:
         self.aju: dict[int, dict] = {}
         self.alm: set[tuple[int, date, str]] = set()
         self.usu: dict[int, dict] = {}
+        self.sol: dict[int, dict] = {}
+        self.cam: dict[int, dict] = {}
         self._n = 0
 
     def _id(self):
@@ -49,7 +51,8 @@ class BaseFalsa:
         t = dict(t)
         corte = t["fecha_saldo_inicial"]
         t["tomados"] = sum(v["dias"] for v in self.vac.values()
-                           if v["trabajador_id"] == t["id"] and (corte is None or v["desde"] >= corte))
+                           if v["trabajador_id"] == t["id"] and v["tipo"] in self.TIPOS_QUE_DESCUENTAN
+                           and (corte is None or v["desde"] >= corte))
         t["ajustes"] = sum(a["dias"] for a in self.aju.values() if a["trabajador_id"] == t["id"])
         return t
 
@@ -67,7 +70,10 @@ class BaseFalsa:
                 return self._con_totales(t)
         return None
 
-    PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio")
+    PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio", "direccion")
+    TIPOS_AUSENCIA = {"vacaciones": ("Vacaciones", True), "permiso": ("Permiso", True),
+                      "enfermedad": ("Enfermedad", False), "sin_goce": ("Permiso sin goce", False)}
+    TIPOS_QUE_DESCUENTAN = ("vacaciones", "permiso")
 
     def crear_trabajador(self, cedula, nombre, fecha_ingreso, saldo_inicial=None,
                          fecha_saldo_inicial=None, perfil=None):
@@ -89,6 +95,26 @@ class BaseFalsa:
         self.trab[id_].update(cedula=cedula, nombre=nombre, fecha_ingreso=fecha_ingreso)
         if perfil is not None:
             self.trab[id_].update({k: perfil.get(k) for k in self.PERFIL})
+
+    def cambiar_contacto(self, id_, celular, direccion):
+        t = self.trab[id_]
+        cambios = [{"campo": c, "antes": t.get(c), "despues": n}
+                   for c, n in (("celular", celular), ("direccion", direccion)) if t.get(c) != n]
+        if not cambios:
+            return []
+        t.update(celular=celular, direccion=direccion)
+        for c in cambios:
+            id_c = self._id()
+            self.cam[id_c] = {"id": id_c, "trabajador_id": id_, **c, "visto": False,
+                              "creado_en": datetime.now()}
+        return cambios
+
+    def cambios_perfil_sin_ver(self):
+        return [dict(c, nombre=self.trab[c["trabajador_id"]]["nombre"], cedula=self.trab[c["trabajador_id"]]["cedula"])
+                for c in self.cam.values() if not c["visto"]]
+
+    def marcar_cambio_visto(self, id_):
+        self.cam[id_]["visto"] = True
 
     def dar_de_baja(self, id_, fecha_salida):
         self.trab[id_].update(activo=False, fecha_salida=fecha_salida)
@@ -118,15 +144,56 @@ class BaseFalsa:
         return sorted((v for v in self.vac.values() if v["trabajador_id"] == trabajador_id),
                       key=lambda v: v["desde"], reverse=True)
 
-    def agregar_vacacion(self, trabajador_id, desde, hasta, dias, nota, cargado_por):
+    def agregar_vacacion(self, trabajador_id, desde, hasta, dias, nota, cargado_por, tipo="vacaciones"):
+        if tipo not in self.TIPOS_AUSENCIA:
+            raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
         id_ = self._id()
         self.vac[id_] = {"id": id_, "trabajador_id": trabajador_id, "desde": desde, "hasta": hasta,
-                         "dias": dias, "nota": nota or None, "cargado_por": cargado_por,
+                         "dias": dias, "nota": nota or None, "cargado_por": cargado_por, "tipo": tipo,
                          "creado_en": datetime.now()}
         return id_
 
     def borrar_vacacion(self, id_):
         self.vac.pop(id_, None)
+
+    # --- pedidos ---
+    def _sol_con_trab(self, s):
+        t = self.trab[s["trabajador_id"]]
+        return dict(s, nombre=t["nombre"], cedula=t["cedula"], celular=t.get("celular"), area=t.get("area"))
+
+    def solicitudes(self, trabajador_id):
+        return sorted((dict(s) for s in self.sol.values() if s["trabajador_id"] == trabajador_id),
+                      key=lambda s: s["creado_en"], reverse=True)
+
+    def solicitud(self, id_):
+        s = self.sol.get(id_)
+        return self._sol_con_trab(s) if s else None
+
+    def solicitudes_pendientes(self):
+        return [self._sol_con_trab(s) for s in self.sol.values() if s["estado"] == "pendiente"]
+
+    def solicitudes_respondidas(self, limite=40):
+        return [self._sol_con_trab(s) for s in sorted(self.sol.values(), key=lambda s: s["id"], reverse=True)
+                if s["estado"] != "pendiente"][:limite]
+
+    def cuantas_pendientes(self):
+        return sum(1 for s in self.sol.values() if s["estado"] == "pendiente")
+
+    def crear_solicitud(self, trabajador_id, tipo, desde, hasta, dias, nota):
+        if tipo not in self.TIPOS_AUSENCIA:
+            raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
+        id_ = self._id()
+        self.sol[id_] = {"id": id_, "trabajador_id": trabajador_id, "tipo": tipo, "desde": desde,
+                         "hasta": hasta, "dias": dias, "nota": nota or None, "estado": "pendiente",
+                         "respuesta": None, "respondido_por": None, "respondido_en": None,
+                         "vacacion_id": None, "creado_en": datetime.now()}
+        return id_
+
+    def responder_solicitud(self, id_, estado, respuesta, quien, vacacion_id=None):
+        s = self.sol[id_]
+        if s["estado"] == "pendiente":
+            s.update(estado=estado, respuesta=respuesta or None, respondido_por=quien,
+                     respondido_en=datetime.now(), vacacion_id=vacacion_id)
 
     def ajustes(self, trabajador_id):
         return [a for a in self.aju.values() if a["trabajador_id"] == trabajador_id]
@@ -195,4 +262,6 @@ def enchufar(store_modulo, base: BaseFalsa | None = None) -> BaseFalsa:
         setattr(store_modulo, n, getattr(base, n))
     store_modulo.cargar_lote = base._cargar_lote
     store_modulo.AVISOS_ESQUEMA = []
+    store_modulo.TIPOS_AUSENCIA = base.TIPOS_AUSENCIA
+    store_modulo.TIPOS_QUE_DESCUENTAN = base.TIPOS_QUE_DESCUENTAN
     return base

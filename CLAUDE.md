@@ -38,6 +38,14 @@ en `trabajador`. Lo acreditado antes de esa fecha NO suma y los
 períodos anteriores NO restan: ya están adentro de ese número. No convertirlo
 en un ajuste: se probó y la lista quedaba con «231 ganados, −210 ajustes».
 
+**Los tipos de ausencia viven en `store.TIPOS_AUSENCIA`** (nombre, ¿descuenta?). El
+SQL de `tomados` filtra por los que descuentan; agregar un tipo es agregar una
+línea ahí, y el test lo prueba contra la base falsa que repite la misma tabla.
+
+**Los avisos al trabajador no son automáticos**: no hay API de WhatsApp. Al
+responder un pedido, la pantalla ofrece un link `wa.me` con el mensaje armado.
+El trabajador siempre ve la respuesta en su pestaña Vacaciones.
+
 **«Hoy» es el de Ecuador**, `app.hoy()`, nunca `date.today()`: el server está
 en UTC y desde las 19:00 el check de la comida caería en el día siguiente.
 

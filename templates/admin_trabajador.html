@@ -17,10 +17,11 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
   <div class="bloque">
-    <div class="titulo"><h2>Vacaciones tomadas</h2><p>Este año le tocan {{ v.este_anio|num(1) }}{% if v.fijo is not none %} (fijo){% endif %}. El {{ v.proxima_carga|fecha }} se acreditan {{ v.proxima_cantidad|num(2) }} más.</p></div>
+    <div class="titulo"><h2>Días tomados</h2><p>Este año le tocan {{ v.este_anio|num(1) }}{% if v.fijo is not none %} (fijo){% endif %}. El {{ v.proxima_carga|fecha }} se acreditan {{ v.proxima_cantidad|num(2) }} más.</p></div>
     <div class="relleno">
       <form method="POST" class="formulario">
         <input type="hidden" name="accion" value="vacacion">
+        <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}">{{ nombre }}{% if not descuenta %} (no descuenta){% endif %}</option>{% endfor %}</select></div>
         <div><label class="campo">Desde</label><input name="desde" placeholder="01/02/2026" required></div>
         <div><label class="campo">Hasta</label><input name="hasta" placeholder="15/02/2026" required></div>
         <div><label class="campo">Días</label><input name="dias" placeholder="se calculan solos"></div>
@@ -31,10 +32,11 @@
     </div>
     {% if vacaciones %}
     <table>
-      <thead><tr><th>Desde</th><th>Hasta</th><th class="der">Días</th><th>Nota</th><th></th></tr></thead>
+      <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th>Nota</th><th></th></tr></thead>
       <tbody>
       {% for x in vacaciones %}
         <tr>
+          <td>{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico">no descuenta</span>{% endif %}</td>
           <td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td>
           <td class="der"><b>{{ x.dias|num(1) }}</b></td>
           <td class="tenue">{{ x.nota or '' }}{% if v.fecha_saldo and x.desde < v.fecha_saldo %} <span class="etiqueta">antes del arranque · ya descontado</span>{% endif %} <span class="chico">cargó {{ x.cargado_por }}</span></td>
@@ -90,6 +92,7 @@
           <div><label class="campo">Área</label><input name="area" value="{{ t.area or '' }}"></div>
           <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" value="{{ t.fecha_nacimiento|fecha if t.fecha_nacimiento else '' }}"></div>
           <div><label class="campo">Celular</label><input name="celular" value="{{ t.celular or '' }}"></div>
+          <div style="grid-column:span 2"><label class="campo">Dirección</label><input name="direccion" value="{{ t.direccion or '' }}"></div>
           <div><label class="campo">Días de vacaciones por año</label><input name="dias_por_anio" value="{{ t.dias_por_anio|num(1) if t.dias_por_anio is not none else '' }}" placeholder="vacío = por ley"></div>
           <div><button class="btn suave" type="submit">Guardar</button></div>
           <p class="ayuda ancho">«Días por año» sólo si la empresa le da un número fijo (por antigüedad o acuerdo). Vacío = por ley: 15, y uno más por cada año de antigüedad que pase de cinco.</p>

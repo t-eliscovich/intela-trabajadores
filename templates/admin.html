@@ -1,10 +1,18 @@
 {% extends "base.html" %}
 {% block titulo %}Trabajadores{% endblock %}
 {% block contenido %}
-<h1>Trabajadores <small>{{ filas|length }} {{ 'en total' if incluir else 'activos' }}</small></h1>
+<h1>Trabajadores <small>{{ filas|length }}{% if q %} que coinciden con «{{ q }}»{% else %} {{ 'en total' if incluir else 'activos' }}{% endif %}</small></h1>
 
-<div class="bloque">
-  <div class="titulo"><h2>Agregar uno</h2><p>Para cargar a muchos de una vez, <a href="{{ url_for('admin_carga') }}">pegá la planilla</a>.</p></div>
+<form method="GET" class="buscador">
+  <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre, cédula o área…" autofocus>
+  {% if incluir %}<input type="hidden" name="todos" value="1">{% endif %}
+  <button class="btn suave" type="submit">Buscar</button>
+  {% if q %}<a class="btn suave" href="{{ url_for('admin', todos=('1' if incluir else none)) }}">Ver todos</a>{% endif %}
+  <button class="btn" type="button" onclick="var a=document.getElementById('alta');a.open=!a.open;if(a.open)a.querySelector('input').focus()">+ Agregar</button>
+</form>
+
+<details class="bloque" id="alta" {% if abrir_alta %}open{% endif %}>
+  <summary style="display:none"></summary>
   <div class="relleno">
     <form method="POST" class="formulario">
       <div><label class="campo">Cédula</label><input name="cedula" inputmode="numeric" required></div>
@@ -15,16 +23,17 @@
       <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" placeholder="12/08/1990"></div>
       <div><label class="campo">Celular</label><input name="celular" placeholder="0991234567"></div>
       <div><label class="campo">Días por año</label><input name="dias_por_anio" placeholder="vacío = por ley"></div>
+      <div style="grid-column:span 2"><label class="campo">Dirección</label><input name="direccion"></div>
       <div><button class="btn" type="submit">Agregar</button></div>
     </form>
-    <p class="ayuda" style="margin-top:8px">Si ya trabajaba, poné cuántos días de vacaciones le quedan hoy: de ahí en adelante la cuenta sigue sola. «Días por año» sólo si la empresa le da un número fijo distinto al de la ley.</p>
+    <p class="ayuda" style="margin-top:8px">Si ya trabajaba, poné cuántos días de vacaciones le quedan hoy: de ahí en adelante la cuenta sigue sola. «Días por año» sólo si la empresa le da un número fijo distinto al de la ley. Para cargar a muchos de una vez, <a href="{{ url_for('admin_carga') }}">pegá la planilla</a>.</p>
   </div>
-</div>
+</details>
 
 <div class="bloque">
   <div class="titulo">
     <h2>Saldo de vacaciones</h2>
-    <p>{% if incluir %}<a href="{{ url_for('admin') }}">Ver sólo activos</a>{% else %}<a href="{{ url_for('admin', todos=1) }}">Ver también los dados de baja</a>{% endif %}</p>
+    <p>{% if incluir %}<a href="{{ url_for('admin', q=q or none) }}">Ver sólo activos</a>{% else %}<a href="{{ url_for('admin', todos=1, q=q or none) }}">Ver también los dados de baja</a>{% endif %}</p>
   </div>
   {% if filas %}
   <div class="desliza">
@@ -55,6 +64,8 @@
   </table>
   </div>
   <div class="nota">Cada 1 de enero se acreditan los días del año: 15, más uno por cada año de antigüedad que pase de cinco (tope 30); el año de ingreso, 1,25 por mes. Saldo = al arrancar + acreditado desde entonces + ajustes − tomados.</div>
+  {% elif q %}
+  <div class="vacio"><h3>Nadie coincide con «{{ q }}»</h3><p>Probá con menos letras, o con la cédula.</p></div>
   {% else %}
   <div class="vacio"><h3>Todavía no hay trabajadores</h3><p>Agregá uno arriba o pegá la planilla completa.</p></div>
   {% endif %}

@@ -11,6 +11,7 @@ Para contabilidad (con usuario y clave):
 
     /admin                   la lista de trabajadores con el saldo de cada uno
     /admin/trabajador/N      la ficha: vacaciones tomadas, ajustes, comidas
+    /admin/solicitudes       los pedidos de los trabajadores (aprobar / rechazar)
     /admin/carga             pegar la planilla para cargar a todos de una vez
     /admin/comidas           el cuadro del mes para pagarle a la cafetería
     /admin/usuarios          quién entra a esta parte
@@ -213,7 +214,37 @@ def leer_perfil(f) -> dict:
     dpa = leer_decimal(dpa, "Los días por año") if dpa else None
     if dpa is not None and not 0 < dpa <= 60:
         raise ValueError("Los días por año tienen que estar entre 1 y 60.")
-    return {"area": area, "fecha_nacimiento": nac, "celular": cel, "dias_por_anio": dpa}
+    direccion = (f.get("direccion") or "").strip()[:200] or None
+    return {"area": area, "fecha_nacimiento": nac, "celular": cel, "dias_por_anio": dpa,
+            "direccion": direccion}
+
+
+def leer_celular(texto: str | None) -> str | None:
+    """Sólo dígitos (y un + adelante). Vacío → None."""
+    cel = re.sub(r"[^\d+]", "", texto or "")
+    if cel and not 7 <= len(cel.lstrip("+")) <= 15:
+        raise ValueError("El celular tiene que tener entre 7 y 15 números.")
+    return cel or None
+
+
+def leer_tipo_ausencia(texto: str | None) -> str:
+    if texto not in store.TIPOS_AUSENCIA:
+        raise ValueError("Falta decir qué tipo de ausencia es.")
+    return texto
+
+
+def link_whatsapp(celular: str | None, texto: str) -> str | None:
+    """Abre el chat de WhatsApp con el mensaje ya escrito. Un celular de
+    Ecuador «0991234567» es +593 991234567."""
+    if not celular:
+        return None
+    digitos = re.sub(r"\D", "", celular)
+    if digitos.startswith("0") and len(digitos) == 10:
+        digitos = "593" + digitos[1:]
+    if len(digitos) < 8:
+        return None
+    from urllib.parse import quote
+    return f"https://wa.me/{digitos}?text={quote(texto)}"
 
 
 @app.template_filter("num")
@@ -235,12 +266,21 @@ def num(valor, decimales=0):
 def fecha_es(valor):
     if not valor:
         return "—"
+    if isinstance(valor, datetime) and valor.tzinfo:
+        valor = valor.astimezone(ZoneInfo(config.ZONA))
     return valor.strftime("%d/%m/%Y")
 
 
 @app.context_processor
 def _globales():
-    return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "hoy": hoy()}
+    pendientes = 0
+    if g.get("usuario") and not ERROR_ARRANQUE:
+        try:
+            pendientes = store.cuantas_pendientes()
+        except Exception:  # noqa: BLE001
+            pendientes = 0
+    return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA,
+            "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
 
 
 def _totales(marcados: set) -> dict:
@@ -302,7 +342,50 @@ def yo_vacaciones():
     if not t:
         return redirect(url_for("entrar"))
     return render_template("yo_vacaciones.html", t=t, v=_resumen(t),
-                           vacaciones=store.vacaciones(t["id"]))
+                           vacaciones=store.vacaciones(t["id"]),
+                           pedidos=store.solicitudes(t["id"]))
+
+
+# Hasta cuántos días para atrás se puede pedir (una enfermedad se avisa después).
+DIAS_ATRAS_PEDIDO = 30
+
+
+@app.route("/yo/pedir", methods=["POST"])
+def yo_pedir():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    f = request.form
+    try:
+        tipo = leer_tipo_ausencia(f.get("tipo"))
+        desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
+        dias = float(vacaciones.dias_entre(desde, hasta))
+        h = hoy()
+        if desde < h - timedelta(days=DIAS_ATRAS_PEDIDO):
+            raise ValueError(f"Sólo se puede pedir hasta {DIAS_ATRAS_PEDIDO} días para atrás. "
+                             "Para algo más viejo, hablá con contabilidad.")
+        if dias > 60:
+            raise ValueError("Son más de 60 días. Hablá con contabilidad.")
+        for p in store.solicitudes(t["id"]):
+            if p["estado"] == "pendiente" and p["desde"] <= hasta and desde <= p["hasta"]:
+                raise ValueError("Ya tenés un pedido pendiente para esos días.")
+        store.crear_solicitud(t["id"], tipo, desde, hasta, dias, (f.get("nota") or "").strip()[:200])
+        flash("Pedido enviado. Contabilidad lo va a responder acá.", "ok")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("yo_vacaciones"))
+
+
+@app.route("/yo/pedido/cancelar", methods=["POST"])
+def yo_pedido_cancelar():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    p = store.solicitud(int(request.form.get("id", 0) or 0))
+    if p and p["trabajador_id"] == t["id"] and p["estado"] == "pendiente":
+        store.responder_solicitud(p["id"], "cancelada", None, "trabajador")
+        flash("Pedido cancelado.", "ok")
+    return redirect(url_for("yo_vacaciones"))
 
 
 @app.route("/yo/comida", methods=["POST"])
@@ -328,11 +411,20 @@ def yo_comida():
     return redirect(url_for("yo", mes=f"{fecha.year}-{fecha.month:02d}"))
 
 
-@app.route("/yo/perfil")
+@app.route("/yo/perfil", methods=["GET", "POST"])
 def yo_perfil():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if request.method == "POST":
+        try:
+            cel = leer_celular(request.form.get("celular"))
+            direccion = (request.form.get("direccion") or "").strip()[:200] or None
+            cambios = store.cambiar_contacto(t["id"], cel, direccion)
+            flash("Datos guardados. Contabilidad los va a ver." if cambios else "No cambió nada.", "ok")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("yo_perfil"))
     return render_template("yo_perfil.html", t=t, v=_resumen(t))
 
 
@@ -387,8 +479,20 @@ def admin():
         except ValueError as exc:
             flash(str(exc), "error")
     incluir = request.args.get("todos") == "1"
-    filas = [dict(t, v=_resumen(t)) for t in store.trabajadores(incluir_inactivos=incluir)]
-    return render_template("admin.html", filas=filas, incluir=incluir)
+    q = (request.args.get("q") or "").strip()
+    filas = [dict(t, v=_resumen(t)) for t in store.trabajadores(incluir_inactivos=incluir)
+             if not q or _coincide(t, q)]
+    return render_template("admin.html", filas=filas, incluir=incluir, q=q,
+                           abrir_alta=request.method == "POST")
+
+
+def _coincide(t: dict, q: str) -> bool:
+    """Busca por nombre, cédula o área, sin importar mayúsculas ni acentos."""
+    import unicodedata
+    def plano(x):
+        return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
+    aguja = plano(q)
+    return all(p in plano(f"{t['nombre']} {t['cedula']} {t.get('area') or ''}") for p in aguja.split())
 
 
 @app.route("/admin/trabajador/<int:id_>", methods=["GET", "POST"])
@@ -450,8 +554,9 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         dias = leer_decimal(f.get("dias") or str(propuesto), "Los días")
         if dias <= 0:
             raise ValueError("Los días tienen que ser más que cero.")
-        store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip(), quien)
-        flash(f"{num(dias)} días de vacaciones cargados.", "ok")
+        tipo = leer_tipo_ausencia(f.get("tipo") or "vacaciones")
+        store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip(), quien, tipo)
+        flash(f"{num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
     elif accion == "vacacion_borrar":
         store.borrar_vacacion(int(f.get("id", 0)))
         flash("Período borrado.", "ok")
@@ -597,6 +702,67 @@ def admin_carga():
     existentes = {t["cedula"] for t in store.trabajadores(incluir_inactivos=True)} if buenas else set()
     return render_template("admin_carga.html", texto=texto, buenas=buenas, malas=malas,
                            existentes=existentes)
+
+
+# --------------------------------------------------------------------------
+# Pedidos de los trabajadores (y los datos que cambiaron desde el perfil)
+# --------------------------------------------------------------------------
+@app.route("/admin/solicitudes", methods=["GET", "POST"])
+@requiere_admin
+def admin_solicitudes():
+    if request.method == "POST":
+        f = request.form
+        try:
+            accion = f.get("accion", "")
+            if accion == "visto":
+                store.marcar_cambio_visto(int(f.get("id", 0)))
+                return redirect(url_for("admin_solicitudes"))
+            p = store.solicitud(int(f.get("id", 0) or 0))
+            if not p or p["estado"] != "pendiente":
+                raise ValueError("Ese pedido ya no está pendiente.")
+            quien = g.usuario["usuario"]
+            if accion == "aprobar":
+                dias = leer_decimal(f.get("dias") or str(p["dias"]), "Los días")
+                if dias <= 0:
+                    raise ValueError("Los días tienen que ser más que cero.")
+                nota = f"pedido #{p['id']}" + (f" · {p['nota']}" if p.get("nota") else "")
+                vid = store.agregar_vacacion(p["trabajador_id"], p["desde"], p["hasta"], dias,
+                                             nota, quien, p["tipo"])
+                store.responder_solicitud(p["id"], "aprobada", (f.get("respuesta") or "").strip(), quien, vid)
+                flash(f"Aprobado: {num(dias)} días de {store.TIPOS_AUSENCIA[p['tipo']][0].lower()} "
+                      f"para {p['nombre']}.", "ok")
+            elif accion == "rechazar":
+                motivo = (f.get("respuesta") or "").strip()
+                if not motivo:
+                    raise ValueError("Escribí por qué se rechaza: el trabajador lo va a leer.")
+                store.responder_solicitud(p["id"], "rechazada", motivo, quien)
+                flash(f"Rechazado el pedido de {p['nombre']}.", "ok")
+            else:
+                raise ValueError("No sé qué hacer con eso.")
+            return redirect(url_for("admin_solicitudes", avisar=p["id"]))
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("admin_solicitudes"))
+    pendientes = [dict(p, saldo=_resumen(store.trabajador(p["trabajador_id"]))["saldo"])
+                  for p in store.solicitudes_pendientes()]
+    avisar = None
+    id_avisar = request.args.get("avisar")
+    if id_avisar and id_avisar.isdigit():
+        p = store.solicitud(int(id_avisar))
+        if p and p["estado"] in ("aprobada", "rechazada"):
+            avisar = dict(p, whatsapp=link_whatsapp(p["celular"], _texto_aviso(p)))
+    return render_template("admin_solicitudes.html", pendientes=pendientes,
+                           respondidas=store.solicitudes_respondidas(),
+                           cambios=store.cambios_perfil_sin_ver(), avisar=avisar)
+
+
+def _texto_aviso(p: dict) -> str:
+    nombre = p["nombre"].split()[0] if p["nombre"] else ""
+    que = store.TIPOS_AUSENCIA[p["tipo"]][0].lower()
+    cuando = f"del {p['desde'].strftime('%d/%m')} al {p['hasta'].strftime('%d/%m')}"
+    if p["estado"] == "aprobada":
+        return f"Hola {nombre}, tu pedido de {que} {cuando} está aprobado. Saludos, Intela."
+    return f"Hola {nombre}, tu pedido de {que} {cuando} no se pudo aprobar: {p['respuesta']}. Saludos, Intela."
 
 
 # --------------------------------------------------------------------------

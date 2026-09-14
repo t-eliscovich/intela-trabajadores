@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Pedidos{% endblock %}
+{% block contenido %}
+<h1>Pedidos <small>{{ pendientes|length }} {{ 'pendiente' if pendientes|length == 1 else 'pendientes' }}</small></h1>
+
+{% if avisar %}
+<div class="aviso">
+  <b>{{ avisar.nombre }}</b>: pedido {{ 'aprobado' if avisar.estado == 'aprobada' else 'rechazado' }}. Lo va a ver cuando entre al programa.
+  {% if avisar.whatsapp %}<a class="btn verde chico" href="{{ avisar.whatsapp }}" target="_blank" rel="noopener" style="margin-left:8px">Avisarle por WhatsApp</a>{% else %}<span class="tenue">(no tiene celular cargado para avisarle por WhatsApp)</span>{% endif %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
+<div>
+  <div class="bloque">
+    <div class="titulo"><h2>Por responder</h2><p>Al aprobar, el período se carga solo en la ficha.</p></div>
+    {% for p in pendientes %}
+    <div class="pedido">
+      <div class="quien-pide"><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a> <span class="chico" style="display:inline">{{ p.area or '' }} · le quedan {{ p.saldo|num(1) }}</span></div>
+      <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b>{% if not TIPOS_AUSENCIA[p.tipo][1] %} <span class="tenue">(no descuenta)</span>{% endif %} · {{ p.desde|fecha }} al {{ p.hasta|fecha }}{% if p.nota %} · <span class="tenue">{{ p.nota }}</span>{% endif %}</div>
+      <div class="chico">pedido el {{ p.creado_en|fecha }}</div>
+      <form method="POST" class="formulario">
+        <input type="hidden" name="id" value="{{ p.id }}">
+        <div><label class="campo">Días</label><input name="dias" value="{{ p.dias|num(1) }}"></div>
+        <div style="grid-column:span 2"><label class="campo">Mensaje para el trabajador</label><input name="respuesta" placeholder="obligatorio si se rechaza"></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn verde" type="submit" name="accion" value="aprobar">Aprobar</button>
+          <button class="btn rojo" type="submit" name="accion" value="rechazar">Rechazar</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <div class="vacio"><h3>Nada pendiente</h3><p>Cuando un trabajador pida días desde su celular, aparece acá.</p></div>
+    {% endfor %}
+  </div>
+
+  {% if cambios %}
+  <div class="bloque">
+    <div class="titulo"><h2>Datos que cambiaron los trabajadores</h2><p>Pasalos a la nómina y marcá visto.</p></div>
+    <table>
+      <tbody>
+      {% for c in cambios %}
+        <tr>
+          <td><b>{{ c.nombre }}</b> <span class="chico">{{ c.creado_en|fecha }}</span></td>
+          <td>{{ 'Celular' if c.campo == 'celular' else 'Dirección' }}: <span class="tenue">{{ c.antes or '—' }}</span> → <b>{{ c.despues or '—' }}</b></td>
+          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="visto"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn suave chico" type="submit">Visto</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="bloque">
+  <div class="titulo"><h2>Ya respondidos</h2><p>Los últimos {{ respondidas|length }}.</p></div>
+  {% if respondidas %}
+  <table>
+    <thead><tr><th>Quién</th><th>Qué</th><th></th></tr></thead>
+    <tbody>
+    {% for p in respondidas %}
+      <tr>
+        <td><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a></td>
+        <td>{{ TIPOS_AUSENCIA[p.tipo][0] }} · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} d<span class="chico">{{ p.respuesta or '' }}</span></td>
+        <td class="der">
+          {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>{% elif p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
+          <span class="chico">{{ p.respondido_por or '' }} {{ p.respondido_en|fecha if p.respondido_en else '' }}</span>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="vacio"><p>Todavía no se respondió ninguno.</p></div>{% endif %}
+</div>
+</div>
+{% endblock %}

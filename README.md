@@ -8,14 +8,19 @@ con su cédula.
 
 **El trabajador** entra a `trabajadores.intela.com.ec`, pone su cédula y ve:
 
-- en la pestaña Vacaciones, cuántos días le quedan, cuándo se le suman los próximos y los períodos que tomó;
-- en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por año, sus datos;
+- en la pestaña Vacaciones, cuántos días le quedan, cuándo se le suman los próximos, los períodos
+  que tomó, y **pide días** (vacaciones, permiso, enfermedad, permiso sin goce): contabilidad
+  responde y él ve la respuesta ahí mismo;
+- en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por
+  año; y corrige su celular y dirección;
 - primero, su calendario de comidas del mes: toca A (almuerzo) o C (cena) y queda marcado. Puede
   corregir los últimos 3 días; más atrás lo arregla contabilidad.
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:
 
-- la lista de trabajadores con el saldo de vacaciones de cada uno;
+- la lista de trabajadores con el saldo de vacaciones de cada uno (con buscador);
+- **Pedidos**: lo que piden los trabajadores, para aprobar (se carga solo el período) o rechazar
+  con motivo, y un botón para avisarles por WhatsApp; abajo, los datos de contacto que cambiaron;
 - la ficha de cada uno: cargar los períodos tomados, ajustes, el saldo con el
   que arrancó, editar datos, dar de baja;
 - **Cargar planilla**: pegar las filas del Excel (cédula · nombre · fecha de
@@ -37,6 +42,9 @@ Como el programa no sabe cuántos días tomó cada uno antes de existir,
 contabilidad carga el **saldo al arrancar** (los días que le quedan hoy) y de
 ahí en adelante la cuenta sigue sola. Los períodos anteriores a esa fecha se
 guardan como historia pero no se restan otra vez.
+
+Cada período tiene un tipo: vacaciones y permiso descuentan del saldo; enfermedad y
+permiso sin goce se anotan pero no descuentan.
 
 Todo esto vive en `vacaciones.py`, sin base ni Flask, y tiene tests.
 

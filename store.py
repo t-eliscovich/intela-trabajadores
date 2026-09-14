@@ -121,8 +121,11 @@ ESQUEMA = """
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS celular text;
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS dias_por_anio numeric(4,1);
 
-    -- Cada período de vacaciones tomado. `dias` se propone como los días
-    -- corridos entre las dos fechas y contabilidad lo puede corregir.
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS direccion text;
+
+    -- Cada período de ausencia. `dias` se propone como los días corridos entre
+    -- las dos fechas y contabilidad lo puede corregir. `tipo` dice si descuenta
+    -- del saldo (vacaciones, permiso) o sólo se anota (enfermedad, sin goce).
     CREATE TABLE IF NOT EXISTS trabajadores.vacacion (
         id             serial PRIMARY KEY,
         trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
@@ -130,11 +133,45 @@ ESQUEMA = """
         hasta          date NOT NULL,
         dias           numeric(6,1) NOT NULL,
         nota           text,
+        tipo           text NOT NULL DEFAULT 'vacaciones',
         cargado_por    text NOT NULL,
         creado_en      timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS vacacion_trabajador_idx
         ON trabajadores.vacacion (trabajador_id, desde DESC);
+    ALTER TABLE trabajadores.vacacion ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'vacaciones';
+
+    -- Lo que pide el trabajador desde el celular. Contabilidad lo aprueba (y
+    -- ahí nace la fila en `vacacion`) o lo rechaza con un motivo.
+    CREATE TABLE IF NOT EXISTS trabajadores.solicitud (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        tipo           text NOT NULL,
+        desde          date NOT NULL,
+        hasta          date NOT NULL,
+        dias           numeric(6,1) NOT NULL,
+        nota           text,
+        estado         text NOT NULL DEFAULT 'pendiente'
+                       CHECK (estado IN ('pendiente', 'aprobada', 'rechazada', 'cancelada')),
+        respuesta      text,
+        respondido_por text,
+        respondido_en  timestamptz,
+        vacacion_id    integer REFERENCES trabajadores.vacacion(id) ON DELETE SET NULL,
+        creado_en      timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS solicitud_estado_idx ON trabajadores.solicitud (estado, creado_en DESC);
+
+    -- Datos que el trabajador cambió desde su perfil, para que contabilidad
+    -- los vea (y los pase a la nómina si hace falta).
+    CREATE TABLE IF NOT EXISTS trabajadores.cambio_perfil (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        campo          text NOT NULL,
+        antes          text,
+        despues        text,
+        visto          boolean NOT NULL DEFAULT false,
+        creado_en      timestamptz NOT NULL DEFAULT now()
+    );
 
     -- Días que suman o restan sin ser un período tomado: el saldo con el que
     -- arranca alguien que ya trabajaba, días pagados en plata, correcciones.
@@ -174,12 +211,25 @@ ESQUEMA = """
 # --------------------------------------------------------------------------
 # Trabajadores
 # --------------------------------------------------------------------------
-_TRABAJADOR_CON_TOTALES = """
+# Tipos de ausencia: (nombre en pantalla, ¿descuenta del saldo?). Vacaciones y
+# permiso descuentan (así lo cuenta la planilla de contabilidad); enfermedad y
+# permiso sin goce se anotan pero no tocan el saldo.
+TIPOS_AUSENCIA = {
+    "vacaciones": ("Vacaciones", True),
+    "permiso": ("Permiso", True),
+    "enfermedad": ("Enfermedad", False),
+    "sin_goce": ("Permiso sin goce", False),
+}
+TIPOS_QUE_DESCUENTAN = tuple(k for k, (_, d) in TIPOS_AUSENCIA.items() if d)
+
+_TRABAJADOR_CON_TOTALES = f"""
     SELECT t.*,
            -- Un período anterior al saldo inicial ya está descontado en ese
            -- saldo: se guarda como historia pero no se resta dos veces.
+           -- Sólo descuentan los tipos que descuentan (vacaciones, permiso).
            COALESCE((SELECT SUM(dias) FROM trabajadores.vacacion v
                       WHERE v.trabajador_id = t.id
+                        AND v.tipo IN {TIPOS_QUE_DESCUENTAN!r}
                         AND (t.fecha_saldo_inicial IS NULL
                              OR v.desde >= t.fecha_saldo_inicial)), 0) AS tomados,
            COALESCE((SELECT SUM(dias) FROM trabajadores.ajuste_vacacion a
@@ -201,7 +251,7 @@ def trabajador_por_cedula(cedula: str) -> dict | None:
     return _uno(_TRABAJADOR_CON_TOTALES + " WHERE t.cedula = %s", (cedula,))
 
 
-PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio")
+PERFIL = ("area", "fecha_nacimiento", "celular", "dias_por_anio", "direccion")
 
 
 def crear_trabajador(cedula: str, nombre: str, fecha_ingreso: date,
@@ -212,8 +262,8 @@ def crear_trabajador(cedula: str, nombre: str, fecha_ingreso: date,
     fila = _ejecutar(
         "INSERT INTO trabajadores.trabajador "
         "(cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial, "
-        " area, fecha_nacimiento, celular, dias_por_anio) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        " area, fecha_nacimiento, celular, dias_por_anio, direccion) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
         (cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial,
          *(perfil.get(k) for k in PERFIL)))
     return fila["id"]
@@ -228,8 +278,37 @@ def editar_trabajador(id_: int, cedula: str, nombre: str, fecha_ingreso: date,
                   "WHERE id=%s", (cedula, nombre, fecha_ingreso, id_))
     else:
         _ejecutar("UPDATE trabajadores.trabajador SET cedula=%s, nombre=%s, fecha_ingreso=%s, "
-                  "area=%s, fecha_nacimiento=%s, celular=%s, dias_por_anio=%s WHERE id=%s",
+                  "area=%s, fecha_nacimiento=%s, celular=%s, dias_por_anio=%s, direccion=%s "
+                  "WHERE id=%s",
                   (cedula, nombre, fecha_ingreso, *(perfil.get(k) for k in PERFIL), id_))
+
+
+def cambiar_contacto(id_: int, celular: str | None, direccion: str | None) -> list[dict]:
+    """Lo que el trabajador corrige desde su perfil. Devuelve los cambios
+    reales (campo, antes, después) y los deja anotados para contabilidad."""
+    actual = _uno("SELECT celular, direccion FROM trabajadores.trabajador WHERE id=%s", (id_,))
+    cambios = []
+    for campo, nuevo in (("celular", celular), ("direccion", direccion)):
+        if (actual or {}).get(campo) != nuevo:
+            cambios.append({"campo": campo, "antes": (actual or {}).get(campo), "despues": nuevo})
+    if not cambios:
+        return []
+    _ejecutar("UPDATE trabajadores.trabajador SET celular=%s, direccion=%s WHERE id=%s",
+              (celular, direccion, id_))
+    for c in cambios:
+        _ejecutar("INSERT INTO trabajadores.cambio_perfil (trabajador_id, campo, antes, despues) "
+                  "VALUES (%s,%s,%s,%s)", (id_, c["campo"], c["antes"], c["despues"]))
+    return cambios
+
+
+def cambios_perfil_sin_ver() -> list[dict]:
+    return _todos("SELECT c.*, t.nombre, t.cedula FROM trabajadores.cambio_perfil c "
+                  "JOIN trabajadores.trabajador t ON t.id = c.trabajador_id "
+                  "WHERE NOT c.visto ORDER BY c.creado_en")
+
+
+def marcar_cambio_visto(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.cambio_perfil SET visto=true WHERE id=%s", (id_,))
 
 
 def poner_saldo_inicial(id_: int, saldo: float | None, fecha: date | None) -> None:
@@ -278,16 +357,67 @@ def vacaciones(trabajador_id: int) -> list[dict]:
 
 
 def agregar_vacacion(trabajador_id: int, desde: date, hasta: date, dias: float,
-                     nota: str, cargado_por: str) -> int:
+                     nota: str, cargado_por: str, tipo: str = "vacaciones") -> int:
+    if tipo not in TIPOS_AUSENCIA:
+        raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
     fila = _ejecutar(
-        "INSERT INTO trabajadores.vacacion (trabajador_id, desde, hasta, dias, nota, cargado_por) "
-        "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
-        (trabajador_id, desde, hasta, dias, nota or None, cargado_por))
+        "INSERT INTO trabajadores.vacacion (trabajador_id, desde, hasta, dias, nota, cargado_por, tipo) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        (trabajador_id, desde, hasta, dias, nota or None, cargado_por, tipo))
     return fila["id"]
 
 
 def borrar_vacacion(id_: int) -> None:
     _ejecutar("DELETE FROM trabajadores.vacacion WHERE id=%s", (id_,))
+
+
+# --------------------------------------------------------------------------
+# Pedidos del trabajador
+# --------------------------------------------------------------------------
+def solicitudes(trabajador_id: int) -> list[dict]:
+    return _todos("SELECT * FROM trabajadores.solicitud WHERE trabajador_id=%s "
+                  "ORDER BY creado_en DESC LIMIT 30", (trabajador_id,))
+
+
+def solicitud(id_: int) -> dict | None:
+    return _uno("SELECT s.*, t.nombre, t.cedula, t.celular FROM trabajadores.solicitud s "
+                "JOIN trabajadores.trabajador t ON t.id = s.trabajador_id WHERE s.id=%s", (id_,))
+
+
+def solicitudes_pendientes() -> list[dict]:
+    return _todos("SELECT s.*, t.nombre, t.cedula, t.celular, t.area FROM trabajadores.solicitud s "
+                  "JOIN trabajadores.trabajador t ON t.id = s.trabajador_id "
+                  "WHERE s.estado = 'pendiente' ORDER BY s.creado_en")
+
+
+def solicitudes_respondidas(limite: int = 40) -> list[dict]:
+    return _todos("SELECT s.*, t.nombre, t.cedula, t.celular FROM trabajadores.solicitud s "
+                  "JOIN trabajadores.trabajador t ON t.id = s.trabajador_id "
+                  "WHERE s.estado <> 'pendiente' ORDER BY s.respondido_en DESC NULLS LAST, "
+                  "s.creado_en DESC LIMIT %s", (limite,))
+
+
+def cuantas_pendientes() -> int:
+    fila = _uno("SELECT COUNT(*) AS n FROM trabajadores.solicitud WHERE estado='pendiente'")
+    return int(fila["n"]) if fila else 0
+
+
+def crear_solicitud(trabajador_id: int, tipo: str, desde: date, hasta: date, dias: float,
+                    nota: str) -> int:
+    if tipo not in TIPOS_AUSENCIA:
+        raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
+    fila = _ejecutar(
+        "INSERT INTO trabajadores.solicitud (trabajador_id, tipo, desde, hasta, dias, nota) "
+        "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+        (trabajador_id, tipo, desde, hasta, dias, nota or None))
+    return fila["id"]
+
+
+def responder_solicitud(id_: int, estado: str, respuesta: str, quien: str,
+                        vacacion_id: int | None = None) -> None:
+    _ejecutar("UPDATE trabajadores.solicitud SET estado=%s, respuesta=%s, respondido_por=%s, "
+              "respondido_en=now(), vacacion_id=%s WHERE id=%s AND estado='pendiente'",
+              (estado, respuesta or None, quien, vacacion_id, id_))
 
 
 def ajustes(trabajador_id: int) -> list[dict]:

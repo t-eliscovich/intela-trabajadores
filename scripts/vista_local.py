@@ -35,6 +35,14 @@ base.agregar_ajuste(ids["Carlos Andrade"], -3, "3 días pagados en plata", "cont
 base.agregar_vacacion(ids["Juan Pérez"], date(2026, 9, 7), date(2026, 9, 13), 7, "pidió la mitad", "conta")
 base.agregar_vacacion(ids["Juan Pérez"], date(2026, 2, 2), date(2026, 2, 16), 15, "", "conta")
 base.agregar_vacacion(ids["Carlos Andrade"], date(2026, 1, 5), date(2026, 1, 25), 21, "", "conta")
+base.agregar_vacacion(ids["Juan Pérez"], date(2026, 4, 1), date(2026, 4, 3), 3, "certificado", "conta", "enfermedad")
+# pedidos: uno pendiente de Juan, uno respondido, uno de María pendiente
+base.crear_solicitud(ids["Juan Pérez"], "vacaciones", date(2026, 10, 12), date(2026, 10, 18), 7, "viaje familiar")
+sid = base.crear_solicitud(ids["Juan Pérez"], "permiso", date(2026, 9, 3), date(2026, 9, 3), 1, "trámite")
+base.responder_solicitud(sid, "rechazada", "ese día hay inventario, ¿puede ser el 4?", "conta")
+sid = base.crear_solicitud(ids["María López"], "enfermedad", date(2026, 9, 10), date(2026, 9, 11), 2, "")
+base.crear_solicitud(ids["María López"], "vacaciones", date(2026, 11, 2), date(2026, 11, 8), 7, "")
+base.cambiar_contacto(ids["Luis Tipán"], "0987654321", "Av. Eloy Alfaro 123, Quito")
 primero = hoy.replace(day=1)
 for i, nom in enumerate(ids):
     for d in range((hoy - primero).days + 1):
@@ -76,3 +84,5 @@ r = c.post("/admin/carga", data={"texto": "Cédula\tNombre\tIngreso\tSaldo\n1712
 guardar("admin_carga", r.get_data(as_text=True))
 guardar("admin_carga_vacaciones", c.post("/admin/carga?que=vacaciones", data={"texto": "1712345678\t02/02/2026\t16/02/2026\n1712345678\t19/02/2026\t19/02/2026\t1\tpermiso\n0000000000\t01/01/2026\t02/01/2026", "confirmar": "0"}).get_data(as_text=True))
 guardar("admin_usuarios", c.get("/admin/usuarios").get_data(as_text=True))
+guardar("admin_solicitudes", c.get("/admin/solicitudes").get_data(as_text=True))
+guardar("admin_buscar", c.get("/admin?q=juan").get_data(as_text=True))

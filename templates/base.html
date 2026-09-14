@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titulo %}Trabajadores{% endblock %} · Intela</title>
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<meta name="theme-color" content="#0f2942">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Intela">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icono-192.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='icono-192.png') }}">
 <style>
   :root{
     --tinta:#0f172a; --gris:#64748b; --gris-claro:#94a3b8;
@@ -29,6 +35,9 @@
         white-space:nowrap;border-bottom:3px solid transparent}
   nav a:hover{color:#fff}
   nav a.activo{color:#fff;border-bottom-color:#fff}
+  .globo{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+         background:var(--rojo);color:#fff;font-size:11px;font-weight:800;line-height:18px;
+         text-align:center;vertical-align:1px}
   .quien{font-size:13px;color:#a9bdd2;white-space:nowrap}
   .quien a{color:#dbe6f0}
 
@@ -161,6 +170,17 @@
   .etiqueta{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.05em;
         text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#eef1f5;color:var(--gris)}
   .etiqueta.baja{background:#fdeaea;color:var(--rojo)}
+  .etiqueta.ok{background:#e8f8ee;color:#15803d}
+  .etiqueta.pendiente{background:#fef6e7;color:#92400e}
+  .buscador{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .buscador input{flex:1;min-width:200px;height:40px;font-size:16px}
+  .pedido{padding:12px 14px;border-bottom:1px solid var(--borde)}
+  .pedido:last-child{border-bottom:0}
+  .pedido .quien-pide{font-weight:800}
+  .pedido .cuando{font-size:14px;margin:2px 0}
+  .pedido form{margin-top:8px}
+  .btn.verde{background:var(--verde)}
+  .btn.verde:hover{background:#15803d}
 
   @media(max-width:760px){
     .hoja{padding:12px 11px 28px}
@@ -185,6 +205,7 @@
     {% if g.usuario %}
     <nav>
       <a href="{{ url_for('admin') }}" class="{{ 'activo' if request.endpoint in ('admin','admin_trabajador') }}">Trabajadores</a>
+      <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>

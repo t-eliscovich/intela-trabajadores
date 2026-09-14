@@ -15,6 +15,46 @@
 </div>
 
 <div class="bloque">
+  <div class="titulo"><h2>Pedir días</h2><p>Contabilidad te responde acá mismo.</p></div>
+  <div class="relleno">
+    <form method="POST" action="{{ url_for('yo_pedir') }}" class="formulario">
+      <div class="ancho"><label class="campo">Qué pedís</label>
+        <select name="tipo">
+          {% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}
+          <option value="{{ clave }}">{{ nombre }}{% if not descuenta %} (no descuenta días){% endif %}</option>
+          {% endfor %}
+        </select></div>
+      <div><label class="campo">Desde</label><input type="date" name="desde" required></div>
+      <div><label class="campo">Hasta</label><input type="date" name="hasta" required></div>
+      <div class="ancho"><label class="campo">Nota (opcional)</label><input name="nota" maxlength="200" placeholder="por ejemplo: viaje familiar"></div>
+      <div class="ancho"><button class="btn" type="submit" style="width:100%">Enviar el pedido</button></div>
+    </form>
+    <p class="ayuda" style="margin-top:8px">Los días se cuentan corridos, con el fin de semana. Una enfermedad se puede avisar después, hasta 30 días para atrás.</p>
+  </div>
+</div>
+
+{% if pedidos %}
+<div class="bloque">
+  <div class="titulo"><h2>Tus pedidos</h2></div>
+  {% for p in pedidos %}
+  <div class="pedido">
+    <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b> · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} {{ 'día' if p.dias == 1 else 'días' }}</div>
+    {% if p.estado == 'pendiente' %}
+      <span class="etiqueta pendiente">Esperando respuesta</span>
+      <form method="POST" action="{{ url_for('yo_pedido_cancelar') }}" class="enlinea"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit">Cancelar</button></form>
+    {% elif p.estado == 'aprobada' %}
+      <span class="etiqueta ok">Aprobado</span>{% if p.respuesta %} <span class="tenue">{{ p.respuesta }}</span>{% endif %}
+    {% elif p.estado == 'rechazada' %}
+      <span class="etiqueta baja">No aprobado</span> <span class="tenue">{{ p.respuesta }}</span>
+    {% else %}
+      <span class="etiqueta">Cancelado</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bloque">
   <div class="nota" style="border-top:0">
     En Intela desde el {{ t.fecha_ingreso|fecha }}: <b>{{ v.anios }}</b> {{ 'año' if v.anios == 1 else 'años' }} cumplidos.<br>
     Este año te tocan <b>{{ v.este_anio|num(1) }}</b> días. El {{ v.proxima_carga|fecha }} se suman <b>{{ v.proxima_cantidad|num(2) }}</b> más.
@@ -23,13 +63,13 @@
 </div>
 
 <div class="bloque">
-  <div class="titulo"><h2>Vacaciones que tomaste</h2></div>
+  <div class="titulo"><h2>Días que tomaste</h2></div>
   {% if vacaciones %}
   <table>
-    <thead><tr><th>Desde</th><th>Hasta</th><th class="der">Días</th></tr></thead>
+    <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th></tr></thead>
     <tbody>
     {% for x in vacaciones %}
-      <tr><td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td><td class="der"><b>{{ x.dias|num(1) }}</b></td></tr>
+      <tr><td>{{ TIPOS_AUSENCIA[x.tipo][0] }}</td><td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td><td class="der"><b>{{ x.dias|num(1) }}</b>{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico">no descuenta</span>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
