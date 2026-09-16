@@ -747,6 +747,19 @@ def admin_solicitudes():
                 else:
                     raise ValueError("Sólo se borra un pedido rechazado o cancelado.")
                 return redirect(url_for("admin_solicitudes"))
+            if accion == "cargar":
+                t = store.trabajador_por_cedula(limpiar_cedula(f.get("cedula", "")))
+                if not t:
+                    raise ValueError("No hay ningún trabajador con esa cédula.")
+                tipo = leer_tipo_ausencia(f.get("tipo"))
+                desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
+                dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
+                if dias <= 0:
+                    raise ValueError("Los días tienen que ser más que cero.")
+                store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip() or "cargado en la oficina",
+                                       g.usuario["usuario"], tipo)
+                flash(f"{t['nombre']}: {num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
+                return redirect(url_for("admin_solicitudes"))
             if accion == "deshacer":
                 p = store.solicitud(int(f.get("id", 0) or 0))
                 if not p or p["estado"] != "aprobada":
@@ -791,7 +804,8 @@ def admin_solicitudes():
             avisar = dict(p, whatsapp=link_whatsapp(p["celular"], _texto_aviso(p)))
     return render_template("admin_solicitudes.html", pendientes=pendientes,
                            respondidas=store.solicitudes_respondidas(),
-                           cambios=store.cambios_perfil_sin_ver(), avisar=avisar)
+                           cambios=store.cambios_perfil_sin_ver(), avisar=avisar,
+                           trabajadores=store.trabajadores())
 
 
 def _texto_aviso(p: dict) -> str:
@@ -827,18 +841,30 @@ def admin_historial():
 @requiere_admin
 def admin_comidas():
     anio, mes = leer_mes(request.values.get("mes"))
+    vista = "cuadro" if request.values.get("vista") == "cuadro" else "dias"
     if request.method == "POST":
         try:
-            id_ = int(request.form.get("trabajador_id", 0))
             fecha = leer_fecha(request.form.get("fecha", ""))
             tipo = leer_tipo_comida(request.form.get("tipo"))
-            if request.form.get("accion") == "desmarcar":
-                store.desmarcar_comida(id_, fecha, tipo)
+            if request.form.get("cedula"):
+                # cargado a mano desde la oficina, por cédula
+                t = store.trabajador_por_cedula(limpiar_cedula(request.form.get("cedula", "")))
+                if not t:
+                    raise ValueError("No hay ningún trabajador con esa cédula.")
+                if fecha > hoy():
+                    raise ValueError("La fecha no puede ser futura.")
+                store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"])
+                flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} marcado.", "ok")
+                anio, mes = fecha.year, fecha.month
             else:
-                store.marcar_comida(id_, fecha, tipo, g.usuario["usuario"])
+                id_ = int(request.form.get("trabajador_id", 0))
+                if request.form.get("accion") == "desmarcar":
+                    store.desmarcar_comida(id_, fecha, tipo)
+                else:
+                    store.marcar_comida(id_, fecha, tipo, g.usuario["usuario"])
         except ValueError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("admin_comidas", mes=f"{anio}-{mes:02d}"))
+        return redirect(url_for("admin_comidas", mes=f"{anio}-{mes:02d}", vista=request.form.get("vista") or vista))
     dias = [date(anio, mes, d) for d in range(1, calendar.monthrange(anio, mes)[1] + 1)]
     marcados = store.comidas_de_todos(anio, mes)
     filas = []
@@ -852,8 +878,9 @@ def admin_comidas():
     totales = {tipo: sum(f["totales"][tipo] for f in filas) for tipo, _ in TIPOS_COMIDA}
     totales["total"] = sum(totales.values())
     return render_template(
-        "admin_comidas.html", anio=anio, mes=mes, dias=dias, filas=filas, por_dia=por_dia,
-        totales=totales, anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
+        "admin_comidas.html", anio=anio, mes=mes, dias=dias, filas=filas, por_dia=por_dia, vista=vista,
+        totales=totales, anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes),
+        trabajadores=store.trabajadores())
 
 
 # --------------------------------------------------------------------------

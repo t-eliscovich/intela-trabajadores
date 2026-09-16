@@ -13,6 +13,22 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
   <div class="bloque">
+    <div class="titulo"><h2>Cargar días a mano</h2><p>Si lo pidieron en la oficina y no por el celular.</p></div>
+    <div class="relleno">
+      <form method="POST" class="formulario">
+        <input type="hidden" name="accion" value="cargar">
+        <div style="grid-column:span 2"><label class="campo">Trabajador</label>{% include "_elegir_trabajador.html" %}</div>
+        <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}">{{ nombre }}{% if not descuenta %} · no descuenta{% endif %}</option>{% endfor %}</select></div>
+        <div><label class="campo">Desde</label><input name="desde" placeholder="01/10/2026" required></div>
+        <div><label class="campo">Hasta</label><input name="hasta" placeholder="05/10/2026" required></div>
+        <div><label class="campo">Días</label><input name="dias" placeholder="se calculan solos"></div>
+        <div style="grid-column:span 2"><label class="campo">Nota</label><input name="nota" placeholder="permiso para ir al banco"></div>
+        <div><button class="btn" type="submit">Cargar</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="bloque">
     <div class="titulo"><h2>Por responder</h2><p>Al aprobar, el período se carga solo en la ficha.</p></div>
     {% for p in pendientes %}
     <div class="pedido">

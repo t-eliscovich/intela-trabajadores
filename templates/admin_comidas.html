@@ -15,6 +15,43 @@
   <div class="cifra"><b>{{ filas|length }}</b><small>Personas</small></div>
 </div>
 
+<div class="bloque no-imprime">
+  <div class="titulo"><h2>Marcar una comida</h2><p>Si alguien no pasó por la tablet.</p></div>
+  <div class="relleno">
+    <form method="POST" class="formulario">
+      <input type="hidden" name="vista" value="{{ vista }}">
+      <div style="grid-column:span 2"><label class="campo">Trabajador</label>{% include "_elegir_trabajador.html" %}</div>
+      <div><label class="campo">Día</label><input name="fecha" value="{{ hoy|fecha }}" required></div>
+      <div><label class="campo">Qué</label><select name="tipo"><option value="almuerzo">Almuerzo</option><option value="cena">Cena</option></select></div>
+      <div><button class="btn" type="submit">Marcar</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="pestanas no-imprime" style="max-width:420px">
+  <a href="{{ url_for('admin_comidas', mes=anio ~ '-' ~ '%02d' % mes) }}" class="{{ 'activa' if vista == 'dias' }}">Por día</a>
+  <a href="{{ url_for('admin_comidas', mes=anio ~ '-' ~ '%02d' % mes, vista='cuadro') }}" class="{{ 'activa' if vista == 'cuadro' }}">Por persona</a>
+</div>
+
+{% if vista == 'dias' %}
+<div class="bloque">
+  <div class="titulo"><h2>Cuántos comieron cada día</h2><p>{{ MESES[mes]|capitalize }} {{ anio }}</p></div>
+  <table>
+    <thead><tr><th>Día</th><th class="der">Almuerzos</th><th class="der">Cenas</th><th class="der">Total</th></tr></thead>
+    <tbody>
+    {% for d in dias %}{% if d <= hoy %}
+      <tr class="{{ 'tenue' if d.weekday() >= 5 }}">
+        <td>{{ d|fecha_larga }}</td>
+        <td class="der">{{ por_dia[d].almuerzo or '' }}</td>
+        <td class="der">{{ por_dia[d].cena or '' }}</td>
+        <td class="der"><b>{{ (por_dia[d].almuerzo + por_dia[d].cena) or '' }}</b></td>
+      </tr>
+    {% endif %}{% endfor %}
+    </tbody>
+    <tfoot><tr><td><b>Total del mes</b></td><td class="der"><b>{{ totales.almuerzo }}</b></td><td class="der"><b>{{ totales.cena }}</b></td><td class="der"><b>{{ totales.total }}</b></td></tr></tfoot>
+  </table>
+</div>
+{% else %}
 <div class="bloque">
   {% if filas %}
   <div class="desliza">
@@ -37,7 +74,7 @@
                 <input type="hidden" name="trabajador_id" value="{{ f.t.id }}">
                 <input type="hidden" name="fecha" value="{{ d.isoformat() }}">
                 <input type="hidden" name="tipo" value="{{ tipo }}">
-                <input type="hidden" name="mes" value="{{ anio }}-{{ '%02d' % mes }}">
+                <input type="hidden" name="mes" value="{{ anio }}-{{ '%02d' % mes }}"><input type="hidden" name="vista" value="cuadro">
                 <input type="hidden" name="accion" value="{{ 'desmarcar' if si else 'marcar' }}">
                 <button class="celda {{ 'si' if si }}" title="{{ f.t.nombre }} · {{ tipo }} · {{ d|fecha }}">{{ letra }}</button>
               </form>
@@ -62,4 +99,5 @@
   <div class="vacio"><h3>No hay nadie para mostrar en {{ MESES[mes] }}</h3></div>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,6 @@
+{# Un campo de cédula con la lista de nombres para escribir y elegir. #}
+<input name="cedula" list="lista-trabajadores" placeholder="cédula o nombre" required autocomplete="off"
+       oninput="var o=[...document.querySelectorAll('#lista-trabajadores option')].find(o=>o.value===this.value||o.label===this.value);if(o&&o.dataset.cedula)this.value=o.dataset.cedula">
+<datalist id="lista-trabajadores">
+  {% for t in trabajadores %}<option value="{{ t.cedula }}" label="{{ t.nombre }}" data-cedula="{{ t.cedula }}">{{ t.nombre }}</option>{% endfor %}
+</datalist>
