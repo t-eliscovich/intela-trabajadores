@@ -591,6 +591,14 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         tipo = leer_tipo_ausencia(f.get("tipo") or "vacaciones")
         store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip(), quien, tipo)
         flash(f"{num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
+    elif accion == "vacacion_editar":
+        tipo = leer_tipo_ausencia(f.get("tipo"))
+        desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
+        dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
+        if dias <= 0:
+            raise ValueError("Los días tienen que ser más que cero.")
+        store.editar_vacacion(int(f.get("id", 0)), tipo, desde, hasta, dias, (f.get("nota") or "").strip())
+        flash("Período corregido.", "ok")
     elif accion == "vacacion_borrar":
         store.borrar_vacacion(int(f.get("id", 0)), quien)
         flash("Período borrado. Queda en Historial por si hay que recuperarlo.", "ok")
@@ -762,6 +770,17 @@ def admin_solicitudes():
                 store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip() or "cargado en la oficina",
                                        g.usuario["usuario"], tipo)
                 flash(f"{t['nombre']}: {num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
+                return redirect(url_for("admin_solicitudes"))
+            if accion == "editar":
+                p = store.solicitud(int(f.get("id", 0) or 0))
+                if not p or p["estado"] != "aprobada" or not p["vacacion_id"]:
+                    raise ValueError("Sólo se corrige un pedido aprobado.")
+                desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
+                dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
+                if dias <= 0:
+                    raise ValueError("Los días tienen que ser más que cero.")
+                store.editar_vacacion(p["vacacion_id"], p["tipo"], desde, hasta, dias, f"pedido #{p['id']}" + (f" · {p['nota']}" if p.get("nota") else ""))
+                flash(f"Corregido: {p['nombre']}, {num(dias)} días del {desde.strftime('%d/%m')} al {hasta.strftime('%d/%m')}.", "ok")
                 return redirect(url_for("admin_solicitudes"))
             if accion == "deshacer":
                 p = store.solicitud(int(f.get("id", 0) or 0))

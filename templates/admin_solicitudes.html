@@ -80,6 +80,7 @@
         <td>{{ TIPOS_AUSENCIA[p.tipo][0] }} · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} d<span class="chico">{{ p.respuesta or '' }}</span></td>
         <td class="der">
           {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>
+            <button class="btn suave chico" type="button" onclick="var e=document.getElementById('ep{{ p.id }}');e.hidden=!e.hidden">Corregir</button>
             <form method="POST" class="enlinea"><input type="hidden" name="accion" value="deshacer"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit" title="Cancela el pedido y saca el período de la ficha">Deshacer</button></form>
           {% else %}{% if p.estado == 'rechazada' %}<span class="etiqueta baja">rechazado</span>{% else %}<span class="etiqueta">cancelado</span>{% endif %}
             <form method="POST" class="enlinea"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ p.id }}"><button class="borrar-fila" type="submit" title="Borrar este pedido">×</button></form>
@@ -87,6 +88,17 @@
           <span class="chico">{{ p.respondido_por or '' }} {{ p.respondido_en|fecha if p.respondido_en else '' }}</span>
         </td>
       </tr>
+      {% if p.estado == 'aprobada' %}
+      <tr id="ep{{ p.id }}" hidden><td colspan="3" style="background:#fafbfc">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="editar"><input type="hidden" name="id" value="{{ p.id }}">
+          <div><label class="campo">Desde</label><input name="desde" value="{{ p.desde|fecha }}" required></div>
+          <div><label class="campo">Hasta</label><input name="hasta" value="{{ p.hasta|fecha }}" required></div>
+          <div><label class="campo">Días</label><input name="dias" placeholder="se calculan solos"></div>
+          <div><button class="btn chico" type="submit">Guardar</button></div>
+        </form>
+      </td></tr>
+      {% endif %}
     {% endfor %}
     </tbody>
   </table>

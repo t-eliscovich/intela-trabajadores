@@ -221,6 +221,12 @@ check("hasta antes de desde avisa", "anterior" in r.get_data(as_text=True) and b
 vid = base.vacaciones(juan)[0]["id"]
 c.post(f"/admin/trabajador/{juan}", data={"accion": "vacacion_borrar", "id": vid})
 check("borra un período", base.trabajador(juan)["tomados"] == 15)
+vid2 = base.vacaciones(juan)[0]["id"]
+r = c.post(f"/admin/trabajador/{juan}", data={"accion": "vacacion_editar", "id": vid2, "tipo": "permiso", "desde": "01/02/2026", "hasta": "10/02/2026", "nota": "corregido"}, follow_redirects=True)
+check("corrige un período desde la ficha (fechas, tipo, nota; los días se recalculan)", base.vac[vid2]["hasta"] == date(2026, 2, 10) and base.vac[vid2]["dias"] == 10 and base.vac[vid2]["tipo"] == "permiso" and base.vac[vid2]["nota"] == "corregido" and "Período corregido" in r.get_data(as_text=True))
+c.post(f"/admin/trabajador/{juan}", data={"accion": "vacacion_editar", "id": vid2, "tipo": "vacaciones", "desde": "01/02/2026", "hasta": "15/02/2026", "dias": "15"})
+html = c.get(f"/admin/trabajador/{juan}").get_data(as_text=True)
+check("la ficha es una tabla simple: le corresponden, tomó este año, le quedan", "Le corresponden por año" in html and "Tomó este año" in html and "Le quedan" in html and "Generados" not in html and "arrancar" not in html)
 html = c.get("/admin/historial").get_data(as_text=True)
 check("el período borrado queda en Historial con quién lo borró", "Juan Pérez" in html and "conta" in html and base.vac[vid]["borrado_por"] == "conta")
 c.post("/admin/historial", data={"que": "periodo", "id": vid})
@@ -366,6 +372,9 @@ antes = base.trabajador(maria)["tomados"]
 r = c.post("/admin/solicitudes", data={"accion": "deshacer", "id": viejo, "respuesta": "se cambió la fecha"}, follow_redirects=True)
 check("contabilidad deshace un aprobado", base.solicitud(viejo)["estado"] == "cancelada" and base.trabajador(maria)["tomados"] == antes - 2 and "se sacó de la ficha" in r.get_data(as_text=True))
 check("y ofrece avisarle también", "wa.me/" in r.get_data(as_text=True))
+aprob = base.solicitud(ids[0]); antes_v = base.vac[aprob["vacacion_id"]]["dias"]
+r = c.post("/admin/solicitudes", data={"accion": "editar", "id": ids[0], "desde": (HOY + timedelta(days=10)).strftime("%d/%m/%Y"), "hasta": (HOY + timedelta(days=12)).strftime("%d/%m/%Y")}, follow_redirects=True)
+check("corrige un pedido aprobado desde Pedidos (cambia el período, no el estado)", base.vac[aprob["vacacion_id"]]["dias"] == 3 and base.solicitud(ids[0])["estado"] == "aprobada" and "Corregido" in r.get_data(as_text=True))
 antes = base.trabajador(maria)["tomados"]
 r = c.post("/admin/solicitudes", data={"accion": "cargar", "cedula": "0912345678", "tipo": "permiso", "desde": "01/12/2026", "hasta": "02/12/2026"}, follow_redirects=True)
 check("contabilidad carga días a mano desde Pedidos", base.trabajador(maria)["tomados"] == antes + 2 and "2 días de permiso cargados" in r.get_data(as_text=True))

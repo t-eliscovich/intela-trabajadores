@@ -384,6 +384,13 @@ def agregar_vacacion(trabajador_id: int, desde: date, hasta: date, dias: float,
     return fila["id"]
 
 
+def editar_vacacion(id_: int, tipo: str, desde: date, hasta: date, dias: float, nota: str) -> None:
+    if tipo not in TIPOS_AUSENCIA:
+        raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
+    _ejecutar("UPDATE trabajadores.vacacion SET tipo=%s, desde=%s, hasta=%s, dias=%s, nota=%s "
+              "WHERE id=%s AND borrado_en IS NULL", (tipo, desde, hasta, dias, nota or None, id_))
+
+
 def borrar_vacacion(id_: int, quien: str = "?") -> None:
     """No borra: marca. Se ve en Historial y se puede recuperar."""
     _ejecutar("UPDATE trabajadores.vacacion SET borrado_en=now(), borrado_por=%s "

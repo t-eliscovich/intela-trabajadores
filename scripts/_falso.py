@@ -155,6 +155,12 @@ class BaseFalsa:
                          "creado_en": datetime.now(), "borrado_en": None, "borrado_por": None}
         return id_
 
+    def editar_vacacion(self, id_, tipo, desde, hasta, dias, nota):
+        if tipo not in self.TIPOS_AUSENCIA:
+            raise ValueError(f"No sé qué tipo de ausencia es «{tipo}».")
+        if id_ in self.vac and not self.vac[id_]["borrado_en"]:
+            self.vac[id_].update(tipo=tipo, desde=desde, hasta=hasta, dias=dias, nota=nota or None)
+
     def borrar_vacacion(self, id_, quien="?"):
         if id_ in self.vac and not self.vac[id_]["borrado_en"]:
             self.vac[id_].update(borrado_en=datetime.now(), borrado_por=quien)
