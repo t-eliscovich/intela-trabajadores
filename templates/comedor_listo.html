@@ -10,11 +10,11 @@
     <p>
       {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado anotado' if invitados_anotados == 1 else 'invitados anotados' }}. ¡Buen provecho!
       {% elif ya_estaba %}Ya marcó {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
-      {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }} marcado. ¡Buen provecho!{% endif %}
+      {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} marcado. ¡Buen provecho!{% endif %}
     </p>
   </div>
 
-  {% if invitados < 3 %}
+  {% if t.puede_invitar and invitados < 3 %}
   <div class="bloque" style="text-align:left">
     <div class="titulo"><h2>¿Trae invitados?</h2><p>Hasta 3 por día{% if invitados %} · ya tiene {{ invitados }}{% endif %}.</p></div>
     <div class="relleno">

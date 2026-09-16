@@ -201,6 +201,10 @@ ESQUEMA = """
         PRIMARY KEY (trabajador_id, fecha, tipo)
     );
     CREATE INDEX IF NOT EXISTS comida_fecha_idx ON trabajadores.comida (fecha);
+    -- turno: el horario del almuerzo ('12:00', '12:30', '13:00', '13:30'); la cena por ahora sin turno.
+    ALTER TABLE trabajadores.comida ADD COLUMN IF NOT EXISTS turno text;
+    -- Sólo algunos trabajadores pueden traer invitados (se marca en la ficha).
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS puede_invitar boolean NOT NULL DEFAULT false;
 
     -- Invitados que trae un trabajador (proveedor, familiar): sin cédula, con
     -- una descripción. Se pagan aparte de las comidas de los trabajadores.
@@ -554,21 +558,22 @@ def comidas_del_mes(trabajador_id: int, anio: int, mes: int) -> set[tuple[date, 
     return {(f["fecha"], f["tipo"]) for f in filas}
 
 
-def comidas_de_todos(anio: int, mes: int) -> dict[int, set[tuple[date, str]]]:
+def comidas_de_todos(anio: int, mes: int) -> dict[int, dict[tuple[date, str], str | None]]:
+    """Por trabajador, {(fecha, tipo): turno} del mes. Se usa como un set: `(d, tipo) in suyos`."""
     filas = _todos(
-        "SELECT trabajador_id, fecha, tipo FROM trabajadores.comida "
+        "SELECT trabajador_id, fecha, tipo, turno FROM trabajadores.comida "
         "WHERE date_trunc('month', fecha) = %s", (date(anio, mes, 1),))
-    salida: dict[int, set[tuple[date, str]]] = {}
+    salida: dict[int, dict[tuple[date, str], str | None]] = {}
     for f in filas:
-        salida.setdefault(f["trabajador_id"], set()).add((f["fecha"], f["tipo"]))
+        salida.setdefault(f["trabajador_id"], {})[(f["fecha"], f["tipo"])] = f["turno"]
     return salida
 
 
 def quien_comio(fecha: date) -> list[dict]:
     """Los que marcaron ese día, con hora, para la lista del comedor."""
-    return _todos("SELECT c.trabajador_id, c.tipo, c.marcado_por, c.creado_en, t.nombre, t.area, t.celular "
+    return _todos("SELECT c.trabajador_id, c.tipo, c.turno, c.marcado_por, c.creado_en, t.nombre, t.area, t.celular "
                   "FROM trabajadores.comida c JOIN trabajadores.trabajador t ON t.id = c.trabajador_id "
-                  "WHERE c.fecha = %s ORDER BY t.nombre", (fecha,))
+                  "WHERE c.fecha = %s ORDER BY c.turno NULLS LAST, t.nombre", (fecha,))
 
 
 def desmarcar_comida_reciente(trabajador_id: int, fecha: date, tipo: str, minutos: int = 10) -> bool:
@@ -642,11 +647,16 @@ def comida_marcada(trabajador_id: int, fecha: date, tipo: str) -> bool:
                 (trabajador_id, fecha, tipo)) is not None
 
 
-def marcar_comida(trabajador_id: int, fecha: date, tipo: str, marcado_por: str) -> None:
+def marcar_comida(trabajador_id: int, fecha: date, tipo: str, marcado_por: str,
+                  turno: str | None = None) -> None:
     if tipo not in TIPOS_COMIDA:
         raise ValueError(f"No sé qué comida es «{tipo}».")
-    _ejecutar("INSERT INTO trabajadores.comida (trabajador_id, fecha, tipo, marcado_por) "
-              "VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING", (trabajador_id, fecha, tipo, marcado_por))
+    _ejecutar("INSERT INTO trabajadores.comida (trabajador_id, fecha, tipo, marcado_por, turno) "
+              "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING", (trabajador_id, fecha, tipo, marcado_por, turno))
+
+
+def poner_puede_invitar(trabajador_id: int, puede: bool) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET puede_invitar=%s WHERE id=%s", (puede, trabajador_id))
 
 
 def desmarcar_comida(trabajador_id: int, fecha: date, tipo: str) -> None:

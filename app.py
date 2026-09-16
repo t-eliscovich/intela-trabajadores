@@ -281,6 +281,7 @@ def _globales():
         except Exception:  # noqa: BLE001
             pendientes = 0
     return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
+            "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
 
 
@@ -424,6 +425,39 @@ def comida_de_ahora() -> str:
     return "cena" if datetime.now(ZoneInfo(config.ZONA)).hour >= HORA_CENA else "almuerzo"
 
 
+# Los turnos del almuerzo: media hora cada uno. La cena todavía no tiene turnos.
+TURNOS_ALMUERZO = ("12:00", "12:30", "13:00", "13:30")
+
+
+def nombre_turno(turno: str | None) -> str:
+    """'12:30' → '12:30 a 13:00'."""
+    if turno not in TURNOS_ALMUERZO:
+        return ""
+    h, m = int(turno[:2]), int(turno[3:])
+    fin = f"{h + (m + 30) // 60:02d}:{(m + 30) % 60:02d}"
+    return f"{turno} a {fin}"
+
+
+def turno_de_ahora() -> str:
+    """El turno que corresponde a la hora de Ecuador: antes de las 12 el primero,
+    después de las 14 el último. Es la opción que sale elegida en la tablet."""
+    ahora = datetime.now(ZoneInfo(config.ZONA)).strftime("%H:%M")
+    elegido = TURNOS_ALMUERZO[0]
+    for t in TURNOS_ALMUERZO:
+        if ahora >= t:
+            elegido = t
+    return elegido
+
+
+def leer_turno(texto: str | None, tipo: str) -> str | None:
+    """El turno sólo va con el almuerzo. Vacío → None (se marcó sin horario)."""
+    if tipo != "almuerzo" or not texto:
+        return None
+    if texto not in TURNOS_ALMUERZO:
+        raise ValueError("Ese horario no existe.")
+    return texto
+
+
 DIAS_LARGOS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 DIAS_TRES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -510,7 +544,7 @@ def comedor():
             return _tablet("comedor.html", error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
             return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo))
-        return _tablet("comedor_confirmar.html", t=t, fecha=h)
+        return _tablet("comedor_confirmar.html", t=t, fecha=h, turno=turno_de_ahora())
     return _tablet("comedor.html")
 
 
@@ -533,10 +567,11 @@ def _trabajador_del_form():
 def comedor_confirmar():
     try:
         t, tipo = _trabajador_del_form()
+        turno = leer_turno(request.form.get("turno"), tipo)
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
-    store.marcar_comida(t["id"], hoy(), tipo, _quien_marca())
-    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=0)
+    store.marcar_comida(t["id"], hoy(), tipo, _quien_marca(), turno)
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=0, turno=turno)
 
 
 @app.route("/comedor/deshacer", methods=["POST"], endpoint="comedor_deshacer")
@@ -558,6 +593,8 @@ def comedor_deshacer():
 def comedor_invitados():
     try:
         t, tipo = _trabajador_del_form()
+        if not t.get("puede_invitar"):
+            raise ValueError(f"{t['nombre']} no tiene permiso para traer invitados. Pregunte en contabilidad.")
         cantidad = int(request.form.get("cantidad", 0) or 0)
         if not 1 <= cantidad <= MAX_INVITADOS:
             raise ValueError(f"Los invitados son de 1 a {MAX_INVITADOS}.")
@@ -585,8 +622,9 @@ def comedor_dia():
         try:
             accion = request.form.get("accion", "")
             if accion == "marcar":
-                store.marcar_comida(int(request.form.get("trabajador_id", 0)), fecha,
-                                    leer_tipo_comida(request.form.get("tipo")), g.usuario["usuario"])
+                tipo = leer_tipo_comida(request.form.get("tipo"))
+                store.marcar_comida(int(request.form.get("trabajador_id", 0)), fecha, tipo,
+                                    g.usuario["usuario"], leer_turno(request.form.get("turno"), tipo))
             elif accion == "desmarcar":
                 store.desmarcar_comida(int(request.form.get("trabajador_id", 0)), fecha,
                                        leer_tipo_comida(request.form.get("tipo")))
@@ -597,11 +635,16 @@ def comedor_dia():
         return redirect(url_for("comedor_dia", fecha=fecha.isoformat()))
     comieron = store.quien_comio(fecha)
     por_tipo = {tipo: [c for c in comieron if c["tipo"] == tipo] for tipo, _ in TIPOS_COMIDA}
+    # el almuerzo agrupado por turno (los sin turno, al final)
+    por_turno = [(turno, [c for c in por_tipo["almuerzo"] if c["turno"] == turno])
+                 for turno in (*TURNOS_ALMUERZO, None)]
+    por_turno = [(turno, lista) for turno, lista in por_turno if lista]
     marcaron = {c["trabajador_id"] for c in comieron}
     faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
               for t in store.trabajadores() if t["id"] not in marcaron]
     invitados = store.invitados_del_dia(fecha)
-    return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, faltan=faltan, invitados=invitados,
+    return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, por_turno=por_turno,
+                           faltan=faltan, invitados=invitados,
                            total_invitados=sum(i["cantidad"] for i in invitados),
                            feriado=store.feriados(fecha.year).get(fecha),
                            ayer=(fecha - timedelta(days=1)).isoformat(), manana=(fecha + timedelta(days=1)).isoformat())
@@ -702,6 +745,9 @@ def admin_trabajador(id_):
 def _accion_trabajador(t: dict, accion: str) -> None:
     f = request.form
     quien = g.usuario["usuario"]
+    if accion == "invitados":
+        store.poner_puede_invitar(t["id"], f.get("puede_invitar") == "1")
+        return
     if accion == "editar":
         nombre = (f.get("nombre") or "").strip()
         if not nombre:
@@ -1020,7 +1066,7 @@ def admin_comidas():
                 raise ValueError("No hay ningún trabajador con esa cédula.")
             if fecha > hoy():
                 raise ValueError("La fecha no puede ser futura.")
-            store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"])
+            store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"], leer_turno(request.form.get("turno"), tipo))
             flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} marcado.", "ok")
             anio, mes = fecha.year, fecha.month
         except ValueError as exc:
@@ -1035,8 +1081,8 @@ def admin_comidas():
     for d in dias_mes:
         if d > hoy():
             break
-        quienes = {tipo: sorted(nombres.get(tid, "?") for tid, m in marcados.items() if (d, tipo) in m)
-                   for tipo, _ in TIPOS_COMIDA}
+        quienes = {tipo: sorted((m[(d, tipo)] or "", nombres.get(tid, "?")) for tid, m in marcados.items() if (d, tipo) in m)
+                   for tipo, _ in TIPOS_COMIDA}  # lista de (turno, nombre), por turno y nombre
         a, c = len(quienes["almuerzo"]), len(quienes["cena"])
         i_ = sum(i["cantidad"] for i in inv.get(d, []))
         if a + c + i_ == 0 and (d.weekday() >= 5 or d in fer):

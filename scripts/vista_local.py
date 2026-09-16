@@ -49,7 +49,7 @@ for i, nom in enumerate(ids):
     for d in range((hoy - primero).days + 1):
         f = primero + timedelta(days=d)
         if f.weekday() < 5 and (d + i) % 3 != 0:
-            base.marcar_comida(ids[nom], f, "almuerzo", "trabajador")
+            base.marcar_comida(ids[nom], f, "almuerzo", "trabajador", ("12:00", "12:30", "13:00", "13:30")[(d + i) % 4])
         if f.weekday() < 5 and (d + i) % 4 == 1:
             base.marcar_comida(ids[nom], f, "cena", "trabajador")
 base.dar_de_baja(base.crear_trabajador("0999999999", "Pedro Salido", date(2015, 5, 5)), date(2026, 7, 31))
@@ -59,6 +59,7 @@ base.crear_usuario("conta", generate_password_hash("x"), "Contabilidad")
 base.crear_usuario("tamara", generate_password_hash("x"), "Tamara")
 base.crear_usuario("comedor", generate_password_hash("x"), "Comedor", "comedor")
 base.poner_configuracion("clave_comedor", "abc123")
+base.poner_puede_invitar(ids["Juan Pérez"], True)
 base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet")
 
 SALIDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vista")

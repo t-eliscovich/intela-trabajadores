@@ -17,9 +17,12 @@
     <div class="titulo"><h2>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</h2><p>{{ por_tipo[tipo]|length }}</p></div>
     {% if por_tipo[tipo] %}
     <table><tbody>
-    {% for c in por_tipo[tipo] %}
+    {% for turno, lista in (por_turno if tipo == 'almuerzo' else [(None, por_tipo[tipo])]) %}
+      {% if tipo == 'almuerzo' %}<tr class="turno-fila"><th colspan="2">{{ nombre_turno(turno) or 'Sin horario' }} · {{ lista|length }}</th></tr>{% endif %}
+      {% for c in lista %}
       <tr><td>{{ c.nombre }} <span class="chico">{{ c.area or '' }}{% if c.creado_en %} · {{ c.creado_en.astimezone().strftime('%H:%M') if c.creado_en.tzinfo else c.creado_en.strftime('%H:%M') }}{% endif %}</span></td>
           <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="{{ tipo }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
+      {% endfor %}
     {% endfor %}
     </tbody></table>
     {% else %}<div class="vacio"><p>Nadie todavía.</p></div>{% endif %}
@@ -48,7 +51,7 @@
         <td>{{ t.nombre }} <span class="chico">{{ t.area or '' }}</span></td>
         <td class="der" style="white-space:nowrap">
           {% if t.whatsapp %}<a class="btn verde chico" href="{{ t.whatsapp }}" target="_blank" rel="noopener">Avisar</a>{% endif %}
-          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}"><input type="hidden" name="tipo" value="almuerzo"><button class="btn suave chico" type="submit">Almuerzo</button></form>
+          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}"><input type="hidden" name="tipo" value="almuerzo"><select name="turno" class="chico" style="width:auto;height:30px;display:inline-block">{% for x in TURNOS_ALMUERZO %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select> <button class="btn suave chico" type="submit">Almuerzo</button></form>
           <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}"><input type="hidden" name="tipo" value="cena"><button class="btn suave chico" type="submit">Cena</button></form>
         </td>
       </tr>

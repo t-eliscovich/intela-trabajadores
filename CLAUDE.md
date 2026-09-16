@@ -63,7 +63,11 @@ en UTC y desde las 19:00 el check de la comida caería en el día siguiente.
 regenera desde /admin/usuarios («Generar uno nuevo»). Almuerzo o cena por la
 hora de Ecuador (`HORA_CENA`). El trabajador puede deshacer su marca durante
 `MINUTOS_PARA_DESHACER` y anotar hasta `MAX_INVITADOS` invitados por comida
-(descripción, sin cédula; tabla `invitado`). El usuario con `rol = 'comedor'`
+(descripción, sin cédula; tabla `invitado`) SÓLO si `trabajador.puede_invitar`
+(se marca en la ficha, «Invitados al comedor»; no va por planilla). El almuerzo
+lleva `comida.turno` (`TURNOS_ALMUERZO`: 12:00/12:30/13:00/13:30, media hora
+cada uno): la tablet lo preselecciona por la hora (`turno_de_ahora`) y el
+trabajador lo puede cambiar; la cena por ahora sin turno. El usuario con `rol = 'comedor'`
 (antes `cafeteria`; el esquema lo renombra) ve /comedor/dia: quién comió,
 invitados, quién no se anotó (aviso por wa.me). Sábados, domingos y `feriado`
 (precargados los nacionales de Ecuador, editables en /admin/feriados) salen en

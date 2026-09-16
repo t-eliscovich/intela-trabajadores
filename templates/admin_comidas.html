@@ -32,11 +32,11 @@
     <div class="dia-quienes">
       <div>
         <h4>Almorzaron</h4>
-        <ul>{% for n in f.quienes.almuerzo %}<li>{{ n }}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
+        <ul>{% for turno, n in f.quienes.almuerzo %}<li>{{ n }}{% if turno %}<small class="turno">{{ turno }}</small>{% endif %}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
       </div>
       <div>
         <h4>Cenaron</h4>
-        <ul>{% for n in f.quienes.cena %}<li>{{ n }}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
+        <ul>{% for turno, n in f.quienes.cena %}<li>{{ n }}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
       </div>
       <div>
         <h4>Invitados</h4>
@@ -59,6 +59,7 @@
         <div style="grid-column:span 2"><label class="campo">Trabajador</label>{% include "_elegir_trabajador.html" %}</div>
         <div><label class="campo">Día</label><input name="fecha" value="{{ hoy|fecha }}" required></div>
         <div><label class="campo">Qué</label><select name="tipo"><option value="almuerzo">Almuerzo</option><option value="cena">Cena</option></select></div>
+        <div><label class="campo">Horario (si es almuerzo)</label><select name="turno"><option value="">—</option>{% for x in TURNOS_ALMUERZO %}<option value="{{ x }}">{{ nombre_turno(x) }}</option>{% endfor %}</select></div>
         <div><button class="btn" type="submit">Marcar</button></div>
       </form>
     </div>

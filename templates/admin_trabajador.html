@@ -99,6 +99,16 @@
       {% endif %}
     </details>
     <details>
+      <summary>Invitados al comedor{% if t.puede_invitar %} <span class="etiqueta">puede</span>{% endif %}</summary>
+      <div class="relleno">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="invitados">
+          <div class="ancho"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="puede_invitar" value="1" style="width:auto;height:auto" {% if t.puede_invitar %}checked{% endif %}> Puede traer invitados al comedor (hasta 3 por comida)</label></div>
+          <div><button class="btn suave" type="submit">Guardar</button></div>
+        </form>
+      </div>
+    </details>
+    <details>
       <summary>Editar los datos</summary>
       <div class="relleno">
         <form method="POST" class="formulario">

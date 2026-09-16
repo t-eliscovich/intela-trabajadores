@@ -44,6 +44,7 @@ class BaseFalsa:
         self.fer: dict[date, str] = {date(2026, 1, 1): "Año Nuevo", date(2026, 12, 25): "Navidad"}
         self.conf: dict[str, str] = {}
         self.alm_hora: dict[tuple, datetime] = {}
+        self.alm_turno: dict[tuple, str | None] = {}
         self._n = 0
 
     def _id(self):
@@ -88,7 +89,7 @@ class BaseFalsa:
         id_ = self._id()
         perfil = perfil or {}
         self.trab[id_] = {"id": id_, "cedula": cedula, "nombre": nombre,
-                          "fecha_ingreso": fecha_ingreso, "activo": True,
+                          "fecha_ingreso": fecha_ingreso, "activo": True, "puede_invitar": False,
                           "fecha_salida": None, "saldo_inicial": saldo_inicial,
                           "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now(),
                           **{k: perfil.get(k) for k in self.PERFIL}}
@@ -264,24 +265,29 @@ class BaseFalsa:
         salida = {}
         for (t, f, tipo) in self.alm:
             if f.year == anio and f.month == mes:
-                salida.setdefault(t, set()).add((f, tipo))
+                salida.setdefault(t, {})[(f, tipo)] = self.alm_turno.get((t, f, tipo))
         return salida
 
-    def marcar_comida(self, trabajador_id, fecha, tipo, marcado_por):
+    def marcar_comida(self, trabajador_id, fecha, tipo, marcado_por, turno=None):
         if tipo not in ("almuerzo", "cena"):
             raise ValueError(f"No sé qué comida es «{tipo}».")
         if (trabajador_id, fecha, tipo) not in self.alm:
             self.alm_hora[(trabajador_id, fecha, tipo)] = datetime.now()
+            self.alm_turno[(trabajador_id, fecha, tipo)] = turno
         self.alm.add((trabajador_id, fecha, tipo))
+
+    def poner_puede_invitar(self, trabajador_id, puede):
+        self.trab[trabajador_id]["puede_invitar"] = bool(puede)
 
     def quien_comio(self, fecha):
         filas = []
         for (tid, f, tipo) in self.alm:
             if f == fecha:
                 t = self.trab[tid]
-                filas.append({"trabajador_id": tid, "tipo": tipo, "marcado_por": "?", "creado_en": self.alm_hora.get((tid, f, tipo)),
+                filas.append({"trabajador_id": tid, "tipo": tipo, "turno": self.alm_turno.get((tid, f, tipo)),
+                              "marcado_por": "?", "creado_en": self.alm_hora.get((tid, f, tipo)),
                               "nombre": t["nombre"], "area": t.get("area"), "celular": t.get("celular")})
-        return sorted(filas, key=lambda x: x["nombre"])
+        return sorted(filas, key=lambda x: (x["turno"] is None, x["turno"] or "", x["nombre"]))
 
     def desmarcar_comida_reciente(self, trabajador_id, fecha, tipo, minutos=10):
         k = (trabajador_id, fecha, tipo)
