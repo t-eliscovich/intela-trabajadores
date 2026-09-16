@@ -399,6 +399,11 @@ check("crea usuario", base.usuario_por_nombre("ana") is not None and base.usuari
 c.post("/admin/usuarios", data={"accion": "crear", "usuario": "mesa", "clave": "123456", "nombre": "Mesa", "rol": "cafeteria"})
 check("crea el usuario de la cafetería", base.usuario_por_nombre("mesa")["rol"] == "cafeteria" and "cafetería" in c.get("/admin/usuarios").get_data(as_text=True))
 check("contabilidad también puede abrir la cafetería", c.get("/cafeteria").status_code == 200)
+with c.session_transaction() as ses:
+    ses["usuario"] = {"id": 1, "usuario": "vieja", "nombre": "Sesión vieja"}
+check("una sesión de antes de los roles sigue entrando a contabilidad", c.get("/admin").status_code == 200)
+with c.session_transaction() as ses:
+    ses["usuario"] = {"id": base.usuario_por_nombre("conta")["id"], "usuario": "conta", "nombre": "Contabilidad", "rol": "contabilidad"}
 yo_id = base.usuario_por_nombre("conta")["id"]
 r = c.post("/admin/usuarios", data={"accion": "desactivar", "id": yo_id}, follow_redirects=True)
 check("no se puede desactivar a sí mismo", "su propio usuario" in r.get_data(as_text=True))

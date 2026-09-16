@@ -129,7 +129,8 @@ def requiere_admin(f):
         u = g.get("usuario")
         if not u:
             return redirect(url_for("admin_entrar", next=request.path))
-        if u.get("rol") != "contabilidad":
+        # Una sesión abierta antes de que existieran los roles no trae rol: es de contabilidad.
+        if (u.get("rol") or "contabilidad") != "contabilidad":
             return redirect(url_for("cafeteria"))
         return f(*a, **kw)
     return wrapper
