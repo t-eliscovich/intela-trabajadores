@@ -595,13 +595,15 @@ def invitados_del_dia(fecha: date) -> list[dict]:
                   "WHERE i.fecha = %s AND i.borrado_en IS NULL ORDER BY i.creado_en", (fecha,))
 
 
-def invitados_del_mes(anio: int, mes: int) -> dict[date, dict[str, int]]:
-    filas = _todos("SELECT fecha, tipo, SUM(cantidad) AS n FROM trabajadores.invitado "
-                   "WHERE date_trunc('month', fecha) = %s AND borrado_en IS NULL GROUP BY fecha, tipo",
+def invitados_del_mes(anio: int, mes: int) -> dict[date, list[dict]]:
+    """Por día, los invitados (con el nombre de quien los trajo), en orden de carga."""
+    filas = _todos("SELECT i.*, t.nombre FROM trabajadores.invitado i "
+                   "JOIN trabajadores.trabajador t ON t.id = i.trabajador_id "
+                   "WHERE date_trunc('month', i.fecha) = %s AND i.borrado_en IS NULL ORDER BY i.creado_en",
                    (date(anio, mes, 1),))
-    salida: dict[date, dict[str, int]] = {}
+    salida: dict[date, list[dict]] = {}
     for f in filas:
-        salida.setdefault(f["fecha"], {})[f["tipo"]] = int(f["n"])
+        salida.setdefault(f["fecha"], []).append(f)
     return salida
 
 

@@ -10,55 +10,48 @@
 <div>
   <div class="bloque">
     <div class="titulo"><h2>Vacaciones</h2></div>
-    <table>
-      <tbody>
-        <tr><td class="tenue">En Intela desde</td><td>{{ t.fecha_ingreso|fecha }} <span class="chico">{{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }}</span></td></tr>
-        {% if v.primer_anio %}
-        <tr><td class="tenue">Cumple el año</td><td>{{ v.aniversario|fecha }} <span class="chico">ese día se le acreditan {{ v.proxima_cantidad|num }}</span></td></tr>
-        {% else %}
-        <tr><td class="tenue">Le corresponden por año</td><td>{{ v.este_anio|num }} días <span class="chico">{% if v.fijo is not none %}número fijo acordado{% elif v.este_anio > 15 %}15 + {{ (v.este_anio - 15)|num }} por más de 5 años{% else %}15 por ley{% endif %}</span></td></tr>
-        <tr><td class="tenue">{% if v.arrastre >= 0 %}Traía de años anteriores{% else %}Debía de años anteriores{% endif %}</td><td>{{ (v.arrastre if v.arrastre >= 0 else -v.arrastre)|num(1) }}</td></tr>
-        <tr><td class="tenue">Tomó este año</td><td>{{ v.tomados_anio|num(1) }}</td></tr>
-        {% endif %}
-        {% if v.ajustes %}<tr><td class="tenue">Ajustes</td><td>{{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }}</td></tr>{% endif %}
-        <tr><td><b>Le quedan</b></td><td><b class="{{ 'negativo' if v.saldo < 0 }}" style="font-size:22px">{{ v.saldo|num(1) }}</b></td></tr>
-      </tbody>
-    </table>
+    <ul class="vac-resumen">
+      <li><span class="vac-que">En Intela desde</span><span class="vac-cuanto">{{ t.fecha_ingreso|fecha }}<small>{{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }}</small></span></li>
+      {% if v.primer_anio %}
+      <li><span class="vac-que">Cumple el año</span><span class="vac-cuanto">{{ v.aniversario|fecha }}<small>ese día se le acreditan {{ v.proxima_cantidad|num }}</small></span></li>
+      {% else %}
+      <li><span class="vac-que">Le corresponden por año</span><span class="vac-cuanto">{{ v.este_anio|num }} días<small>{% if v.fijo is not none %}número fijo acordado{% elif v.este_anio > 15 %}15 + {{ (v.este_anio - 15)|num }} por más de 5 años{% else %}15 por ley{% endif %}</small></span></li>
+      <li><span class="vac-que">{% if v.arrastre >= 0 %}Traía de años anteriores{% else %}Debía de años anteriores{% endif %}</span><span class="vac-cuanto">{{ (v.arrastre if v.arrastre >= 0 else -v.arrastre)|num(1) }}</span></li>
+      <li><span class="vac-que">Tomó este año</span><span class="vac-cuanto">{{ v.tomados_anio|num(1) }}</span></li>
+      {% endif %}
+      {% if v.ajustes %}<li><span class="vac-que">Ajustes</span><span class="vac-cuanto">{{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }}</span></li>{% endif %}
+    </ul>
+    <div class="vac-saldo"><span>Le quedan</span><b class="{{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b></div>
     <div class="nota">El {{ v.proxima_carga|fecha }}{% if v.proxima_tipo == 'aniversario' %} (cumple el año){% endif %} se acreditan {{ v.proxima_cantidad|num }} más.</div>
   </div>
 
   <div class="bloque">
     <div class="titulo"><h2>Días tomados</h2><p>Toque el lápiz para corregir uno.</p></div>
     {% if vacaciones %}
-    <table>
-      <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th style="padding:0"></th></tr></thead>
-      <tbody>
+    <ul class="tomados">
       {% for x in vacaciones %}
-        <tr id="v{{ x.id }}">
-          <td>{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %}<span class="chico" style="display:block">{{ x.nota }}</span>{% endif %}</td>
-          <td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td>
-          <td class="der"><b>{{ x.dias|num(1) }}</b>{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico" style="display:block">no descuenta</span>{% endif %}</td>
-          <td class="der" style="white-space:nowrap;padding-left:0;padding-right:6px">
-            <button class="borrar-fila" type="button" title="Corregir" style="color:var(--acento);padding:2px 3px" onclick="var e=document.getElementById('e{{ x.id }}');e.hidden=!e.hidden">✎</button>
-            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="vacacion_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" style="padding:2px 3px" title="Borrar este período">×</button></form>
-          </td>
-        </tr>
-        <tr id="e{{ x.id }}" hidden>
-          <td colspan="5" style="background:#fafbfc">
-            <form method="POST" class="formulario">
-              <input type="hidden" name="accion" value="vacacion_editar"><input type="hidden" name="id" value="{{ x.id }}">
-              <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}" {% if clave == x.tipo %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
-              <div><label class="campo">Desde</label><input name="desde" value="{{ x.desde|fecha }}" required></div>
-              <div><label class="campo">Hasta</label><input name="hasta" value="{{ x.hasta|fecha }}" required></div>
-              <div><label class="campo">Días</label><input name="dias" value="{{ x.dias|num(1) }}"></div>
-              <div style="grid-column:span 2"><label class="campo">Nota</label><input name="nota" value="{{ x.nota or '' }}"></div>
-              <div><button class="btn chico" type="submit">Guardar</button></div>
-            </form>
-          </td>
-        </tr>
+        <li id="v{{ x.id }}">
+          <span class="t-que">{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %}<small>{{ x.nota }}</small>{% endif %}</span>
+          <span class="t-fechas">{{ x.desde|fecha }} – {{ x.hasta|fecha }}</span>
+          <span class="t-dias">{{ x.dias|num(1) }}{% if not TIPOS_AUSENCIA[x.tipo][1] %}<small>no descuenta</small>{% endif %}</span>
+          <span class="t-acciones">
+            <button class="borrar-fila" type="button" title="Corregir" onclick="var e=document.getElementById('e{{ x.id }}');e.hidden=!e.hidden">✎</button>
+            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="vacacion_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" title="Borrar este período">×</button></form>
+          </span>
+        </li>
+        <li id="e{{ x.id }}" class="t-editar" hidden>
+          <form method="POST" class="formulario">
+            <input type="hidden" name="accion" value="vacacion_editar"><input type="hidden" name="id" value="{{ x.id }}">
+            <div><label class="campo">Qué</label><select name="tipo">{% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}<option value="{{ clave }}" {% if clave == x.tipo %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+            <div><label class="campo">Desde</label><input name="desde" value="{{ x.desde|fecha }}" required></div>
+            <div><label class="campo">Hasta</label><input name="hasta" value="{{ x.hasta|fecha }}" required></div>
+            <div><label class="campo">Días</label><input name="dias" value="{{ x.dias|num(1) }}"></div>
+            <div style="grid-column:span 2"><label class="campo">Nota</label><input name="nota" value="{{ x.nota or '' }}"></div>
+            <div><button class="btn chico" type="submit">Guardar</button></div>
+          </form>
+        </li>
       {% endfor %}
-      </tbody>
-    </table>
+    </ul>
     {% else %}<div class="nota">Todavía no tomó vacaciones.</div>{% endif %}
     <details>
       <summary>Cargar días</summary>

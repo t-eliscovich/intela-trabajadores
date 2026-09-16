@@ -1030,17 +1030,21 @@ def admin_comidas():
     marcados = store.comidas_de_todos(anio, mes)
     inv = store.invitados_del_mes(anio, mes)
     fer = store.feriados(anio)
+    nombres = {t["id"]: t["nombre"] for t in store.trabajadores(incluir_inactivos=True)}
     filas = []
     for d in dias_mes:
         if d > hoy():
             break
-        a = sum(1 for m in marcados.values() if (d, "almuerzo") in m)
-        c = sum(1 for m in marcados.values() if (d, "cena") in m)
-        i_ = sum(inv.get(d, {}).values())
+        quienes = {tipo: sorted(nombres.get(tid, "?") for tid, m in marcados.items() if (d, tipo) in m)
+                   for tipo, _ in TIPOS_COMIDA}
+        a, c = len(quienes["almuerzo"]), len(quienes["cena"])
+        i_ = sum(i["cantidad"] for i in inv.get(d, []))
         if a + c + i_ == 0 and (d.weekday() >= 5 or d in fer):
             continue  # un sábado, domingo o feriado sin nadie no ocupa renglón
-        filas.append({"fecha": d, "almuerzo": a, "cena": c, "invitados": i_,
+        filas.append({"fecha": d, "almuerzo": a, "cena": c, "invitados": i_, "quienes": quienes,
+                      "lista_invitados": inv.get(d, []), "hoy": d == hoy(),
                       "gris": d.weekday() >= 5 or d in fer, "feriado": fer.get(d)})
+    filas.reverse()  # hoy primero: en el comedor miran lo de hoy, no lo de atrás
     totales = {"almuerzo": sum(f["almuerzo"] for f in filas), "cena": sum(f["cena"] for f in filas),
                "invitados": sum(f["invitados"] for f in filas)}
     totales["total"] = totales["almuerzo"] + totales["cena"] + totales["invitados"]
@@ -1064,7 +1068,7 @@ def admin_comidas_imprimir():
         filas.append({"t": t, "marcados": suyos, "totales": _totales(suyos)})
     totales = {tipo: sum(f["totales"][tipo] for f in filas) for tipo, _ in TIPOS_COMIDA}
     inv = store.invitados_del_mes(anio, mes)
-    totales["invitados"] = sum(sum(v.values()) for v in inv.values())
+    totales["invitados"] = sum(i["cantidad"] for v in inv.values() for i in v)
     return render_template("admin_comidas_imprimir.html", anio=anio, mes=mes, dias=dias, filas=filas,
                            totales=totales, feriados=store.feriados(anio))
 

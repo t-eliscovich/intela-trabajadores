@@ -305,10 +305,9 @@ class BaseFalsa:
 
     def invitados_del_mes(self, anio, mes):
         salida = {}
-        for i in self.inv.values():
+        for i in sorted(self.inv.values(), key=lambda i: i["creado_en"]):
             if i["fecha"].year == anio and i["fecha"].month == mes and not i["borrado_en"]:
-                d = salida.setdefault(i["fecha"], {})
-                d[i["tipo"]] = d.get(i["tipo"], 0) + i["cantidad"]
+                salida.setdefault(i["fecha"], []).append(dict(i, nombre=self.trab[i["trabajador_id"]]["nombre"]))
         return salida
 
     def borrar_invitados(self, id_):

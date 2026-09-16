@@ -3,7 +3,7 @@
 {% block contenido %}
 <h1>Comidas
   <span class="no-imprime" style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span class="mes-nav" style="gap:10px"><a href="{{ url_for('admin_comidas', mes=anterior) }}">‹</a><b>{{ MESES[mes]|capitalize }} {{ anio }}</b><a href="{{ url_for('admin_comidas', mes=siguiente) }}">›</a></span>
+    <span class="mes-nav"><a href="{{ url_for('admin_comidas', mes=anterior) }}">‹</a><b>{{ MESES[mes]|capitalize }} {{ anio }}</b><a href="{{ url_for('admin_comidas', mes=siguiente) }}">›</a></span>
     <a class="btn suave chico" href="{{ url_for('admin_comidas_imprimir', mes=anio ~ '-' ~ '%02d' % mes) }}">Cuadro para pagar</a>
     {% if g.usuario.rol != 'comedor' %}<a class="btn suave chico" href="{{ url_for('admin_feriados') }}">Feriados</a>{% endif %}
   </span>
@@ -17,24 +17,38 @@
 </div>
 
 <div class="bloque">
-  <table>
-    <thead><tr><th>Día</th><th class="der">Almuerzos</th><th class="der">Cenas</th><th class="der">Invitados</th><th></th></tr></thead>
-    <tbody>
-    {% for f in filas %}
-      <tr class="{{ 'tenue' if f.gris }}">
-        <td>{{ f.fecha|fecha_corta }}{% if f.feriado %} <span class="etiqueta">feriado</span>{% endif %}</td>
-        <td class="der">{{ f.almuerzo or '' }}</td>
-        <td class="der">{{ f.cena or '' }}</td>
-        <td class="der">{{ f.invitados or '' }}</td>
-        <td class="der"><a href="{{ url_for('comedor_dia', fecha=f.fecha.isoformat()) }}">ver quiénes</a></td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="vacio">Todavía no hay comidas en {{ MESES[mes] }}.</td></tr>
-    {% endfor %}
-    </tbody>
-    <tfoot><tr><td><b>Total</b></td><td class="der"><b>{{ totales.almuerzo }}</b></td><td class="der"><b>{{ totales.cena }}</b></td><td class="der"><b>{{ totales.invitados }}</b></td><td></td></tr></tfoot>
-  </table>
-  <div class="nota">Sábados, domingos y feriados en gris; si no comió nadie, no aparecen.</div>
+  <div class="dias-cab"><b>Día</b><span>Almuerzos</span><span>Cenas</span><span>Invitados</span><span></span></div>
+  {% for f in filas %}
+  <details class="dia{{ ' hoy' if f.hoy }}{{ ' gris' if f.gris }}">
+    <summary>
+      <div class="dia-fila">
+        <span class="dia-fecha">{{ f.fecha|fecha_corta }}{% if f.hoy %} <span class="etiqueta hoy">hoy</span>{% endif %}{% if f.feriado %} <span class="etiqueta">feriado</span>{% endif %}</span>
+        <span class="n">{{ f.almuerzo or '' }}</span>
+        <span class="n">{{ f.cena or '' }}</span>
+        <span class="n">{{ f.invitados or '' }}</span>
+        <span class="dia-mas" title="Ver quiénes"></span>
+      </div>
+    </summary>
+    <div class="dia-quienes">
+      <div>
+        <h4>Almorzaron</h4>
+        <ul>{% for n in f.quienes.almuerzo %}<li>{{ n }}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <h4>Cenaron</h4>
+        <ul>{% for n in f.quienes.cena %}<li>{{ n }}</li>{% else %}<li class="nadie">Nadie</li>{% endfor %}</ul>
+      </div>
+      <div>
+        <h4>Invitados</h4>
+        <ul>{% for i in f.lista_invitados %}<li>{{ i.cantidad }} · {{ i.descripcion }}<small>con {{ i.nombre }} · {{ i.tipo }}</small></li>{% else %}<li class="nadie">Ninguno</li>{% endfor %}</ul>
+      </div>
+    </div>
+  </details>
+  {% else %}
+  <div class="vacio">Todavía no hay comidas en {{ MESES[mes] }}.</div>
+  {% endfor %}
+  <div class="dias-total"><b>Total</b><span>{{ totales.almuerzo }}</span><span>{{ totales.cena }}</span><span>{{ totales.invitados }}</span><span></span></div>
+  <div class="nota">Toque el + para ver quiénes. Sábados, domingos y feriados en gris; si no comió nadie, no aparecen.</div>
 </div>
 
 <div class="bloque no-imprime">

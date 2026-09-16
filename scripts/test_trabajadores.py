@@ -315,7 +315,7 @@ check("contabilidad marca a mano por cédula", (maria, date(2026, 1, 8), "almuer
 r = c.post("/admin/comidas", data={"cedula": "0000000000", "fecha": "08/01/2026", "tipo": "almuerzo"}, follow_redirects=True)
 check("cédula desconocida avisa", "ningún trabajador" in r.get_data(as_text=True))
 html = c.get("/admin/comidas?mes=2026-01").get_data(as_text=True)
-check("comidas del mes: una fila por día con fecha corta, invitados y link a quiénes", "Mar 6" in html and "Invitados" in html and "ver quiénes" in html and "Total" in html)
+check("comidas del mes: una fila por día con fecha corta, invitados y el + que despliega quiénes", "Mar 6" in html and "Invitados" in html and 'class="dia-mas"' in html and "Almorzaron" in html and "Total" in html)
 check("el 1 de enero (feriado sin nadie) no aparece; el sábado 3 tampoco", '<span class="etiqueta">feriado</span>' not in html and "Sáb 3" not in html)
 base.marcar_comida(maria, date(2026, 1, 1), "almuerzo", "conta")
 html = c.get("/admin/comidas?mes=2026-01").get_data(as_text=True)
