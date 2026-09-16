@@ -83,7 +83,6 @@ guardar("cafeteria_listo", k.post("/cafeteria/confirmar", data={"cedula": "17123
 
 # contabilidad
 c = A.app.test_client()
-guardar("admin_entrar", c.get("/admin/entrar").get_data(as_text=True))
 c.post("/admin/entrar", data={"usuario": "conta", "clave": "x"})
 guardar("admin", c.get("/admin").get_data(as_text=True))
 guardar("admin_trabajador", c.get(f"/admin/trabajador/{ids['Juan Pérez']}").get_data(as_text=True))

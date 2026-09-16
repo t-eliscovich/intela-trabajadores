@@ -483,7 +483,7 @@ def admin_entrar():
             session.permanent = False  # contabilidad: se cierra con el navegador
             return redirect(_adonde_iba() or url_for("admin"))
         flash("Usuario o clave incorrectos.", "error")
-    return render_template("admin_entrar.html")
+    return render_template("entrar.html", admin=True)
 
 
 @app.route("/admin/salir")

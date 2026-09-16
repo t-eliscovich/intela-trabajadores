@@ -4,12 +4,12 @@
 {% block contenido %}
 <div class="bloque" style="margin-top:24px">
   <div class="relleno">
-    <h1 style="margin-bottom:4px">Escriba su cédula</h1>
-    <p class="tenue" style="margin:0 0 14px">Para ver sus vacaciones y pedir días.</p>
-    <form method="POST" class="formulario">
+    <h1 style="margin-bottom:4px">Trabajador</h1>
+    <p class="tenue" style="margin:0 0 14px">Escriba su cédula para ver sus vacaciones y pedir días.</p>
+    <form method="POST" action="{{ url_for('entrar') }}" class="formulario">
       <div class="ancho">
         <input type="text" name="cedula" inputmode="numeric" autocomplete="off"
-               placeholder="Ej: 1712345678" autofocus required
+               placeholder="Cédula" {% if not admin %}autofocus{% endif %} required
                style="height:48px;font-size:22px;letter-spacing:.06em;text-align:center">
       </div>
       <div class="ancho">
@@ -17,6 +17,17 @@
       </div>
     </form>
   </div>
-  <div class="nota">Contabilidad y cafetería: <a href="{{ url_for('admin_entrar') }}">entrar por aquí</a>.</div>
+</div>
+
+<div class="bloque">
+  <div class="relleno">
+    <h1 style="margin-bottom:4px">Contabilidad y cafetería</h1>
+    <p class="tenue" style="margin:0 0 14px">Con su usuario y clave.</p>
+    <form method="POST" action="{{ url_for('admin_entrar', next=request.args.get('next') or none) }}" class="formulario">
+      <div class="ancho"><input type="text" name="usuario" placeholder="Usuario" required autocapitalize="none" autocomplete="username" {% if admin %}autofocus{% endif %}></div>
+      <div class="ancho"><input type="password" name="clave" placeholder="Clave" required autocomplete="current-password"></div>
+      <div class="ancho"><button class="btn suave" type="submit" style="width:100%;height:44px">Entrar</button></div>
+    </form>
+  </div>
 </div>
 {% endblock %}
