@@ -9,8 +9,8 @@
     <b>{{ t.nombre }}</b>
     <p>
       {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado anotado' if invitados_anotados == 1 else 'invitados anotados' }}. ¡Buen provecho!
-      {% elif ya_estaba %}Ya marcó {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
-      {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} marcado. ¡Buen provecho!{% endif %}
+      {% elif ya_estaba %}Ya registró {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
+      {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado. ¡Buen provecho!{% endif %}
     </p>
   </div>
 

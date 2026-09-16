@@ -64,10 +64,15 @@ regenera desde /admin/usuarios («Generar uno nuevo»). Almuerzo o cena por la
 hora de Ecuador (`HORA_CENA`). El trabajador puede deshacer su marca durante
 `MINUTOS_PARA_DESHACER` y anotar hasta `MAX_INVITADOS` invitados por comida
 (descripción, sin cédula; tabla `invitado`) SÓLO si `trabajador.puede_invitar`
-(se marca en la ficha, «Invitados al comedor»; no va por planilla). El almuerzo
-lleva `comida.turno` (`TURNOS_ALMUERZO`: 12:00/12:30/13:00/13:30, media hora
-cada uno): la tablet lo preselecciona por la hora (`turno_de_ahora`) y el
-trabajador lo puede cambiar; la cena por ahora sin turno. El usuario con `rol = 'comedor'`
+(se marca en la ficha, «Invitados al comedor»; no va por planilla). Toda comida
+lleva `comida.turno` (`TURNOS`: almuerzo 12:00/12:30/13:00/13:30, cena
+18:30/19:00; media hora cada uno): la tablet lo preselecciona por la hora
+(`turno_de_ahora`) y el trabajador lo puede cambiar; vacío → el de ahora. Los
+invitados llevan el turno de quien los trae.
+
+**Palabras del comedor** (Tamara, 16/09: «muy poco profesional»): comensales,
+registrar/registrado, horario, sin registrar, quitar. No «quién comió»,
+«marcar», «se anotó», «nadie todavía». El usuario con `rol = 'comedor'`
 (antes `cafeteria`; el esquema lo renombra) ve /comedor/dia: quién comió,
 invitados, quién no se anotó (aviso por wa.me). Sábados, domingos y `feriado`
 (precargados los nacionales de Ecuador, editables en /admin/feriados) salen en

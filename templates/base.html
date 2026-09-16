@@ -248,7 +248,7 @@
   .turnos .turno:last-child{border-right:0}
   .turno h3{margin:0;font-size:13px;font-weight:700;padding:8px 12px;background:#f4f6f9;border-bottom:1px solid var(--borde);
             display:flex;justify-content:space-between;align-items:baseline}
-  .turno h3 b{font-size:16px}
+  .turno h3 b{font-size:16px;white-space:nowrap}
   .turno-nombre{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 6px 6px 12px;
                 border-bottom:1px solid #f2f5f8;font-size:14px}
   .turno-nombre span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -289,9 +289,9 @@
     <div class="marca">TRABAJADORES <span>· INTELA</span></div>
     {% if g.usuario and g.usuario.rol == 'comedor' %}
     <nav>
-      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Quién comió</a>
-      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir') }}">Por día</a>
-      <a href="{{ url_for('comedor') }}" class="{{ 'activo' if request.endpoint=='comedor' }}">Marcar</a>
+      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Comensales</a>
+      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir') }}">Por mes</a>
+      <a href="{{ url_for('comedor') }}" class="{{ 'activo' if request.endpoint=='comedor' }}">Registrar</a>
     </nav>
     <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
     {% elif g.token %}

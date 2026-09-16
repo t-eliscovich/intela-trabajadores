@@ -281,7 +281,7 @@ def _globales():
         except Exception:  # noqa: BLE001
             pendientes = 0
     return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
-            "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
+            "TURNOS": TURNOS, "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
 
 
@@ -425,37 +425,37 @@ def comida_de_ahora() -> str:
     return "cena" if datetime.now(ZoneInfo(config.ZONA)).hour >= HORA_CENA else "almuerzo"
 
 
-# Los turnos del almuerzo: media hora cada uno. La cena todavía no tiene turnos.
-TURNOS_ALMUERZO = ("12:00", "12:30", "13:00", "13:30")
+# Los turnos de cada comida: media hora cada uno.
+TURNOS = {"almuerzo": ("12:00", "12:30", "13:00", "13:30"), "cena": ("18:30", "19:00")}
+TURNOS_ALMUERZO = TURNOS["almuerzo"]
 
 
 def nombre_turno(turno: str | None) -> str:
     """'12:30' → '12:30 a 13:00'."""
-    if turno not in TURNOS_ALMUERZO:
+    if not turno or not re.fullmatch(r"\d\d:\d\d", turno):
         return ""
     h, m = int(turno[:2]), int(turno[3:])
     fin = f"{h + (m + 30) // 60:02d}:{(m + 30) % 60:02d}"
     return f"{turno} a {fin}"
 
 
-def turno_de_ahora() -> str:
-    """El turno que corresponde a la hora de Ecuador: antes de las 12 el primero,
-    después de las 14 el último. Es la opción que sale elegida en la tablet."""
+def turno_de_ahora(tipo: str = "almuerzo") -> str:
+    """El turno que corresponde a la hora de Ecuador: antes del primero, el primero;
+    después del último, el último. Es la opción que sale elegida en la tablet."""
     ahora = datetime.now(ZoneInfo(config.ZONA)).strftime("%H:%M")
-    elegido = TURNOS_ALMUERZO[0]
-    for t in TURNOS_ALMUERZO:
+    turnos = TURNOS[tipo]
+    elegido = turnos[0]
+    for t in turnos:
         if ahora >= t:
             elegido = t
     return elegido
 
 
-def leer_turno(texto: str | None, tipo: str) -> str | None:
-    """El turno sólo va con el almuerzo. Vacío → el de ahora (el almuerzo siempre tiene horario)."""
-    if tipo != "almuerzo":
-        return None
+def leer_turno(texto: str | None, tipo: str) -> str:
+    """Vacío → el de ahora (toda comida lleva horario)."""
     if not texto:
-        return turno_de_ahora()
-    if texto not in TURNOS_ALMUERZO:
+        return turno_de_ahora(tipo)
+    if texto not in TURNOS[tipo]:
         raise ValueError("Ese horario no existe.")
     return texto
 
@@ -546,7 +546,7 @@ def comedor():
             return _tablet("comedor.html", error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
             return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo))
-        return _tablet("comedor_confirmar.html", t=t, fecha=h, turno=turno_de_ahora())
+        return _tablet("comedor_confirmar.html", t=t, fecha=h, turno=turno_de_ahora(tipo))
     return _tablet("comedor.html")
 
 
@@ -585,7 +585,7 @@ def comedor_deshacer():
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
     if store.desmarcar_comida_reciente(t["id"], hoy(), tipo, MINUTOS_PARA_DESHACER):
-        return _tablet("comedor.html", tipo=tipo, aviso=f"Listo, {t['nombre']}: se sacó {'el almuerzo' if tipo == 'almuerzo' else 'la cena'}.")
+        return _tablet("comedor.html", tipo=tipo, aviso=f"Listo, {t['nombre']}: {'el almuerzo' if tipo == 'almuerzo' else 'la cena'} quedó sin registrar.")
     return _tablet("comedor.html", tipo=tipo, error="Eso ya no se puede deshacer desde aquí. Avise en contabilidad.")
 
 
@@ -616,7 +616,7 @@ def comedor_invitados():
 @app.route("/comedor/dia", methods=["GET", "POST"])
 @requiere_sesion
 def comedor_dia():
-    """Quién comió un día: para la persona del comedor y para contabilidad."""
+    """Los comensales de un día, por horario: para el comedor y para contabilidad."""
     try:
         fecha = leer_fecha(request.values.get("fecha", "")) if request.values.get("fecha") else hoy()
     except ValueError:
@@ -640,18 +640,21 @@ def comedor_dia():
     por_tipo = {tipo: [c for c in comieron if c["tipo"] == tipo] for tipo, _ in TIPOS_COMIDA}
     # el almuerzo agrupado por turno (los sin turno, al final)
     invitados = store.invitados_del_dia(fecha)
-    inv_turno = {turno: [i for i in invitados if i["tipo"] == "almuerzo" and i.get("turno") == turno]
-                 for turno in (*TURNOS_ALMUERZO, None)}
-    inv_cena = [i for i in invitados if i["tipo"] == "cena"]
-    por_turno = [(turno, [c for c in por_tipo["almuerzo"] if c["turno"] == turno])
-                 for turno in (*TURNOS_ALMUERZO, None)]
-    # los 4 turnos siempre; «sin horario» sólo si quedó algo viejo marcado sin horario
-    por_turno = [(turno, lista) for turno, lista in por_turno if turno or lista or inv_turno[None]]
+    # por comida, columnas por horario: [(turno, comensales, invitados)]; los 4 (o 2) turnos
+    # siempre; «sin horario» sólo si quedó algo viejo registrado sin horario
+    columnas = {}
+    for tipo, _ in TIPOS_COMIDA:
+        cols = []
+        for turno in (*TURNOS[tipo], None):
+            gente = [c for c in por_tipo[tipo] if c["turno"] == turno]
+            inv = [i for i in invitados if i["tipo"] == tipo and i.get("turno") == turno]
+            if turno or gente or inv:
+                cols.append((turno, gente, inv))
+        columnas[tipo] = cols
     marcaron = {c["trabajador_id"] for c in comieron}
     faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
               for t in store.trabajadores() if t["id"] not in marcaron]
-    return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, por_turno=por_turno,
-                           inv_turno=inv_turno, inv_cena=inv_cena,
+    return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, columnas=columnas,
                            faltan=faltan, invitados=invitados,
                            total_invitados=sum(i["cantidad"] for i in invitados),
                            feriado=store.feriados(fecha.year).get(fecha),
@@ -661,7 +664,7 @@ def comedor_dia():
 def _texto_no_se_anoto(t: dict, fecha: date) -> str:
     nombre = t["nombre"].split()[-2] if len(t["nombre"].split()) >= 3 else t["nombre"].split()[0]
     cuando = "hoy" if fecha == hoy() else f"el {fecha.strftime('%d/%m')}"
-    return f"Hola {nombre}, {cuando} no se anotó en el comedor. Si va a comer, pase por la tablet. Saludos, Intela."
+    return f"Hola {nombre}, {cuando} no registró su comida en el comedor. Si va a comer, pase por la tablet. Saludos, Intela."
 
 
 @app.route("/cafeteria")
@@ -1075,7 +1078,7 @@ def admin_comidas():
             if fecha > hoy():
                 raise ValueError("La fecha no puede ser futura.")
             store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"], leer_turno(request.form.get("turno"), tipo))
-            flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} marcado.", "ok")
+            flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} registrado.", "ok")
             anio, mes = fecha.year, fecha.month
         except ValueError as exc:
             flash(str(exc), "error")
@@ -1099,12 +1102,27 @@ def admin_comidas():
                       "lista_invitados": inv.get(d, []), "hoy": d == hoy(),
                       "gris": d.weekday() >= 5 or d in fer, "feriado": fer.get(d)})
     filas.reverse()  # hoy primero: en el comedor miran lo de hoy, no lo de atrás
+    semanas = _por_semana(filas)
     totales = {"almuerzo": sum(f["almuerzo"] for f in filas), "cena": sum(f["cena"] for f in filas),
                "invitados": sum(f["invitados"] for f in filas)}
     totales["total"] = totales["almuerzo"] + totales["cena"] + totales["invitados"]
-    return render_template("admin_comidas.html", anio=anio, mes=mes, filas=filas, totales=totales,
+    return render_template("admin_comidas.html", anio=anio, mes=mes, filas=filas, totales=totales, semanas=semanas,
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes),
                            trabajadores=store.trabajadores())
+
+
+def _por_semana(filas: list[dict]) -> list[dict]:
+    """Las cantidades del mes sumadas por semana (lunes a domingo), la última primero."""
+    semanas: dict[date, dict] = {}
+    for f in filas:
+        lunes = f["fecha"] - timedelta(days=f["fecha"].weekday())
+        sem = semanas.setdefault(lunes, {"desde": lunes, "hasta": lunes + timedelta(days=6),
+                                         "almuerzo": 0, "cena": 0, "invitados": 0, "dias": 0})
+        sem["almuerzo"] += f["almuerzo"]; sem["cena"] += f["cena"]; sem["invitados"] += f["invitados"]
+        sem["dias"] += 1 if f["almuerzo"] + f["cena"] else 0
+    for sem in semanas.values():
+        sem["total"] = sem["almuerzo"] + sem["cena"] + sem["invitados"]
+    return [semanas[k] for k in sorted(semanas, reverse=True)]
 
 
 @app.route("/admin/comidas/imprimir")

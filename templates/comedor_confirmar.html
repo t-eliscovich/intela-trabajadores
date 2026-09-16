@@ -8,18 +8,16 @@
     <b>{{ t.nombre }}</b>
     <span>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</span>
   </div>
-  {% if tipo == 'almuerzo' %}
   <label class="kiosco-turno">Horario
     <select onchange="document.getElementById('turno-elegido').value=this.value">
-      {% for x in TURNOS_ALMUERZO %}<option value="{{ x }}" {% if x == turno %}selected{% endif %}>{{ nombre_turno(x) }}</option>{% endfor %}
+      {% for x in TURNOS[tipo] %}<option value="{{ x }}" {% if x == turno %}selected{% endif %}>{{ nombre_turno(x) }}</option>{% endfor %}
     </select>
   </label>
-  {% endif %}
   <p class="kiosco-pregunta">¿Es usted?</p>
   <div class="kiosco-botones">
     <form method="POST" action="{{ u('comedor_confirmar') }}">
       <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
-      {% if tipo == 'almuerzo' %}<input type="hidden" name="turno" value="{{ turno }}" id="turno-elegido">{% endif %}
+      <input type="hidden" name="turno" value="{{ turno }}" id="turno-elegido">
       <button class="btn verde kiosco-btn" type="submit" autofocus>Sí</button>
     </form>
     <form method="GET" action="{{ u('comedor') }}">

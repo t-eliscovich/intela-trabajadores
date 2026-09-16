@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block titulo %}Comedor · {{ fecha|fecha }}{% endblock %}
+{% block titulo %}Comensales · {{ fecha|fecha }}{% endblock %}
 {% block contenido %}
-<h1>Quién comió
+<h1>Comensales
   <span style="margin-left:auto" class="mes-nav"><a href="{{ url_for('comedor_dia', fecha=ayer) }}">‹</a><b>{{ fecha|fecha_larga }}{% if feriado %} · <span class="tenue">{{ feriado }}</span>{% endif %}</b><a href="{{ url_for('comedor_dia', fecha=manana) }}">›</a></span>
 </h1>
 
@@ -11,42 +11,30 @@
   <div class="cifra"><b>{{ total_invitados }}</b><small>Invitados</small></div>
 </div>
 
+{% for tipo, letra in TIPOS_COMIDA %}
 <div class="bloque">
-  <div class="titulo"><h2>Almuerzo</h2><p>{{ por_tipo.almuerzo|length }}</p></div>
-  <div class="turnos" style="grid-template-columns:repeat({{ por_turno|length }},1fr)">
-    {% for turno, lista in por_turno %}
+  <div class="titulo"><h2>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</h2><p>{{ por_tipo[tipo]|length }} {{ 'comensal' if por_tipo[tipo]|length == 1 else 'comensales' }}</p></div>
+  <div class="turnos" style="grid-template-columns:repeat({{ columnas[tipo]|length }},1fr)">
+    {% for turno, gente, inv in columnas[tipo] %}
     <div class="turno">
-      {% set ninv = inv_turno[turno]|sum(attribute='cantidad') %}<h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ lista|length }}{% if ninv %} <small class="chico">+{{ ninv }}</small>{% endif %}</b></h3>
-      {% for c in lista %}
+      {% set ninv = inv|sum(attribute='cantidad') %}<h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ gente|length }}{% if ninv %} <small class="chico">+{{ ninv }}</small>{% endif %}</b></h3>
+      {% for c in gente %}
       <div class="turno-nombre"><span>{{ c.nombre }}</span>
-        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="almuerzo"><button class="borrar-fila" title="Sacar">×</button></form></div>
-      {% else %}{% if not inv_turno[turno] %}<p class="turno-nadie">Nadie todavía.</p>{% endif %}{% endfor %}
-      {% for i in inv_turno[turno] %}
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="{{ tipo }}"><button class="borrar-fila" title="Quitar">×</button></form></div>
+      {% else %}{% if not inv %}<p class="turno-nadie">Sin comensales.</p>{% endif %}{% endfor %}
+      {% for i in inv %}
       <div class="turno-nombre invitado"><span><b>+{{ i.cantidad }}</b> {{ i.descripcion }} <small class="chico">con {{ i.nombre }}</small></span>
-        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Sacar">×</button></form></div>
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Quitar">×</button></form></div>
       {% endfor %}
     </div>
     {% endfor %}
   </div>
 </div>
-
-<div class="bloque">
-  <div class="titulo"><h2>Cena</h2><p>{{ por_tipo.cena|length }}</p></div>
-  <div class="turno">
-    {% for c in por_tipo.cena %}
-    <div class="turno-nombre"><span>{{ c.nombre }}</span>
-      <form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="cena"><button class="borrar-fila" title="Sacar">×</button></form></div>
-    {% else %}{% if not inv_cena %}<p class="turno-nadie">Nadie todavía.</p>{% endif %}{% endfor %}
-    {% for i in inv_cena %}
-    <div class="turno-nombre invitado"><span><b>+{{ i.cantidad }}</b> {{ i.descripcion }} <small class="chico">con {{ i.nombre }}</small></span>
-      <form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Sacar">×</button></form></div>
-    {% endfor %}
-  </div>
-</div>
+{% endfor %}
 
 <div class="bloque">
   <details>
-    <summary>No se anotaron ({{ faltan|length }})</summary>
+    <summary>Sin registrar ({{ faltan|length }})</summary>
     <table><tbody>
     {% for t in faltan %}
       <tr>

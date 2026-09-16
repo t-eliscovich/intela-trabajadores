@@ -51,7 +51,7 @@ for i, nom in enumerate(ids):
         if f.weekday() < 5 and (d + i) % 3 != 0:
             base.marcar_comida(ids[nom], f, "almuerzo", "trabajador", ("12:00", "12:30", "13:00", "13:30")[(d + i) % 4])
         if f.weekday() < 5 and (d + i) % 4 == 1:
-            base.marcar_comida(ids[nom], f, "cena", "trabajador")
+            base.marcar_comida(ids[nom], f, "cena", "trabajador", ("18:30", "19:00")[(d + i) % 2])
 base.dar_de_baja(base.crear_trabajador("0999999999", "Pedro Salido", date(2015, 5, 5)), date(2026, 7, 31))
 
 from werkzeug.security import generate_password_hash  # noqa: E402
