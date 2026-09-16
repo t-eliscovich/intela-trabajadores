@@ -52,6 +52,8 @@ MESES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 DIAS_CORTOS = ["L", "M", "M", "J", "V", "S", "D"]
 TIPOS_COMIDA = (("almuerzo", "A"), ("cena", "C"))
+# Las áreas de la fábrica, como las usa contabilidad en su planilla (Dep).
+AREAS = ("ADM", "BO", "CC", "KK", "TT")
 
 
 def leer_tipo_comida(texto: str | None) -> str:
@@ -286,7 +288,7 @@ def _globales():
             pendientes = store.cuantas_pendientes()
         except Exception:  # noqa: BLE001
             pendientes = 0
-    return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA,
+    return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
 
 

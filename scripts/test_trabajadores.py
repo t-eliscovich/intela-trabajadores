@@ -236,7 +236,9 @@ r = c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "091
 check("editar con la cédula de otro avisa", "ya es de María" in r.get_data(as_text=True))
 c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "1712345678", "nombre": "Juan Pérez", "fecha_ingreso": "25/03/2019", "area": "Acabado", "dias_por_anio": "18"})
 check("editar guarda el perfil", base.trabajador(juan)["area"] == "Acabado" and base.trabajador(juan)["dias_por_anio"] == 18)
-check("y la ficha lo muestra", "Acabado" in c.get(f"/admin/trabajador/{juan}").get_data(as_text=True))
+html = c.get(f"/admin/trabajador/{juan}").get_data(as_text=True)
+check("y la ficha lo muestra", "Acabado" in html)
+check("el área es una lista con las de la fábrica y conserva la que tenía aunque no esté", '<select name="area">' in html and 'value="TT"' in html and 'value="Acabado" selected' in html)
 c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "1712345678", "nombre": "Juan Pérez", "fecha_ingreso": "25/03/2019"})
 check("editar sin días por año vuelve a la ley", base.trabajador(juan)["dias_por_anio"] is None)
 c.post(f"/admin/trabajador/{juan}", data={"accion": "baja", "fecha_salida": "10/09/2026"})
@@ -257,6 +259,7 @@ check("el buscador encuentra sin acento ni mayúsculas", "Juan Pérez" in html a
 html = c.get("/admin?q=0912").get_data(as_text=True)
 check("y por cédula", "María López" in html and "Juan Pérez" not in html)
 check("la lista dice Generados, no Ganados", "Generados" in html and "Ganados" not in html)
+
 check("sin resultados lo dice", "Nadie coincide" in c.get("/admin?q=zzzz").get_data(as_text=True))
 c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "1712345678", "nombre": "Juan Pérez", "fecha_ingreso": "25/03/2019", "direccion": "Calle 1"})
 check("la ficha guarda la dirección", base.trabajador(juan)["direccion"] == "Calle 1")

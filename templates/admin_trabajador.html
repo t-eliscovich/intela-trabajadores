@@ -85,7 +85,7 @@
           <div><label class="campo">Cédula</label><input name="cedula" value="{{ t.cedula }}" required></div>
           <div style="grid-column:span 2"><label class="campo">Nombre</label><input name="nombre" value="{{ t.nombre }}" required></div>
           <div><label class="campo">Ingreso</label><input name="fecha_ingreso" value="{{ t.fecha_ingreso|fecha }}" required></div>
-          <div><label class="campo">Área</label><input name="area" value="{{ t.area or '' }}"></div>
+          <div><label class="campo">Área</label>{% with actual=t.area %}{% include "_area.html" %}{% endwith %}</div>
           <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" value="{{ t.fecha_nacimiento|fecha if t.fecha_nacimiento else '' }}"></div>
           <div><label class="campo">Celular</label><input name="celular" value="{{ t.celular or '' }}"></div>
           <div style="grid-column:span 2"><label class="campo">Dirección</label><input name="direccion" value="{{ t.direccion or '' }}"></div>

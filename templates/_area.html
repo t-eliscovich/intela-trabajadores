@@ -1,0 +1,6 @@
+{# El área como lista para elegir; si la que tiene no está en la lista, se agrega para no perderla. #}
+<select name="area">
+  <option value="">—</option>
+  {% for a in AREAS %}<option value="{{ a }}" {% if actual == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+  {% if actual and actual not in AREAS %}<option value="{{ actual }}" selected>{{ actual }}</option>{% endif %}
+</select>

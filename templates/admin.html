@@ -19,7 +19,7 @@
       <div style="grid-column:span 2"><label class="campo">Nombre y apellido</label><input name="nombre" required></div>
       <div><label class="campo">Fecha de ingreso</label><input name="fecha_ingreso" placeholder="25/03/2024" required></div>
       <div><label class="campo">Días que le quedan hoy</label><input name="saldo" placeholder="vacío = contar desde el ingreso"></div>
-      <div><label class="campo">Área</label><input name="area" placeholder="tejeduría, tintorería…"></div>
+      <div><label class="campo">Área</label>{% with actual=none %}{% include "_area.html" %}{% endwith %}</div>
       <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" placeholder="12/08/1990"></div>
       <div><label class="campo">Celular</label><input name="celular" placeholder="0991234567"></div>
       <div><label class="campo">Días por año</label><input name="dias_por_anio" placeholder="vacío = por ley"></div>
