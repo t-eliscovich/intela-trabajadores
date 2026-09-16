@@ -31,16 +31,16 @@
     <div class="titulo"><h2>Días tomados</h2><p>Toque el lápiz para corregir uno.</p></div>
     {% if vacaciones %}
     <table>
-      <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th></th></tr></thead>
+      <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th style="padding:0"></th></tr></thead>
       <tbody>
       {% for x in vacaciones %}
         <tr id="v{{ x.id }}">
-          <td>{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %} <span class="chico">{{ x.nota }}</span>{% endif %}</td>
+          <td>{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %}<span class="chico" style="display:block">{{ x.nota }}</span>{% endif %}</td>
           <td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td>
-          <td class="der"><b>{{ x.dias|num(1) }}</b>{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico">no descuenta</span>{% endif %}</td>
-          <td class="der" style="white-space:nowrap">
-            <button class="borrar-fila" type="button" title="Corregir" style="color:var(--acento)" onclick="var e=document.getElementById('e{{ x.id }}');e.hidden=!e.hidden">✎</button>
-            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="vacacion_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" title="Borrar este período">×</button></form>
+          <td class="der"><b>{{ x.dias|num(1) }}</b>{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico" style="display:block">no descuenta</span>{% endif %}</td>
+          <td class="der" style="white-space:nowrap;padding-left:0;padding-right:6px">
+            <button class="borrar-fila" type="button" title="Corregir" style="color:var(--acento);padding:2px 3px" onclick="var e=document.getElementById('e{{ x.id }}');e.hidden=!e.hidden">✎</button>
+            <form method="POST" class="enlinea"><input type="hidden" name="accion" value="vacacion_borrar"><input type="hidden" name="id" value="{{ x.id }}"><button class="borrar-fila" style="padding:2px 3px" title="Borrar este período">×</button></form>
           </td>
         </tr>
         <tr id="e{{ x.id }}" hidden>

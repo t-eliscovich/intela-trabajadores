@@ -6,9 +6,10 @@ Para el trabajador (desde el celular, sólo con la cédula):
     /yo → /yo/vacaciones  cuántos días le quedan, y pedir más
     /yo/perfil      quién es para la empresa: área, desde cuándo, cuántos días gana por año
 
-Para la tablet de la cafetería (entra una vez con un usuario de rol «cafeteria»):
+Para el comedor:
 
-    /cafeteria               el trabajador escribe su cédula y confirma el almuerzo o la cena
+    /comedor/t/<clave>       la tablet: cédula → confirmar → invitados (sin sesión, link con clave)
+    /comedor/dia             quién comió cada día (usuario del comedor o contabilidad)
 
 Para contabilidad (con usuario y clave):
 
@@ -131,17 +132,7 @@ def requiere_admin(f):
             return redirect(url_for("admin_entrar", next=request.path))
         # Una sesión abierta antes de que existieran los roles no trae rol: es de contabilidad.
         if (u.get("rol") or "contabilidad") != "contabilidad":
-            return redirect(url_for("cafeteria"))
-        return f(*a, **kw)
-    return wrapper
-
-
-def requiere_cafeteria(f):
-    """La tablet de la cafetería (rol cafeteria) o cualquiera de contabilidad."""
-    @wraps(f)
-    def wrapper(*a, **kw):
-        if not g.get("usuario"):
-            return redirect(url_for("admin_entrar", next=request.path))
+            return redirect(url_for("comedor_dia"))
         return f(*a, **kw)
     return wrapper
 
@@ -417,11 +408,16 @@ def salir():
 
 
 # ==========================================================================
-# La cafetería: una tablet en el mostrador. El trabajador escribe su cédula,
-# ve su nombre y la comida de hoy, y confirma. Sin clave: la tablet entró una
-# vez con el usuario de rol «cafeteria» y queda entrada.
+# El comedor. Dos entradas:
+#   * la tablet del mostrador abre /comedor/t/<clave> (un link con clave
+#     adentro, sin sesión, que no vence): el trabajador escribe su cédula,
+#     confirma, y puede anotar invitados;
+#   * la persona del comedor (usuario con rol «comedor») o contabilidad entra
+#     con su usuario y ve quién comió cada día.
 # ==========================================================================
 HORA_CENA = 15  # desde las 15:00 (de Ecuador) la comida es la cena; antes, el almuerzo
+MINUTOS_PARA_DESHACER = 10
+MAX_INVITADOS = 3
 
 
 def comida_de_ahora() -> str:
@@ -429,6 +425,7 @@ def comida_de_ahora() -> str:
 
 
 DIAS_LARGOS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+DIAS_TRES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 
 @app.template_filter("fecha_larga")
@@ -436,38 +433,189 @@ def fecha_larga(valor):
     return f"{DIAS_LARGOS[valor.weekday()].capitalize()} {valor.day} de {MESES[valor.month]}"
 
 
-@app.route("/cafeteria", methods=["GET", "POST"])
-@requiere_cafeteria
-def cafeteria():
-    h = hoy()
-    tipo = request.values.get("tipo") if request.values.get("tipo") in dict(TIPOS_COMIDA) else comida_de_ahora()
+@app.template_filter("fecha_corta")
+def fecha_corta(valor):
+    return f"{DIAS_TRES[valor.weekday()]} {valor.day}"
+
+
+def clave_comedor() -> str:
+    """La clave del link de la tablet. Se crea sola la primera vez."""
+    import secrets
+    clave = store.configuracion("clave_comedor")
+    if not clave:
+        clave = secrets.token_urlsafe(9)
+        store.poner_configuracion("clave_comedor", clave)
+    return clave
+
+
+def requiere_comedor(f):
+    """La tablet (link con clave) o cualquier usuario entrado (comedor o contabilidad)."""
+    @wraps(f)
+    def wrapper(*a, **kw):
+        token = kw.pop("token", None)
+        g.token = None
+        if token is not None:
+            if token != clave_comedor():
+                abort(404)
+            g.token = token
+        elif not g.get("usuario"):
+            return redirect(url_for("admin_entrar", next=request.path))
+        return f(*a, **kw)
+    return wrapper
+
+
+def requiere_sesion(f):
+    """Cualquier usuario entrado: contabilidad o comedor."""
+    @wraps(f)
+    def wrapper(*a, **kw):
+        if not g.get("usuario"):
+            return redirect(url_for("admin_entrar", next=request.path))
+        return f(*a, **kw)
+    return wrapper
+
+
+def _u(endpoint: str, **kw) -> str:
+    """URL del comedor conservando la clave de la tablet si la hay."""
+    if g.get("token"):
+        return url_for(endpoint + "_t", token=g.token, **kw)
+    return url_for(endpoint, **kw)
+
+
+@app.context_processor
+def _url_comedor():
+    return {"u": _u}
+
+
+def _quien_marca() -> str:
+    return g.usuario["usuario"] if g.get("usuario") else "tablet"
+
+
+def _tablet(plantilla: str, **kw):
+    kw.setdefault("tipo", comida_de_ahora())
+    return render_template(plantilla, **kw)
+
+
+@app.route("/comedor", methods=["GET", "POST"], endpoint="comedor")
+@app.route("/comedor/t/<token>", methods=["GET", "POST"], endpoint="comedor_t")
+@requiere_comedor
+def comedor():
+    h, tipo = hoy(), comida_de_ahora()
     if request.method == "POST":
         try:
             cedula = limpiar_cedula(request.form.get("cedula", ""))
         except ValueError as exc:
-            return render_template("cafeteria.html", tipo=tipo, error=str(exc)), 200
+            return _tablet("comedor.html", error=str(exc))
         t = store.trabajador_por_cedula(cedula)
         if not t or not t["activo"]:
-            return render_template("cafeteria.html", tipo=tipo, error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
+            return _tablet("comedor.html", error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
-            return render_template("cafeteria.html", tipo=tipo, listo=t, ya_estaba=True)
-        return render_template("cafeteria_confirmar.html", t=t, tipo=tipo, fecha=h)
-    return render_template("cafeteria.html", tipo=tipo)
+            return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo))
+        return _tablet("comedor_confirmar.html", t=t, fecha=h)
+    return _tablet("comedor.html")
 
 
-@app.route("/cafeteria/confirmar", methods=["POST"])
-@requiere_cafeteria
-def cafeteria_confirmar():
-    try:
-        cedula = limpiar_cedula(request.form.get("cedula", ""))
-        tipo = leer_tipo_comida(request.form.get("tipo"))
-    except ValueError as exc:
-        return render_template("cafeteria.html", tipo=comida_de_ahora(), error=str(exc))
+def _invitados_de(t: dict, fecha: date, tipo: str) -> int:
+    return sum(i["cantidad"] for i in store.invitados_del_dia(fecha) if i["trabajador_id"] == t["id"] and i["tipo"] == tipo)
+
+
+def _trabajador_del_form():
+    cedula = limpiar_cedula(request.form.get("cedula", ""))
+    tipo = leer_tipo_comida(request.form.get("tipo"))
     t = store.trabajador_por_cedula(cedula)
     if not t or not t["activo"]:
-        return render_template("cafeteria.html", tipo=tipo, error="No encontramos esa cédula.")
-    store.marcar_comida(t["id"], hoy(), tipo, g.usuario["usuario"])
-    return render_template("cafeteria.html", tipo=tipo, listo=t)
+        raise ValueError("No encontramos esa cédula.")
+    return t, tipo
+
+
+@app.route("/comedor/confirmar", methods=["POST"], endpoint="comedor_confirmar")
+@app.route("/comedor/t/<token>/confirmar", methods=["POST"], endpoint="comedor_confirmar_t")
+@requiere_comedor
+def comedor_confirmar():
+    try:
+        t, tipo = _trabajador_del_form()
+    except ValueError as exc:
+        return _tablet("comedor.html", error=str(exc))
+    store.marcar_comida(t["id"], hoy(), tipo, _quien_marca())
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=0)
+
+
+@app.route("/comedor/deshacer", methods=["POST"], endpoint="comedor_deshacer")
+@app.route("/comedor/t/<token>/deshacer", methods=["POST"], endpoint="comedor_deshacer_t")
+@requiere_comedor
+def comedor_deshacer():
+    try:
+        t, tipo = _trabajador_del_form()
+    except ValueError as exc:
+        return _tablet("comedor.html", error=str(exc))
+    if store.desmarcar_comida_reciente(t["id"], hoy(), tipo, MINUTOS_PARA_DESHACER):
+        return _tablet("comedor.html", tipo=tipo, aviso=f"Listo, {t['nombre']}: se sacó {'el almuerzo' if tipo == 'almuerzo' else 'la cena'}.")
+    return _tablet("comedor.html", tipo=tipo, error="Eso ya no se puede deshacer desde aquí. Avise en contabilidad.")
+
+
+@app.route("/comedor/invitados", methods=["POST"], endpoint="comedor_invitados")
+@app.route("/comedor/t/<token>/invitados", methods=["POST"], endpoint="comedor_invitados_t")
+@requiere_comedor
+def comedor_invitados():
+    try:
+        t, tipo = _trabajador_del_form()
+        cantidad = int(request.form.get("cantidad", 0) or 0)
+        if not 1 <= cantidad <= MAX_INVITADOS:
+            raise ValueError(f"Los invitados son de 1 a {MAX_INVITADOS}.")
+        descripcion = (request.form.get("descripcion") or "").strip()[:80]
+        if not descripcion:
+            raise ValueError("Diga quiénes son los invitados (por ejemplo: proveedor, familiar).")
+        ya = _invitados_de(t, hoy(), tipo)
+        if ya + cantidad > MAX_INVITADOS:
+            raise ValueError(f"Ya tiene {ya} {'invitado' if ya == 1 else 'invitados'} hoy; el máximo es {MAX_INVITADOS}.")
+    except ValueError as exc:
+        return _tablet("comedor.html", error=str(exc))
+    store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca())
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, invitados_anotados=cantidad, invitados=ya + cantidad)
+
+
+@app.route("/comedor/dia", methods=["GET", "POST"])
+@requiere_sesion
+def comedor_dia():
+    """Quién comió un día: para la persona del comedor y para contabilidad."""
+    try:
+        fecha = leer_fecha(request.values.get("fecha", "")) if request.values.get("fecha") else hoy()
+    except ValueError:
+        fecha = hoy()
+    if request.method == "POST":
+        try:
+            accion = request.form.get("accion", "")
+            if accion == "marcar":
+                store.marcar_comida(int(request.form.get("trabajador_id", 0)), fecha,
+                                    leer_tipo_comida(request.form.get("tipo")), g.usuario["usuario"])
+            elif accion == "desmarcar":
+                store.desmarcar_comida(int(request.form.get("trabajador_id", 0)), fecha,
+                                       leer_tipo_comida(request.form.get("tipo")))
+            elif accion == "quitar_invitados":
+                store.borrar_invitados(int(request.form.get("id", 0)))
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("comedor_dia", fecha=fecha.isoformat()))
+    comieron = store.quien_comio(fecha)
+    por_tipo = {tipo: [c for c in comieron if c["tipo"] == tipo] for tipo, _ in TIPOS_COMIDA}
+    marcaron = {c["trabajador_id"] for c in comieron}
+    faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
+              for t in store.trabajadores() if t["id"] not in marcaron]
+    invitados = store.invitados_del_dia(fecha)
+    return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, faltan=faltan, invitados=invitados,
+                           total_invitados=sum(i["cantidad"] for i in invitados),
+                           feriado=store.feriados(fecha.year).get(fecha),
+                           ayer=(fecha - timedelta(days=1)).isoformat(), manana=(fecha + timedelta(days=1)).isoformat())
+
+
+def _texto_no_se_anoto(t: dict, fecha: date) -> str:
+    nombre = t["nombre"].split()[-2] if len(t["nombre"].split()) >= 3 else t["nombre"].split()[0]
+    cuando = "hoy" if fecha == hoy() else f"el {fecha.strftime('%d/%m')}"
+    return f"Hola {nombre}, {cuando} no se anotó en el comedor. Si va a comer, pase por la tablet. Saludos, Intela."
+
+
+@app.route("/cafeteria")
+def cafeteria_vieja():
+    return redirect(url_for("comedor"))
 
 
 # ==========================================================================
@@ -480,9 +628,9 @@ def admin_entrar():
         if u and check_password_hash(u["clave_hash"], request.form.get("clave") or ""):
             rol = u.get("rol") or "contabilidad"
             session["usuario"] = {"id": u["id"], "usuario": u["usuario"], "nombre": u["nombre"], "rol": rol}
-            if rol == "cafeteria":
-                session.permanent = True  # la tablet queda entrada, como el trabajador
-                return redirect(url_for("cafeteria"))
+            if rol == "comedor":
+                session.permanent = True
+                return redirect(url_for("comedor_dia"))
             session.permanent = False  # contabilidad: se cierra con el navegador
             return redirect(_adonde_iba() or url_for("admin"))
         flash("Usuario o clave incorrectos.", "error")
@@ -860,49 +1008,83 @@ def admin_historial():
 # El cuadro de comidas del mes
 # --------------------------------------------------------------------------
 @app.route("/admin/comidas", methods=["GET", "POST"])
-@requiere_admin
+@requiere_sesion
 def admin_comidas():
     anio, mes = leer_mes(request.values.get("mes"))
-    vista = "cuadro" if request.values.get("vista") == "cuadro" else "dias"
     if request.method == "POST":
         try:
             fecha = leer_fecha(request.form.get("fecha", ""))
             tipo = leer_tipo_comida(request.form.get("tipo"))
-            if request.form.get("cedula"):
-                # cargado a mano desde la oficina, por cédula
-                t = store.trabajador_por_cedula(limpiar_cedula(request.form.get("cedula", "")))
-                if not t:
-                    raise ValueError("No hay ningún trabajador con esa cédula.")
-                if fecha > hoy():
-                    raise ValueError("La fecha no puede ser futura.")
-                store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"])
-                flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} marcado.", "ok")
-                anio, mes = fecha.year, fecha.month
-            else:
-                id_ = int(request.form.get("trabajador_id", 0))
-                if request.form.get("accion") == "desmarcar":
-                    store.desmarcar_comida(id_, fecha, tipo)
-                else:
-                    store.marcar_comida(id_, fecha, tipo, g.usuario["usuario"])
+            t = store.trabajador_por_cedula(limpiar_cedula(request.form.get("cedula", "")))
+            if not t:
+                raise ValueError("No hay ningún trabajador con esa cédula.")
+            if fecha > hoy():
+                raise ValueError("La fecha no puede ser futura.")
+            store.marcar_comida(t["id"], fecha, tipo, g.usuario["usuario"])
+            flash(f"{t['nombre']}: {tipo} del {fecha.strftime('%d/%m')} marcado.", "ok")
+            anio, mes = fecha.year, fecha.month
         except ValueError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("admin_comidas", mes=f"{anio}-{mes:02d}", vista=request.form.get("vista") or vista))
+        return redirect(url_for("admin_comidas", mes=f"{anio}-{mes:02d}"))
+    dias_mes = [date(anio, mes, d) for d in range(1, calendar.monthrange(anio, mes)[1] + 1)]
+    marcados = store.comidas_de_todos(anio, mes)
+    inv = store.invitados_del_mes(anio, mes)
+    fer = store.feriados(anio)
+    filas = []
+    for d in dias_mes:
+        if d > hoy():
+            break
+        a = sum(1 for m in marcados.values() if (d, "almuerzo") in m)
+        c = sum(1 for m in marcados.values() if (d, "cena") in m)
+        i_ = sum(inv.get(d, {}).values())
+        if a + c + i_ == 0 and (d.weekday() >= 5 or d in fer):
+            continue  # un sábado, domingo o feriado sin nadie no ocupa renglón
+        filas.append({"fecha": d, "almuerzo": a, "cena": c, "invitados": i_,
+                      "gris": d.weekday() >= 5 or d in fer, "feriado": fer.get(d)})
+    totales = {"almuerzo": sum(f["almuerzo"] for f in filas), "cena": sum(f["cena"] for f in filas),
+               "invitados": sum(f["invitados"] for f in filas)}
+    totales["total"] = totales["almuerzo"] + totales["cena"] + totales["invitados"]
+    return render_template("admin_comidas.html", anio=anio, mes=mes, filas=filas, totales=totales,
+                           anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes),
+                           trabajadores=store.trabajadores())
+
+
+@app.route("/admin/comidas/imprimir")
+@requiere_sesion
+def admin_comidas_imprimir():
+    """El cuadro trabajador × día, para pagarle a la cafetería."""
+    anio, mes = leer_mes(request.values.get("mes"))
     dias = [date(anio, mes, d) for d in range(1, calendar.monthrange(anio, mes)[1] + 1)]
     marcados = store.comidas_de_todos(anio, mes)
     filas = []
     for t in store.trabajadores(incluir_inactivos=True):
         suyos = marcados.get(t["id"], set())
         if not t["activo"] and not suyos:
-            continue  # un dado de baja sin comidas ese mes no ocupa renglón
+            continue
         filas.append({"t": t, "marcados": suyos, "totales": _totales(suyos)})
-    por_dia = {d: {tipo: sum(1 for f in filas if (d, tipo) in f["marcados"]) for tipo, _ in TIPOS_COMIDA}
-               for d in dias}
     totales = {tipo: sum(f["totales"][tipo] for f in filas) for tipo, _ in TIPOS_COMIDA}
-    totales["total"] = sum(totales.values())
-    return render_template(
-        "admin_comidas.html", anio=anio, mes=mes, dias=dias, filas=filas, por_dia=por_dia, vista=vista,
-        totales=totales, anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes),
-        trabajadores=store.trabajadores())
+    inv = store.invitados_del_mes(anio, mes)
+    totales["invitados"] = sum(sum(v.values()) for v in inv.values())
+    return render_template("admin_comidas_imprimir.html", anio=anio, mes=mes, dias=dias, filas=filas,
+                           totales=totales, feriados=store.feriados(anio))
+
+
+@app.route("/admin/feriados", methods=["GET", "POST"])
+@requiere_admin
+def admin_feriados():
+    if request.method == "POST":
+        try:
+            if request.form.get("accion") == "borrar":
+                store.borrar_feriado(leer_fecha(request.form.get("fecha", "")))
+            else:
+                nombre = (request.form.get("nombre") or "").strip()
+                if not nombre:
+                    raise ValueError("Falta el nombre del feriado.")
+                store.agregar_feriado(leer_fecha(request.form.get("fecha", "")), nombre)
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("admin_feriados"))
+    return render_template("admin_feriados.html", feriados=store.feriados())
 
 
 # --------------------------------------------------------------------------
@@ -927,7 +1109,7 @@ def admin_usuarios():
                     raise ValueError(f"El usuario «{usuario}» ya existe.")
                 rol = f.get("rol") or "contabilidad"
                 if rol not in store.ROLES:
-                    raise ValueError("Falta decir si es de contabilidad o de la cafetería.")
+                    raise ValueError("Falta decir si es de contabilidad o del comedor.")
                 store.crear_usuario(usuario, generate_password_hash(clave), nombre, rol)
                 flash(f"Usuario {usuario} creado.", "ok")
             elif accion == "clave":
@@ -936,6 +1118,10 @@ def admin_usuarios():
                     raise ValueError("La clave tiene que tener al menos 6 caracteres.")
                 store.cambiar_clave(int(f.get("id", 0)), generate_password_hash(clave))
                 flash("Clave cambiada.", "ok")
+            elif accion == "nuevo_link":
+                import secrets
+                store.poner_configuracion("clave_comedor", secrets.token_urlsafe(9))
+                flash("Link nuevo. El anterior ya no sirve: cámbielo en la tablet.", "ok")
             elif accion in ("activar", "desactivar"):
                 id_ = int(f.get("id", 0))
                 if accion == "desactivar" and id_ == g.usuario["id"]:
@@ -945,7 +1131,8 @@ def admin_usuarios():
         except ValueError as exc:
             flash(str(exc), "error")
         return redirect(url_for("admin_usuarios"))
-    return render_template("admin_usuarios.html", usuarios=store.usuarios())
+    return render_template("admin_usuarios.html", usuarios=store.usuarios(),
+                           link_comedor=url_for("comedor_t", token=clave_comedor(), _external=True))
 
 
 # --------------------------------------------------------------------------

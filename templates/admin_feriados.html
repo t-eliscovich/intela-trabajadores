@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Feriados{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block contenido %}
+<h1>Feriados <small>para el resumen de comidas</small></h1>
+<div class="bloque">
+  <div class="relleno">
+    <form method="POST" class="formulario">
+      <div><label class="campo">Fecha</label><input name="fecha" placeholder="25/12/2027" required></div>
+      <div style="grid-column:span 2"><label class="campo">Nombre</label><input name="nombre" placeholder="Navidad" required></div>
+      <div><button class="btn" type="submit">Agregar</button></div>
+    </form>
+  </div>
+  <table><tbody>
+  {% for f, nombre in feriados.items() %}
+    <tr><td>{{ f|fecha }} <span class="chico">{{ f|fecha_larga }}</span></td><td>{{ nombre }}</td>
+        <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="fecha" value="{{ f|fecha }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
+  {% endfor %}
+  </tbody></table>
+  <div class="nota">Vienen cargados los feriados nacionales de Ecuador de 2026. Los de 2027 se agregan aquí.</div>
+</div>
+{% endblock %}

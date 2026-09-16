@@ -40,6 +40,10 @@ class BaseFalsa:
         self.usu: dict[int, dict] = {}
         self.sol: dict[int, dict] = {}
         self.cam: dict[int, dict] = {}
+        self.inv: dict[int, dict] = {}
+        self.fer: dict[date, str] = {date(2026, 1, 1): "Año Nuevo", date(2026, 12, 25): "Navidad"}
+        self.conf: dict[str, str] = {}
+        self.alm_hora: dict[tuple, datetime] = {}
         self._n = 0
 
     def _id(self):
@@ -266,7 +270,65 @@ class BaseFalsa:
     def marcar_comida(self, trabajador_id, fecha, tipo, marcado_por):
         if tipo not in ("almuerzo", "cena"):
             raise ValueError(f"No sé qué comida es «{tipo}».")
+        if (trabajador_id, fecha, tipo) not in self.alm:
+            self.alm_hora[(trabajador_id, fecha, tipo)] = datetime.now()
         self.alm.add((trabajador_id, fecha, tipo))
+
+    def quien_comio(self, fecha):
+        filas = []
+        for (tid, f, tipo) in self.alm:
+            if f == fecha:
+                t = self.trab[tid]
+                filas.append({"trabajador_id": tid, "tipo": tipo, "marcado_por": "?", "creado_en": self.alm_hora.get((tid, f, tipo)),
+                              "nombre": t["nombre"], "area": t.get("area"), "celular": t.get("celular")})
+        return sorted(filas, key=lambda x: x["nombre"])
+
+    def desmarcar_comida_reciente(self, trabajador_id, fecha, tipo, minutos=10):
+        k = (trabajador_id, fecha, tipo)
+        h = self.alm_hora.get(k)
+        if k in self.alm and h and (datetime.now() - h).total_seconds() < minutos * 60:
+            self.alm.discard(k)
+            return True
+        return False
+
+    def agregar_invitados(self, trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por):
+        if tipo not in ("almuerzo", "cena"):
+            raise ValueError(f"No sé qué comida es «{tipo}».")
+        id_ = self._id()
+        self.inv[id_] = {"id": id_, "trabajador_id": trabajador_id, "fecha": fecha, "tipo": tipo, "cantidad": cantidad,
+                         "descripcion": descripcion, "cargado_por": cargado_por, "creado_en": datetime.now(), "borrado_en": None}
+        return id_
+
+    def invitados_del_dia(self, fecha):
+        return [dict(i, nombre=self.trab[i["trabajador_id"]]["nombre"]) for i in self.inv.values()
+                if i["fecha"] == fecha and not i["borrado_en"]]
+
+    def invitados_del_mes(self, anio, mes):
+        salida = {}
+        for i in self.inv.values():
+            if i["fecha"].year == anio and i["fecha"].month == mes and not i["borrado_en"]:
+                d = salida.setdefault(i["fecha"], {})
+                d[i["tipo"]] = d.get(i["tipo"], 0) + i["cantidad"]
+        return salida
+
+    def borrar_invitados(self, id_):
+        if id_ in self.inv:
+            self.inv[id_]["borrado_en"] = datetime.now()
+
+    def feriados(self, anio=None):
+        return {f: n for f, n in sorted(self.fer.items()) if anio is None or f.year == anio}
+
+    def agregar_feriado(self, fecha, nombre):
+        self.fer[fecha] = nombre
+
+    def borrar_feriado(self, fecha):
+        self.fer.pop(fecha, None)
+
+    def configuracion(self, clave):
+        return self.conf.get(clave)
+
+    def poner_configuracion(self, clave, valor):
+        self.conf[clave] = valor
 
     def desmarcar_comida(self, trabajador_id, fecha, tipo):
         self.alm.discard((trabajador_id, fecha, tipo))
@@ -284,7 +346,7 @@ class BaseFalsa:
     def hay_usuarios(self):
         return bool(self.usu)
 
-    ROLES = ("contabilidad", "cafeteria")
+    ROLES = ("contabilidad", "comedor")
 
     def crear_usuario(self, usuario, clave_hash, nombre, rol="contabilidad"):
         if rol not in self.ROLES:

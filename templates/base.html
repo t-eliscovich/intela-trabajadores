@@ -129,6 +129,8 @@
   .kiosco-listo .tilde{font-size:54px;line-height:1;font-weight:800}
   .kiosco-listo b{display:block;font-size:26px;margin-top:6px}
   .kiosco-listo p{margin:6px 0 0;font-size:19px}
+  .kiosco-cant{display:flex;gap:10px}
+  .kiosco-cant .btn{flex:1;height:64px;font-size:28px}
   .kiosco-error{background:#fdeaea;color:#b91c1c;border-radius:14px;padding:16px;font-size:20px;font-weight:700;margin-bottom:14px}
 
   /* ---------- el cuadro del mes ---------- */
@@ -192,16 +194,23 @@
 <header>
   <div class="barra">
     <div class="marca">TRABAJADORES <span>· INTELA</span></div>
-    {% if g.usuario and g.usuario.rol == 'cafeteria' %}
+    {% if g.usuario and g.usuario.rol == 'comedor' %}
+    <nav>
+      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Quién comió</a>
+      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir') }}">Por día</a>
+      <a href="{{ url_for('comedor') }}" class="{{ 'activo' if request.endpoint=='comedor' }}">Marcar</a>
+    </nav>
+    <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
+    {% elif g.token %}
     <nav></nav>
-    <div class="quien">Cafetería · <a href="{{ url_for('admin_salir') }}">salir</a></div>
+    <div class="quien">Comedor</div>
     {% elif g.usuario %}
     <nav>
       <a href="{{ url_for('admin') }}" class="{{ 'activo' if request.endpoint in ('admin','admin_trabajador') }}">Trabajadores</a>
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
-      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
+      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir','admin_feriados') }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
-      <a href="{{ url_for('cafeteria') }}" class="{{ 'activo' if request.endpoint in ('cafeteria','cafeteria_confirmar') }}">Cafetería</a>
+      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comedor</a>
       <a href="{{ url_for('admin_historial') }}" class="{{ 'activo' if request.endpoint=='admin_historial' }}">Historial</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>
     </nav>

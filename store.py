@@ -202,8 +202,42 @@ ESQUEMA = """
     );
     CREATE INDEX IF NOT EXISTS comida_fecha_idx ON trabajadores.comida (fecha);
 
-    -- Quién entra a la parte de contabilidad, y la tablet de la cafetería.
-    -- rol: 'contabilidad' (todo) o 'cafeteria' (sólo la pantalla de marcar comidas).
+    -- Invitados que trae un trabajador (proveedor, familiar): sin cédula, con
+    -- una descripción. Se pagan aparte de las comidas de los trabajadores.
+    CREATE TABLE IF NOT EXISTS trabajadores.invitado (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        fecha          date NOT NULL,
+        tipo           text NOT NULL CHECK (tipo IN ('almuerzo', 'cena')),
+        cantidad       integer NOT NULL CHECK (cantidad BETWEEN 1 AND 3),
+        descripcion    text NOT NULL,
+        cargado_por    text NOT NULL,
+        creado_en      timestamptz NOT NULL DEFAULT now(),
+        borrado_en     timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS invitado_fecha_idx ON trabajadores.invitado (fecha);
+
+    -- Feriados: para que el resumen de comidas los muestre en gris.
+    CREATE TABLE IF NOT EXISTS trabajadores.feriado (
+        fecha   date PRIMARY KEY,
+        nombre  text NOT NULL
+    );
+    INSERT INTO trabajadores.feriado (fecha, nombre) VALUES
+        ('2026-01-01', 'Año Nuevo'), ('2026-02-16', 'Carnaval'), ('2026-02-17', 'Carnaval'),
+        ('2026-04-03', 'Viernes Santo'), ('2026-05-01', 'Día del Trabajo'),
+        ('2026-05-25', 'Batalla de Pichincha'), ('2026-08-10', 'Primer Grito de Independencia'),
+        ('2026-10-09', 'Independencia de Guayaquil'), ('2026-11-02', 'Día de los Difuntos'),
+        ('2026-11-03', 'Independencia de Cuenca'), ('2026-12-25', 'Navidad')
+        ON CONFLICT DO NOTHING;
+
+    -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
+    CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
+        clave  text PRIMARY KEY,
+        valor  text NOT NULL
+    );
+
+    -- Quién entra a la parte de contabilidad, y el comedor.
+    -- rol: 'contabilidad' (todo) o 'comedor' (marcar comidas y ver quién comió).
     CREATE TABLE IF NOT EXISTS trabajadores.usuario (
         id          serial PRIMARY KEY,
         usuario     text NOT NULL UNIQUE,
@@ -214,6 +248,7 @@ ESQUEMA = """
         creado_en   timestamptz NOT NULL DEFAULT now()
     );
     ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS rol text NOT NULL DEFAULT 'contabilidad';
+    UPDATE trabajadores.usuario SET rol = 'comedor' WHERE rol = 'cafeteria';
 """
 
 
@@ -529,6 +564,77 @@ def comidas_de_todos(anio: int, mes: int) -> dict[int, set[tuple[date, str]]]:
     return salida
 
 
+def quien_comio(fecha: date) -> list[dict]:
+    """Los que marcaron ese día, con hora, para la lista del comedor."""
+    return _todos("SELECT c.trabajador_id, c.tipo, c.marcado_por, c.creado_en, t.nombre, t.area, t.celular "
+                  "FROM trabajadores.comida c JOIN trabajadores.trabajador t ON t.id = c.trabajador_id "
+                  "WHERE c.fecha = %s ORDER BY t.nombre", (fecha,))
+
+
+def desmarcar_comida_reciente(trabajador_id: int, fecha: date, tipo: str, minutos: int = 10) -> bool:
+    """Deshacer desde la tablet: sólo si se marcó hace poco."""
+    fila = _ejecutar("DELETE FROM trabajadores.comida WHERE trabajador_id=%s AND fecha=%s AND tipo=%s "
+                     "AND creado_en > now() - make_interval(mins => %s) RETURNING trabajador_id",
+                     (trabajador_id, fecha, tipo, minutos))
+    return fila is not None
+
+
+def agregar_invitados(trabajador_id: int, fecha: date, tipo: str, cantidad: int, descripcion: str,
+                      cargado_por: str) -> int:
+    if tipo not in TIPOS_COMIDA:
+        raise ValueError(f"No sé qué comida es «{tipo}».")
+    fila = _ejecutar("INSERT INTO trabajadores.invitado (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por) "
+                     "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+                     (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por))
+    return fila["id"]
+
+
+def invitados_del_dia(fecha: date) -> list[dict]:
+    return _todos("SELECT i.*, t.nombre FROM trabajadores.invitado i "
+                  "JOIN trabajadores.trabajador t ON t.id = i.trabajador_id "
+                  "WHERE i.fecha = %s AND i.borrado_en IS NULL ORDER BY i.creado_en", (fecha,))
+
+
+def invitados_del_mes(anio: int, mes: int) -> dict[date, dict[str, int]]:
+    filas = _todos("SELECT fecha, tipo, SUM(cantidad) AS n FROM trabajadores.invitado "
+                   "WHERE date_trunc('month', fecha) = %s AND borrado_en IS NULL GROUP BY fecha, tipo",
+                   (date(anio, mes, 1),))
+    salida: dict[date, dict[str, int]] = {}
+    for f in filas:
+        salida.setdefault(f["fecha"], {})[f["tipo"]] = int(f["n"])
+    return salida
+
+
+def borrar_invitados(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.invitado SET borrado_en=now() WHERE id=%s", (id_,))
+
+
+def feriados(anio: int | None = None) -> dict[date, str]:
+    filas = _todos("SELECT fecha, nombre FROM trabajadores.feriado" +
+                   (" WHERE date_part('year', fecha) = %s" if anio else "") + " ORDER BY fecha",
+                   (anio,) if anio else ())
+    return {f["fecha"]: f["nombre"] for f in filas}
+
+
+def agregar_feriado(fecha: date, nombre: str) -> None:
+    _ejecutar("INSERT INTO trabajadores.feriado (fecha, nombre) VALUES (%s,%s) "
+              "ON CONFLICT (fecha) DO UPDATE SET nombre = EXCLUDED.nombre", (fecha, nombre))
+
+
+def borrar_feriado(fecha: date) -> None:
+    _ejecutar("DELETE FROM trabajadores.feriado WHERE fecha=%s", (fecha,))
+
+
+def configuracion(clave: str) -> str | None:
+    fila = _uno("SELECT valor FROM trabajadores.configuracion WHERE clave=%s", (clave,))
+    return fila["valor"] if fila else None
+
+
+def poner_configuracion(clave: str, valor: str) -> None:
+    _ejecutar("INSERT INTO trabajadores.configuracion (clave, valor) VALUES (%s,%s) "
+              "ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (clave, valor))
+
+
 def comida_marcada(trabajador_id: int, fecha: date, tipo: str) -> bool:
     return _uno("SELECT 1 AS x FROM trabajadores.comida WHERE trabajador_id=%s AND fecha=%s AND tipo=%s",
                 (trabajador_id, fecha, tipo)) is not None
@@ -562,7 +668,7 @@ def hay_usuarios() -> bool:
     return _uno("SELECT 1 AS x FROM trabajadores.usuario LIMIT 1") is not None
 
 
-ROLES = ("contabilidad", "cafeteria")
+ROLES = ("contabilidad", "comedor")
 
 
 def crear_usuario(usuario: str, clave_hash: str, nombre: str, rol: str = "contabilidad") -> int:

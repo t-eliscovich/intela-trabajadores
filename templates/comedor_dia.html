@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Comedor · {{ fecha|fecha }}{% endblock %}
+{% block contenido %}
+<h1>Quién comió
+  <span style="margin-left:auto" class="mes-nav"><a href="{{ url_for('comedor_dia', fecha=ayer) }}">‹</a><b>{{ fecha|fecha_larga }}{% if feriado %} · <span class="tenue">{{ feriado }}</span>{% endif %}</b><a href="{{ url_for('comedor_dia', fecha=manana) }}">›</a></span>
+</h1>
+
+<div class="cifras">
+  <div class="cifra"><b class="grande">{{ por_tipo.almuerzo|length }}</b><small>Almuerzos</small></div>
+  <div class="cifra"><b class="grande">{{ por_tipo.cena|length }}</b><small>Cenas</small></div>
+  <div class="cifra"><b>{{ total_invitados }}</b><small>Invitados</small></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start">
+  {% for tipo, letra in TIPOS_COMIDA %}
+  <div class="bloque">
+    <div class="titulo"><h2>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</h2><p>{{ por_tipo[tipo]|length }}</p></div>
+    {% if por_tipo[tipo] %}
+    <table><tbody>
+    {% for c in por_tipo[tipo] %}
+      <tr><td>{{ c.nombre }} <span class="chico">{{ c.area or '' }}{% if c.creado_en %} · {{ c.creado_en.astimezone().strftime('%H:%M') if c.creado_en.tzinfo else c.creado_en.strftime('%H:%M') }}{% endif %}</span></td>
+          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="{{ tipo }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<div class="vacio"><p>Nadie todavía.</p></div>{% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="bloque">
+    <div class="titulo"><h2>Invitados</h2><p>{{ total_invitados }}</p></div>
+    {% if invitados %}
+    <table><tbody>
+    {% for i in invitados %}
+      <tr><td><b>{{ i.cantidad }}</b> · {{ i.descripcion }} <span class="chico">trae {{ i.nombre }} · {{ 'almuerzo' if i.tipo == 'almuerzo' else 'cena' }}</span></td>
+          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<div class="vacio"><p>Sin invitados.</p></div>{% endif %}
+  </div>
+</div>
+
+<div class="bloque">
+  <details>
+    <summary>No se anotaron ({{ faltan|length }})</summary>
+    <table><tbody>
+    {% for t in faltan %}
+      <tr>
+        <td>{{ t.nombre }} <span class="chico">{{ t.area or '' }}</span></td>
+        <td class="der" style="white-space:nowrap">
+          {% if t.whatsapp %}<a class="btn verde chico" href="{{ t.whatsapp }}" target="_blank" rel="noopener">Avisar</a>{% endif %}
+          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}"><input type="hidden" name="tipo" value="almuerzo"><button class="btn suave chico" type="submit">Almuerzo</button></form>
+          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}"><input type="hidden" name="tipo" value="cena"><button class="btn suave chico" type="submit">Cena</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+  </details>
+</div>
+{% endblock %}

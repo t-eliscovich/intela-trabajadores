@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}Cuadro {{ MESES[mes] }}{% endblock %}
+{% block contenido %}
+<h1>Comidas de {{ MESES[mes] }} {{ anio }} <small>trabajador por día, para pagar</small>
+  <span class="no-imprime" style="margin-left:auto;display:flex;gap:8px"><a class="btn suave chico" href="{{ url_for('admin_comidas', mes=anio ~ '-' ~ '%02d' % mes) }}">Volver</a><button class="btn suave chico" type="button" onclick="window.print()">Imprimir</button></span>
+</h1>
+<div class="cifras">
+  <div class="cifra"><b class="grande">{{ totales.almuerzo|num }}</b><small>Almuerzos</small></div>
+  <div class="cifra"><b class="grande">{{ totales.cena|num }}</b><small>Cenas</small></div>
+  <div class="cifra"><b>{{ totales.invitados|num }}</b><small>Invitados</small></div>
+  <div class="cifra"><b>{{ filas|length }}</b><small>Personas</small></div>
+</div>
+<div class="bloque">
+  <div class="desliza">
+  <table class="cuadro">
+    <thead><tr>
+      <th>Nombre</th>
+      {% for d in dias %}<th class="{{ 'finde' if d.weekday() >= 5 or d in feriados }}" title="{{ d|fecha_larga }}{% if d in feriados %} · {{ feriados[d] }}{% endif %}">{{ d.day }}<span class="chico">{{ DIAS_CORTOS[d.weekday()] }}</span></th>{% endfor %}
+      <th class="total">A</th><th class="total">C</th>
+    </tr></thead>
+    <tbody>
+    {% for f in filas %}
+      <tr>
+        <td>{{ f.t.nombre }}</td>
+        {% for d in dias %}
+          <td class="{{ 'finde' if d.weekday() >= 5 or d in feriados }}"><div class="par">{% for tipo, letra in TIPOS_COMIDA %}<span class="celda {{ 'si' if (d, tipo) in f.marcados }}">{{ letra }}</span>{% endfor %}</div></td>
+        {% endfor %}
+        <td class="total">{{ f.totales.almuerzo }}</td>
+        <td class="total">{{ f.totales.cena }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

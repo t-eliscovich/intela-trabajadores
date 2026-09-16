@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Comedor{% endblock %}
+{% block clase_hoja %}angosta cafeteria{% endblock %}
+{% block contenido %}
+<div class="kiosco">
+  <div class="kiosco-fecha">{{ hoy|fecha_larga }}</div>
+  <div class="kiosco-listo {{ 'ya' if ya_estaba }}">
+    <div class="tilde">{{ '!' if ya_estaba else '✓' }}</div>
+    <b>{{ t.nombre }}</b>
+    <p>
+      {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado anotado' if invitados_anotados == 1 else 'invitados anotados' }}. ¡Buen provecho!
+      {% elif ya_estaba %}Ya marcó {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
+      {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }} marcado. ¡Buen provecho!{% endif %}
+    </p>
+  </div>
+
+  {% if invitados < 3 %}
+  <div class="bloque" style="text-align:left">
+    <div class="titulo"><h2>¿Trae invitados?</h2><p>Hasta 3 por día{% if invitados %} · ya tiene {{ invitados }}{% endif %}.</p></div>
+    <div class="relleno">
+      <form method="POST" action="{{ u('comedor_invitados') }}" class="formulario">
+        <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
+        <div class="ancho"><label class="campo">Quiénes son</label><input name="descripcion" maxlength="80" placeholder="proveedor, familiar…" required style="height:52px;font-size:20px"></div>
+        <div class="ancho kiosco-cant">
+          {% for n in range(1, 4 - invitados) %}<button class="btn suave" type="submit" name="cantidad" value="{{ n }}">{{ n }}</button>{% endfor %}
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="kiosco-botones" style="margin-top:12px">
+    <form method="GET" action="{{ u('comedor') }}"><button class="btn kiosco-btn" type="submit" autofocus>Listo</button></form>
+    {% if recien %}
+    <form method="POST" action="{{ u('comedor_deshacer') }}">
+      <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
+      <button class="btn suave kiosco-btn" type="submit" style="font-size:18px">Me equivoqué, deshacer</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 25000);</script>
+{% endblock %}

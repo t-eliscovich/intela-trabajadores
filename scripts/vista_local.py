@@ -23,11 +23,11 @@ A.ERROR_ARRANQUE = None
 hoy = A.hoy()
 
 # (cédula, nombre, ingreso, saldo de HOY según contabilidad; None = sin dato)
-GENTE = [("1712345678", "Juan Pérez", date(2017, 3, 25), 26, {"area": "Tejeduría", "fecha_nacimiento": date(1990, 8, 12), "celular": "0991234567", "dias_por_anio": 20}),
-         ("0912345678", "María López", date(2023, 8, 1), None, {"area": "Tintorería"}),
-         ("1103456789", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "Acabado", "dias_por_anio": 22}),
+GENTE = [("1712345678", "Juan Pérez", date(2017, 3, 25), 26, {"area": "TT", "fecha_nacimiento": date(1990, 8, 12), "celular": "0991234567", "dias_por_anio": 20}),
+         ("0912345678", "María López", date(2023, 8, 1), None, {"area": "KK"}),
+         ("1103456789", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "CC", "dias_por_anio": 22}),
          ("0603456789", "Rosa Quishpe", date(2026, 3, 16), None, {}),
-         ("1723456789", "Luis Tipán", date(2019, 1, 7), 3, {"area": "Oficina", "celular": "0987654321"})]
+         ("1723456789", "Luis Tipán", date(2019, 1, 7), 3, {"area": "ADM", "celular": "0987654321"})]
 ids = {}
 for ced, nom, ing, saldo, perfil in GENTE:
     ids[nom] = base.crear_trabajador(ced, nom, ing, saldo, date(2026, 9, 1) if saldo is not None else None, perfil)
@@ -57,7 +57,9 @@ base.dar_de_baja(base.crear_trabajador("0999999999", "Pedro Salido", date(2015, 
 from werkzeug.security import generate_password_hash  # noqa: E402
 base.crear_usuario("conta", generate_password_hash("x"), "Contabilidad")
 base.crear_usuario("tamara", generate_password_hash("x"), "Tamara")
-base.crear_usuario("tablet", generate_password_hash("x"), "Cafetería", "cafeteria")
+base.crear_usuario("comedor", generate_password_hash("x"), "Comedor", "comedor")
+base.poner_configuracion("clave_comedor", "abc123")
+base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet")
 
 SALIDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vista")
 os.makedirs(SALIDA, exist_ok=True)
@@ -74,12 +76,18 @@ c.post("/", data={"cedula": "1712345678"})
 guardar("yo_vacaciones", c.get("/yo/vacaciones").get_data(as_text=True))
 guardar("yo_perfil", c.get("/yo/perfil").get_data(as_text=True))
 
-# la tablet de la cafetería
+# la tablet del comedor (link con clave, sin sesión)
 k = A.app.test_client()
-k.post("/admin/entrar", data={"usuario": "tablet", "clave": "x"})
-guardar("cafeteria", k.get("/cafeteria?tipo=almuerzo").get_data(as_text=True))
-guardar("cafeteria_confirmar", k.post("/cafeteria?tipo=cena", data={"cedula": "0603456789"}).get_data(as_text=True))
-guardar("cafeteria_listo", k.post("/cafeteria/confirmar", data={"cedula": "1712345678", "tipo": "almuerzo"}).get_data(as_text=True))
+T = "/comedor/t/abc123"
+guardar("comedor", k.get(T).get_data(as_text=True))
+guardar("comedor_confirmar", k.post(T, data={"cedula": "0603456789"}).get_data(as_text=True))
+guardar("comedor_listo", k.post(T + "/confirmar", data={"cedula": "1712345678", "tipo": "almuerzo"}).get_data(as_text=True))
+guardar("comedor_invitados", k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": "almuerzo", "cantidad": "1", "descripcion": "proveedor de hilo"}).get_data(as_text=True))
+
+# el usuario del comedor
+m = A.app.test_client()
+m.post("/admin/entrar", data={"usuario": "comedor", "clave": "x"})
+guardar("comedor_dia", m.get("/comedor/dia").get_data(as_text=True))
 
 # contabilidad
 c = A.app.test_client()
@@ -87,6 +95,8 @@ c.post("/admin/entrar", data={"usuario": "conta", "clave": "x"})
 guardar("admin", c.get("/admin").get_data(as_text=True))
 guardar("admin_trabajador", c.get(f"/admin/trabajador/{ids['Juan Pérez']}").get_data(as_text=True))
 guardar("admin_comidas", c.get("/admin/comidas").get_data(as_text=True))
+guardar("admin_comidas_imprimir", c.get("/admin/comidas/imprimir").get_data(as_text=True))
+guardar("admin_feriados", c.get("/admin/feriados").get_data(as_text=True))
 r = c.post("/admin/carga", data={"texto": "Cédula\tNombre\tIngreso\tSaldo\n1712345678\tJuan Pérez\t25/03/2017\t4\n1801234567\tAna Yánez\t03/02/2020\t2\nabc\tSin cédula\t01/01/2020", "confirmar": "0"})
 guardar("admin_carga", r.get_data(as_text=True))
 guardar("admin_carga_vacaciones", c.post("/admin/carga?que=vacaciones", data={"texto": "1712345678\t02/02/2026\t16/02/2026\n1712345678\t19/02/2026\t19/02/2026\t1\tpermiso\n0000000000\t01/01/2026\t02/01/2026", "confirmar": "0"}).get_data(as_text=True))

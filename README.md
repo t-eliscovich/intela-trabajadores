@@ -14,23 +14,29 @@ con su cédula.
 - en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por
   año; y corrige su celular y dirección;
 
-**La cafetería** tiene una tablet en el mostrador con `/cafeteria` abierta (entró una vez con un
-usuario de rol «cafeteria» y queda entrada): el trabajador escribe su cédula, ve su nombre y
-«Almuerzo» o «Cena» (hasta las 15:00 almuerzo, después cena), y toca Sí. Eso es lo que después se le paga a la cafetería.
+**El comedor** tiene una tablet en el mostrador con un link propio abierto (sin usuario ni
+clave; el link se saca de Usuarios): el trabajador escribe su cédula, ve su nombre y
+«Almuerzo» o «Cena» (hasta las 15:00 almuerzo, después cena), y toca Sí. Si se equivocó,
+tiene 10 minutos para deshacer. Puede anotar hasta 3 invitados (quiénes son, sin cédula),
+también después de haber comido. Eso es lo que después se le paga al comedor.
+
+**El usuario del comedor** entra con usuario y clave y ve, día por día, quién almorzó, quién
+cenó, los invitados y quién no se anotó (con un botón para avisarle por WhatsApp).
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:
 
 - la lista de trabajadores con el saldo de vacaciones de cada uno (con buscador);
 - **Pedidos**: lo que piden los trabajadores, para aprobar (se carga solo el período) o rechazar
   con motivo, y un botón para avisarles por WhatsApp; abajo, los datos de contacto que cambiaron;
-- la ficha de cada uno: cargar los períodos tomados, ajustes, el saldo con el
-  que arrancó, editar datos, dar de baja;
+- la ficha de cada uno: una tabla simple (le corresponden, traía, tomó, le quedan), los
+  períodos tomados con lápiz para corregirlos, cargar días, ajustes, editar datos, dar de baja;
 - **Cargar planilla**: pegar las filas del Excel (cédula · nombre · fecha de
   ingreso · días que le quedan hoy · área · fecha de nacimiento · celular ·
   días por año) y cargar a todos de una vez;
-- **Comidas del mes**: el cuadro trabajador × día, almuerzos y cenas por separado, que es lo
-  que se le paga a la cafetería. Se imprime y se corrige ahí;
-- **Cafetería**: la misma pantalla de la tablet, por si hay que marcar desde la oficina;
+- **Comidas del mes**: una fila por día con almuerzos, cenas e invitados (sábados, domingos y
+  feriados en gris); el «Cuadro para pagar» trabajador × día se imprime aparte. Los feriados
+  se editan ahí mismo;
+- **Comedor**: lo mismo que ve el usuario del comedor, por si hay que marcar desde la oficina;
 - **Historial**: lo que se borró (períodos, ajustes), con quién y cuándo; se recupera con un botón;
 - **Usuarios**: quién más entra a esta parte.
 

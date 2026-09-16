@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Cafetería{% endblock %}
+{% block titulo %}Comedor{% endblock %}
 {% block clase_hoja %}angosta cafeteria{% endblock %}
 {% block contenido %}
 <div class="kiosco">
@@ -10,12 +10,14 @@
   </div>
   <p class="kiosco-pregunta">¿Es usted?</p>
   <div class="kiosco-botones">
-    <form method="POST" action="{{ url_for('cafeteria_confirmar') }}">
+    <form method="POST" action="{{ u('comedor_confirmar') }}">
       <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
       <button class="btn verde kiosco-btn" type="submit" autofocus>Sí</button>
     </form>
-    <a class="btn suave kiosco-btn" href="{{ url_for('cafeteria') }}">No</a>
+    <form method="GET" action="{{ u('comedor') }}">
+      <button class="btn suave kiosco-btn" type="submit">No</button>
+    </form>
   </div>
 </div>
-<script>setTimeout(function(){ location.href = "{{ url_for('cafeteria') }}"; }, 20000);</script>
+<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 30000);</script>
 {% endblock %}

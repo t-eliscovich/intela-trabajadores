@@ -1,7 +1,16 @@
 {% extends "base.html" %}
 {% block titulo %}Usuarios{% endblock %}
 {% block contenido %}
-<h1>Usuarios <small>quién entra a contabilidad, y la tablet de la cafetería</small></h1>
+<h1>Usuarios <small>quién entra a contabilidad y al comedor</small></h1>
+
+<div class="bloque">
+  <div class="titulo"><h2>La tablet del comedor</h2><p>Entra por este link, sin usuario ni clave. Guárdelo como favorito en la tablet.</p></div>
+  <div class="relleno" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <code style="font-size:14px;word-break:break-all">{{ link_comedor }}</code>
+    <form method="POST" class="enlinea"><input type="hidden" name="accion" value="nuevo_link"><button class="btn suave chico" type="submit">Generar uno nuevo</button></form>
+  </div>
+  <div class="nota">Si el link se filtra, genere uno nuevo: el anterior deja de servir al instante.</div>
+</div>
 
 <div class="bloque">
   <div class="titulo"><h2>Crear uno</h2></div>
@@ -11,10 +20,10 @@
       <div><label class="campo">Usuario</label><input name="usuario" placeholder="mariana" required autocapitalize="none"></div>
       <div><label class="campo">Nombre</label><input name="nombre" placeholder="Mariana"></div>
       <div><label class="campo">Clave</label><input name="clave" type="password" required minlength="6"></div>
-      <div><label class="campo">Es</label><select name="rol"><option value="contabilidad">de contabilidad</option><option value="cafeteria">la tablet de la cafetería</option></select></div>
+      <div><label class="campo">Es</label><select name="rol"><option value="contabilidad">de contabilidad</option><option value="comedor">del comedor</option></select></div>
       <div><button class="btn" type="submit">Crear</button></div>
     </form>
-    <p class="ayuda" style="margin-top:8px">El usuario de la cafetería sólo abre la pantalla de marcar comidas y queda entrado 30 días en la tablet.</p>
+    <p class="ayuda" style="margin-top:8px">El usuario del comedor ve quién comió cada día, marca y avisa; no entra a lo de contabilidad.</p>
   </div>
 </div>
 
@@ -26,7 +35,7 @@
       <tr>
         <td><b>{{ u.usuario }}</b></td>
         <td>{{ u.nombre }}</td>
-        <td class="tenue">{{ 'cafetería' if u.rol == 'cafeteria' else 'contabilidad' }}</td>
+        <td class="tenue">{{ 'comedor' if u.rol == 'comedor' else 'contabilidad' }}</td>
         <td>{% if u.activo %}activo{% else %}<span class="etiqueta baja">desactivado</span>{% endif %}</td>
         <td>
           <form method="POST" style="display:flex;gap:6px;max-width:300px" autocomplete="off">

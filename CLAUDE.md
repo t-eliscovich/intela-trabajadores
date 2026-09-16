@@ -57,11 +57,17 @@ El trabajador siempre ve la respuesta en su pestaña Vacaciones.
 **«Hoy» es el de Ecuador**, `app.hoy()`, nunca `date.today()`: el server está
 en UTC y desde las 19:00 el check de la comida caería en el día siguiente.
 
-**Las comidas se marcan en la tablet de la cafetería (`/cafeteria`), no en la
-app del trabajador** (decisión 14/09/2026). El usuario de la tablet tiene
-`rol = 'cafeteria'`: entra por la misma pantalla que contabilidad, queda entrado
-30 días y `requiere_admin` lo rebota a /cafeteria. Almuerzo o cena por la hora
-de Ecuador (`HORA_CENA`).
+**Las comidas se marcan en la tablet del comedor, no en la app del trabajador**
+(decisión 14/09/2026). La tablet entra por un link con clave y SIN sesión:
+`/comedor/t/<clave>`; la clave vive en `configuracion.clave_comedor` y se
+regenera desde /admin/usuarios («Generar uno nuevo»). Almuerzo o cena por la
+hora de Ecuador (`HORA_CENA`). El trabajador puede deshacer su marca durante
+`MINUTOS_PARA_DESHACER` y anotar hasta `MAX_INVITADOS` invitados por comida
+(descripción, sin cédula; tabla `invitado`). El usuario con `rol = 'comedor'`
+(antes `cafeteria`; el esquema lo renombra) ve /comedor/dia: quién comió,
+invitados, quién no se anotó (aviso por wa.me). Sábados, domingos y `feriado`
+(precargados los nacionales de Ecuador, editables en /admin/feriados) salen en
+gris en Comidas del mes y se ocultan si no comió nadie.
 
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.
