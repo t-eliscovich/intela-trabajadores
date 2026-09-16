@@ -217,7 +217,7 @@ r = m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "d
 check("y lo saca", (maria, HOY, "almuerzo") not in base.alm)
 m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo", "turno": "13:00"})
 html = m.get("/comedor/dia").get_data(as_text=True)
-check("el almuerzo se ve agrupado por horario", base.alm_turno[(maria, HOY, "almuerzo")] == "13:00" and "13:00 a 13:30" in html and 'class="turno-fila"' in html)
+check("el almuerzo se ve agrupado por horario", base.alm_turno[(maria, HOY, "almuerzo")] == "13:00" and "13:00 a 13:30" in html and 'class="turno"' in html)
 base.desmarcar_comida(maria, HOY, "almuerzo")
 iid = base.invitados_del_dia(HOY)[0]["id"]
 m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "quitar_invitados", "id": iid})

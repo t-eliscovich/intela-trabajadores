@@ -11,34 +11,39 @@
   <div class="cifra"><b>{{ total_invitados }}</b><small>Invitados</small></div>
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start">
-  {% for tipo, letra in TIPOS_COMIDA %}
-  <div class="bloque">
-    <div class="titulo"><h2>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</h2><p>{{ por_tipo[tipo]|length }}</p></div>
-    {% if por_tipo[tipo] %}
-    <table><tbody>
-    {% for turno, lista in (por_turno if tipo == 'almuerzo' else [(None, por_tipo[tipo])]) %}
-      {% if tipo == 'almuerzo' %}<tr class="turno-fila"><th colspan="2">{{ nombre_turno(turno) or 'Sin horario' }} · {{ lista|length }}</th></tr>{% endif %}
+<div class="bloque">
+  <div class="titulo"><h2>Almuerzo</h2><p>{{ por_tipo.almuerzo|length }}</p></div>
+  <div class="turnos" style="grid-template-columns:repeat({{ por_turno|length }},1fr)">
+    {% for turno, lista in por_turno %}
+    <div class="turno">
+      <h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ lista|length }}</b></h3>
       {% for c in lista %}
-      <tr><td>{{ c.nombre }} <span class="chico">{{ c.area or '' }}{% if c.creado_en %} · {{ c.creado_en.astimezone().strftime('%H:%M') if c.creado_en.tzinfo else c.creado_en.strftime('%H:%M') }}{% endif %}</span></td>
-          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="{{ tipo }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
-      {% endfor %}
+      <div class="turno-nombre"><span>{{ c.nombre }}</span>
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="almuerzo"><button class="borrar-fila" title="Sacar">×</button></form></div>
+      {% else %}<p class="turno-nadie">Nadie todavía.</p>{% endfor %}
+    </div>
     {% endfor %}
-    </tbody></table>
-    {% else %}<div class="vacio"><p>Nadie todavía.</p></div>{% endif %}
   </div>
-  {% endfor %}
+</div>
 
+<div class="turnos-abajo">
+  <div class="bloque">
+    <div class="titulo"><h2>Cena</h2><p>{{ por_tipo.cena|length }}</p></div>
+    <div class="turno">
+      {% for c in por_tipo.cena %}
+      <div class="turno-nombre"><span>{{ c.nombre }}</span>
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="desmarcar"><input type="hidden" name="trabajador_id" value="{{ c.trabajador_id }}"><input type="hidden" name="tipo" value="cena"><button class="borrar-fila" title="Sacar">×</button></form></div>
+      {% else %}<p class="turno-nadie">Nadie todavía.</p>{% endfor %}
+    </div>
+  </div>
   <div class="bloque">
     <div class="titulo"><h2>Invitados</h2><p>{{ total_invitados }}</p></div>
-    {% if invitados %}
-    <table><tbody>
-    {% for i in invitados %}
-      <tr><td><b>{{ i.cantidad }}</b> · {{ i.descripcion }} <span class="chico">trae {{ i.nombre }} · {{ 'almuerzo' if i.tipo == 'almuerzo' else 'cena' }}</span></td>
-          <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Sacar">×</button></form></td></tr>
-    {% endfor %}
-    </tbody></table>
-    {% else %}<div class="vacio"><p>Sin invitados.</p></div>{% endif %}
+    <div class="turno">
+      {% for i in invitados %}
+      <div class="turno-nombre"><span><b>{{ i.cantidad }}</b> · {{ i.descripcion }} <small class="chico">con {{ i.nombre }} · {{ 'almuerzo' if i.tipo == 'almuerzo' else 'cena' }}</small></span>
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="quitar_invitados"><input type="hidden" name="id" value="{{ i.id }}"><button class="borrar-fila" title="Sacar">×</button></form></div>
+      {% else %}<p class="turno-nadie">Sin invitados.</p>{% endfor %}
+    </div>
   </div>
 </div>
 

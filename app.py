@@ -638,7 +638,7 @@ def comedor_dia():
     # el almuerzo agrupado por turno (los sin turno, al final)
     por_turno = [(turno, [c for c in por_tipo["almuerzo"] if c["turno"] == turno])
                  for turno in (*TURNOS_ALMUERZO, None)]
-    por_turno = [(turno, lista) for turno, lista in por_turno if lista]
+    por_turno = [(turno, lista) for turno, lista in por_turno if lista or turno]  # los 4 turnos siempre
     marcaron = {c["trabajador_id"] for c in comieron}
     faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
               for t in store.trabajadores() if t["id"] not in marcaron]
