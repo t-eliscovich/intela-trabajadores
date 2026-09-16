@@ -21,7 +21,7 @@
 
 <div class="bloque">
   <div class="relleno">
-    <h1 style="margin-bottom:4px">Contabilidad y cafetería</h1>
+    <h1 style="margin-bottom:4px">Contabilidad</h1>
     <p class="tenue" style="margin:0 0 14px">Con su usuario y clave.</p>
     <form method="POST" action="{{ url_for('admin_entrar', next=request.args.get('next') or none) }}" class="formulario">
       <div class="ancho"><input type="text" name="usuario" placeholder="Usuario" required autocapitalize="none" autocomplete="username" {% if admin %}autofocus{% endif %}></div>
