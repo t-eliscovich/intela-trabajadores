@@ -297,13 +297,17 @@ class BaseFalsa:
             return True
         return False
 
-    def agregar_invitados(self, trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por):
+    def agregar_invitados(self, trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por, turno=None):
         if tipo not in ("almuerzo", "cena"):
             raise ValueError(f"No sé qué comida es «{tipo}».")
         id_ = self._id()
         self.inv[id_] = {"id": id_, "trabajador_id": trabajador_id, "fecha": fecha, "tipo": tipo, "cantidad": cantidad,
-                         "descripcion": descripcion, "cargado_por": cargado_por, "creado_en": datetime.now(), "borrado_en": None}
+                         "descripcion": descripcion, "cargado_por": cargado_por, "creado_en": datetime.now(), "borrado_en": None,
+                         "turno": turno}
         return id_
+
+    def turno_marcado(self, trabajador_id, fecha, tipo):
+        return self.alm_turno.get((trabajador_id, fecha, tipo))
 
     def invitados_del_dia(self, fecha):
         return [dict(i, nombre=self.trab[i["trabajador_id"]]["nombre"]) for i in self.inv.values()

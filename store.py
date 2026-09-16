@@ -203,6 +203,7 @@ ESQUEMA = """
     CREATE INDEX IF NOT EXISTS comida_fecha_idx ON trabajadores.comida (fecha);
     -- turno: el horario del almuerzo ('12:00', '12:30', '13:00', '13:30'); la cena por ahora sin turno.
     ALTER TABLE trabajadores.comida ADD COLUMN IF NOT EXISTS turno text;
+    ALTER TABLE trabajadores.invitado ADD COLUMN IF NOT EXISTS turno text;
     -- Sólo algunos trabajadores pueden traer invitados (se marca en la ficha).
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS puede_invitar boolean NOT NULL DEFAULT false;
 
@@ -585,13 +586,20 @@ def desmarcar_comida_reciente(trabajador_id: int, fecha: date, tipo: str, minuto
 
 
 def agregar_invitados(trabajador_id: int, fecha: date, tipo: str, cantidad: int, descripcion: str,
-                      cargado_por: str) -> int:
+                      cargado_por: str, turno: str | None = None) -> int:
     if tipo not in TIPOS_COMIDA:
         raise ValueError(f"No sé qué comida es «{tipo}».")
-    fila = _ejecutar("INSERT INTO trabajadores.invitado (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por) "
-                     "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
-                     (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por))
+    fila = _ejecutar("INSERT INTO trabajadores.invitado (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por, turno) "
+                     "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                     (trabajador_id, fecha, tipo, cantidad, descripcion, cargado_por, turno))
     return fila["id"]
+
+
+def turno_marcado(trabajador_id: int, fecha: date, tipo: str) -> str | None:
+    """El horario con el que marcó esa comida (None si no marcó o marcó sin horario)."""
+    fila = _uno("SELECT turno FROM trabajadores.comida WHERE trabajador_id=%s AND fecha=%s AND tipo=%s",
+                (trabajador_id, fecha, tipo))
+    return fila["turno"] if fila else None
 
 
 def invitados_del_dia(fecha: date) -> list[dict]:

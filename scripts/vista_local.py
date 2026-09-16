@@ -60,7 +60,7 @@ base.crear_usuario("tamara", generate_password_hash("x"), "Tamara")
 base.crear_usuario("comedor", generate_password_hash("x"), "Comedor", "comedor")
 base.poner_configuracion("clave_comedor", "abc123")
 base.poner_puede_invitar(ids["Juan Pérez"], True)
-base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet")
+base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet", "12:30")
 
 SALIDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vista")
 os.makedirs(SALIDA, exist_ok=True)

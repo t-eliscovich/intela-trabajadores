@@ -450,9 +450,11 @@ def turno_de_ahora() -> str:
 
 
 def leer_turno(texto: str | None, tipo: str) -> str | None:
-    """El turno sólo va con el almuerzo. Vacío → None (se marcó sin horario)."""
-    if tipo != "almuerzo" or not texto:
+    """El turno sólo va con el almuerzo. Vacío → el de ahora (el almuerzo siempre tiene horario)."""
+    if tipo != "almuerzo":
         return None
+    if not texto:
+        return turno_de_ahora()
     if texto not in TURNOS_ALMUERZO:
         raise ValueError("Ese horario no existe.")
     return texto
@@ -606,7 +608,8 @@ def comedor_invitados():
             raise ValueError(f"Ya tiene {ya} {'invitado' if ya == 1 else 'invitados'} hoy; el máximo es {MAX_INVITADOS}.")
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
-    store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca())
+    turno = store.turno_marcado(t["id"], hoy(), tipo) or leer_turno(None, tipo)
+    store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca(), turno)
     return _tablet("comedor_listo.html", t=t, tipo=tipo, invitados_anotados=cantidad, invitados=ya + cantidad)
 
 
@@ -636,14 +639,19 @@ def comedor_dia():
     comieron = store.quien_comio(fecha)
     por_tipo = {tipo: [c for c in comieron if c["tipo"] == tipo] for tipo, _ in TIPOS_COMIDA}
     # el almuerzo agrupado por turno (los sin turno, al final)
+    invitados = store.invitados_del_dia(fecha)
+    inv_turno = {turno: [i for i in invitados if i["tipo"] == "almuerzo" and i.get("turno") == turno]
+                 for turno in (*TURNOS_ALMUERZO, None)}
+    inv_cena = [i for i in invitados if i["tipo"] == "cena"]
     por_turno = [(turno, [c for c in por_tipo["almuerzo"] if c["turno"] == turno])
                  for turno in (*TURNOS_ALMUERZO, None)]
-    por_turno = [(turno, lista) for turno, lista in por_turno if lista or turno]  # los 4 turnos siempre
+    # los 4 turnos siempre; «sin horario» sólo si quedó algo viejo marcado sin horario
+    por_turno = [(turno, lista) for turno, lista in por_turno if turno or lista or inv_turno[None]]
     marcaron = {c["trabajador_id"] for c in comieron}
     faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
               for t in store.trabajadores() if t["id"] not in marcaron]
-    invitados = store.invitados_del_dia(fecha)
     return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, por_turno=por_turno,
+                           inv_turno=inv_turno, inv_cena=inv_cena,
                            faltan=faltan, invitados=invitados,
                            total_invitados=sum(i["cantidad"] for i in invitados),
                            feriado=store.feriados(fecha.year).get(fecha),
