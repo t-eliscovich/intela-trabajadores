@@ -35,10 +35,13 @@
       <div class="quien-pide"><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a> <span class="chico" style="display:inline">{{ p.area or '' }} · le quedan {{ p.saldo|num(1) }}</span></div>
       <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b>{% if not TIPOS_AUSENCIA[p.tipo][1] %} <span class="tenue">(no descuenta)</span>{% endif %} · {{ p.desde|fecha }} al {{ p.hasta|fecha }}{% if p.nota %} · <span class="tenue">{{ p.nota }}</span>{% endif %}</div>
       <div class="chico">pedido el {{ p.creado_en|fecha }}</div>
+      {% if p.pisado %}<div class="mensaje error" style="margin:6px 0">Se pisa con un período ya cargado ({{ p.pisado }}). No se puede aprobar así: corrija la ficha o rechácelo.</div>{% endif %}
+      {% if p.anterior_al_arranque %}<div class="mensaje error" style="margin:6px 0">Empieza antes del saldo inicial: si se aprueba, no descuenta.</div>{% endif %}
       <form method="POST" class="formulario">
         <input type="hidden" name="id" value="{{ p.id }}">
         <div><label class="campo">Días</label><input name="dias" value="{{ p.dias|num(1) }}"></div>
         <div style="grid-column:span 2"><label class="campo">Mensaje para el trabajador</label><input name="respuesta" placeholder="obligatorio si se rechaza"></div>
+        {% if TIPOS_AUSENCIA[p.tipo][1] and not p.anterior_al_arranque and p.dias > p.saldo %}<div class="ancho"><label style="display:flex;gap:8px;align-items:center" class="negativo"><input type="checkbox" name="igual" value="1" style="width:auto;height:auto"> Aprobar aunque no le alcance (le quedan {{ p.saldo|num(1) }}; quedaría en {{ (p.saldo - p.dias)|num(1) }})</label></div>{% endif %}
         <div style="display:flex;gap:6px">
           <button class="btn verde" type="submit" name="accion" value="aprobar">Aprobar</button>
           <button class="btn rojo" type="submit" name="accion" value="rechazar">Rechazar</button>

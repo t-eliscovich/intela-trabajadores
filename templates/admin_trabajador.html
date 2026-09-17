@@ -131,7 +131,7 @@
       <div class="relleno">
         <form method="POST" class="formulario">
           <input type="hidden" name="accion" value="saldo_inicial">
-          <div><label class="campo">Días que le quedaban</label><input name="saldo" value="{{ t.saldo_inicial|num(1) if t.saldo_inicial is not none else '' }}"></div>
+          <div><label class="campo">Saldo inicial</label><input name="saldo" value="{{ t.saldo_inicial|num(1) if t.saldo_inicial is not none else '' }}"></div>
           <div><label class="campo">Ese día</label><input name="fecha" value="{{ (t.fecha_saldo_inicial or hoy)|fecha }}"></div>
           <div><button class="btn suave" type="submit">Guardar</button></div>
           <p class="ayuda ancho">Los días que tenía el día que se lo cargó. Desde esa fecha la cuenta sigue sola; lo tomado antes no se resta otra vez. Vacío = contar desde el ingreso.</p>
