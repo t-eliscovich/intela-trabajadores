@@ -105,6 +105,23 @@ cargarlo; nunca «al arrancar» en pantalla), «tomados», «Comensales» y «Co
 del mes» iguales en el menú y en el título. El nombre de pila para WhatsApp sale
 de `nombre_de_pila` (tercera palabra si hay 3 o más, si no la primera).
 
+**El certificado médico es una foto** (Tamara, 17/09): el trabajador la manda con
+el pedido de enfermedad o después («Subir certificado» en el pedido); contabilidad
+también la sube desde la ficha. Tabla `certificado` (bytea, ligado a trabajador,
+pedido y período); `leer_certificado` achica la foto a JPEG ≤1600 px con Pillow y
+un PDF va tal cual (≤5 MB). Sólo contabilidad la abre (/admin/certificado/N). Al
+aprobar, el certificado del pedido pasa al período. «Sin certificado» se ve en rojo.
+
+**El Excel de comidas** (/admin/comidas/excel, openpyxl, sólo contabilidad) tiene
+los MISMOS números que la pantalla: hojas Por día, Por trabajador (A/C por día) e
+Invitados. **La hoja de saldo de vacaciones** (/admin/trabajador/N/imprimir) es la
+ficha de 5 filas + períodos + ajustes + firmas, para imprimir.
+
+**Backlog (Tamara, 17/09, «para alguna vez»)**: aviso en Pedidos de cuántos de la
+misma área ya están de vacaciones en esas fechas. También: cerrar el mes de comidas
+con Historial, acumulación de vacaciones a 3 años (importa desde 2027), liquidación
+al dar de baja, permisos por horas.
+
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.
 

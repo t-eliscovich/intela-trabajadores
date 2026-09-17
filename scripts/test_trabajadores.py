@@ -531,6 +531,61 @@ check("lo mismo al cargar a mano", "NO descuenta" in r.get_data(as_text=True))
 check("el nombre de pila: con 3+ palabras la tercera, si no la primera", A.nombre_de_pila("ROSAS VERA ANA MARÍA") == "ANA" and A.nombre_de_pila("PÉREZ GÓMEZ JUAN") == "JUAN" and A.nombre_de_pila("Juan Pérez") == "Juan" and A.nombre_de_pila("") == "")
 check("y los dos avisos de WhatsApp usan la misma regla", "Hola ANA," in A._texto_aviso(base.solicitud(rp4)) and "Hola ANA," in A._texto_sin_registrar(base.trabajador(rosa), HOY))
 
+# --- certificado médico (foto), Excel de comidas y hoja de saldo (17/09) ---
+print("Certificado, Excel y hoja de saldo:")
+from io import BytesIO  # noqa: E402
+from PIL import Image  # noqa: E402
+def _foto(ancho=3000, alto=2000):
+    b = BytesIO(); Image.new("RGB", (ancho, alto), (200, 30, 30)).save(b, "PNG"); b.seek(0)
+    return (b, "certificado.png")
+r = rw.post("/yo/pedir", data={"tipo": "enfermedad", "desde": (HOY - timedelta(days=1)).isoformat(), "hasta": HOY.isoformat(), "certificado": _foto()},
+            content_type="multipart/form-data", follow_redirects=True)
+rp5 = [p["id"] for p in base.solicitudes_pendientes()][0]
+certs = base.certificados_por_solicitud().get(rp5, [])
+check("el trabajador manda el pedido de enfermedad con la foto del certificado", "con el certificado" in r.get_data(as_text=True) and len(certs) == 1)
+c1 = base.certificado(certs[0]["id"])
+img = Image.open(BytesIO(c1["datos"]))
+check("la foto se achica a JPEG de hasta 1600 px", c1["tipo_archivo"] == "image/jpeg" and max(img.size) == 1600 and len(c1["datos"]) < 300_000)
+check("el trabajador ve «Certificado enviado»", "Certificado enviado" in rw.get("/yo/vacaciones").get_data(as_text=True))
+html = c.get("/admin/solicitudes").get_data(as_text=True)
+check("contabilidad ve el link al certificado en el pedido", f"/admin/certificado/{c1['id']}" in html and "Ver certificado" in html)
+r = c.get(f"/admin/certificado/{c1['id']}")
+check("y lo abre (sólo contabilidad)", r.status_code == 200 and r.mimetype == "image/jpeg" and A.app.test_client().get(f"/admin/certificado/{c1['id']}").status_code == 302 and m.get(f"/admin/certificado/{c1['id']}").status_code == 302)
+c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp5})
+vid5 = base.solicitud(rp5)["vacacion_id"]
+check("al aprobar, el certificado queda ligado al período y se ve en la ficha", base.certificado(c1["id"])["vacacion_id"] == vid5 and "Ver certificado" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+rw.post("/yo/pedir", data={"tipo": "enfermedad", "desde": (HOY + timedelta(days=70)).isoformat(), "hasta": (HOY + timedelta(days=70)).isoformat()})
+rp6 = [p["id"] for p in base.solicitudes_pendientes()][0]
+html = rw.get("/yo/vacaciones").get_data(as_text=True)
+check("sin foto, el pedido entra igual y ofrece «Subir certificado» después", "Subir certificado" in html and "sin certificado" in c.get("/admin/solicitudes").get_data(as_text=True))
+r = rw.post("/yo/certificado", data={"id": rp6, "certificado": (BytesIO(b"%PDF-1.4 falso"), "cert.pdf")}, content_type="multipart/form-data", follow_redirects=True)
+check("sube un PDF después, y se guarda tal cual", "Certificado guardado" in r.get_data(as_text=True) and base.certificados_por_solicitud()[rp6][0]["id"] in base.cert and base.certificado(base.certificados_por_solicitud()[rp6][0]["id"])["tipo_archivo"] == "application/pdf")
+r = rw.post("/yo/certificado", data={"id": rp6, "certificado": (BytesIO(b"esto no es nada"), "x.txt")}, content_type="multipart/form-data", follow_redirects=True)
+check("un archivo que no es foto ni PDF avisa", "No pude leer" in r.get_data(as_text=True))
+r = otro.post("/yo/certificado", data={"id": rp6, "certificado": _foto(100, 100)}, content_type="multipart/form-data", follow_redirects=True)
+check("otro trabajador no puede subir a un pedido ajeno", "no está" in r.get_data(as_text=True) and len(base.certificados_por_solicitud()[rp6]) == 1)
+r = c.post(f"/admin/trabajador/{rosa}", data={"accion": "certificado", "id": vid5, "certificado": _foto(400, 300)}, content_type="multipart/form-data", follow_redirects=True)
+check("contabilidad sube un certificado desde la ficha a un período", "Certificado guardado" in r.get_data(as_text=True) and sum(1 for x in base.cert.values() if x["vacacion_id"] == vid5) == 2)
+
+r = c.get(f"/admin/comidas/excel?mes={HOY.year}-{HOY.month:02d}")
+check("el Excel del mes baja", r.status_code == 200 and "spreadsheetml" in r.mimetype and f"comidas-{HOY.year}-{HOY.month:02d}.xlsx" in r.headers.get("Content-Disposition", ""))
+from openpyxl import load_workbook  # noqa: E402
+wb = load_workbook(BytesIO(r.data))
+check("con tres hojas: por día, por trabajador, invitados", wb.sheetnames == ["Por día", "Por trabajador", "Invitados"])
+hd = wb["Por día"]
+tot = [row for row in hd.iter_rows(values_only=True) if row[0] == "Total"][0]
+pantalla = c.get(f"/admin/comidas?mes={HOY.year}-{HOY.month:02d}").get_data(as_text=True)
+check("los totales del Excel son los de la pantalla", f'<b class="grande">{tot[2]}</b><small>Almuerzos' in pantalla and f'<b class="grande">{tot[3]}</b><small>Cenas' in pantalla)
+ht = wb["Por trabajador"]
+check("por trabajador: nombre, cédula y una columna por día con A/C", ht.cell(row=1, column=1).value == "Nombre" and ht.cell(row=1, column=4).value == 1 and any(v in ("A", "C", "AC") for row in ht.iter_rows(min_row=3, values_only=True) for v in row[3:-3]))
+m2 = A.app.test_client(); m2.post("/admin/entrar", data={"usuario": "comedor", "clave": "come123"})
+check("el comedor no baja el Excel", "/comedor/dia" in m2.get(f"/admin/comidas/excel?mes={HOY.year}-{HOY.month:02d}").headers["Location"])
+
+html = c.get(f"/admin/trabajador/{rosa}/imprimir").get_data(as_text=True)
+check("la hoja de saldo para imprimir abre con nombre, cédula, la tabla y las firmas", "SALDO DE VACACIONES" in html and "ROSAS VERA ANA MARÍA" in html and "1700000001" in html and "Le corresponden por año" in html and "Le quedan" in html and "Días tomados" in html and "Trabajador</span>" in html and "Contabilidad<br>" in html)
+check("y la ficha tiene el botón", "Hoja de saldo para imprimir" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+check("la hoja no es para el comedor ni sin sesión", m.get(f"/admin/trabajador/{rosa}/imprimir").status_code == 302 and A.app.test_client().get(f"/admin/trabajador/{rosa}/imprimir").status_code == 302)
+
 # el perfil que el trabajador corrige
 r = w.post("/yo/perfil", data={"celular": "099 111 2222", "direccion": "Av. Siempre Viva 123"}, follow_redirects=True)
 check("el trabajador corrige celular y dirección", base.trabajador(maria)["celular"] == "0991112222" and base.trabajador(maria)["direccion"] == "Av. Siempre Viva 123" and "Contabilidad los va a ver" in r.get_data(as_text=True))

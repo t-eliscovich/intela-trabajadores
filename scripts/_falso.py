@@ -43,6 +43,7 @@ class BaseFalsa:
         self.inv: dict[int, dict] = {}
         self.fer: dict[date, str] = {date(2026, 1, 1): "Año Nuevo", date(2026, 12, 25): "Navidad"}
         self.conf: dict[str, str] = {}
+        self.cert: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
         self.alm_quien: dict[tuple, str] = {}
@@ -267,6 +268,33 @@ class BaseFalsa:
 
     def recuperar_ajuste(self, id_):
         self.aju[id_].update(borrado_en=None, borrado_por=None)
+
+    # --- certificados ---
+    def guardar_certificado(self, trabajador_id, datos, tipo_archivo, nombre, subido_por, solicitud_id=None, vacacion_id=None):
+        id_ = self._id()
+        self.cert[id_] = {"id": id_, "trabajador_id": trabajador_id, "solicitud_id": solicitud_id, "vacacion_id": vacacion_id,
+                          "tipo_archivo": tipo_archivo, "nombre": nombre, "datos": datos, "subido_por": subido_por,
+                          "subido_en": datetime.now()}
+        return id_
+
+    def certificado(self, id_):
+        c = self.cert.get(id_)
+        return dict(c) if c else None
+
+    def certificados_de(self, trabajador_id):
+        return [{k: v for k, v in c.items() if k != "datos"} for c in self.cert.values() if c["trabajador_id"] == trabajador_id]
+
+    def certificados_por_solicitud(self):
+        salida = {}
+        for c in self.cert.values():
+            if c["solicitud_id"]:
+                salida.setdefault(c["solicitud_id"], []).append({k: v for k, v in c.items() if k != "datos"})
+        return salida
+
+    def ligar_certificados_a_vacacion(self, solicitud_id, vacacion_id):
+        for c in self.cert.values():
+            if c["solicitud_id"] == solicitud_id:
+                c["vacacion_id"] = vacacion_id
 
     # --- comidas ---
     def comidas_del_mes(self, trabajador_id, anio, mes):

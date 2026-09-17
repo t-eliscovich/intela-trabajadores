@@ -34,7 +34,7 @@
     <div class="pedido">
       <div class="quien-pide"><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a> <span class="chico" style="display:inline">{{ p.area or '' }} · le quedan {{ p.saldo|num(1) }}</span></div>
       <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b>{% if not TIPOS_AUSENCIA[p.tipo][1] %} <span class="tenue">(no descuenta)</span>{% endif %} · {{ p.desde|fecha }} al {{ p.hasta|fecha }}{% if p.nota %} · <span class="tenue">{{ p.nota }}</span>{% endif %}</div>
-      <div class="chico">pedido el {{ p.creado_en|fecha }}</div>
+      <div class="chico">pedido el {{ p.creado_en|fecha }}{% for c in certificados.get(p.id, []) %} · <a href="{{ url_for('admin_certificado', id_=c.id) }}" target="_blank" rel="noopener">Ver certificado</a>{% endfor %}{% if p.tipo == 'enfermedad' and not certificados.get(p.id) %} · <span class="negativo">sin certificado</span>{% endif %}</div>
       {% if p.pisado %}<div class="mensaje error" style="margin:6px 0">Se pisa con un período ya cargado ({{ p.pisado }}). No se puede aprobar así: corrija la ficha o rechácelo.</div>{% endif %}
       {% if p.anterior_al_arranque %}<div class="mensaje error" style="margin:6px 0">Empieza antes del saldo inicial: si se aprueba, no descuenta.</div>{% endif %}
       <form method="POST" class="formulario">
@@ -80,7 +80,7 @@
     {% for p in respondidas %}
       <tr>
         <td><a href="{{ url_for('admin_trabajador', id_=p.trabajador_id) }}">{{ p.nombre }}</a></td>
-        <td>{{ TIPOS_AUSENCIA[p.tipo][0] }} · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} d<span class="chico">{{ p.respuesta or '' }}</span></td>
+        <td>{{ TIPOS_AUSENCIA[p.tipo][0] }} · {{ p.desde|fecha }} al {{ p.hasta|fecha }} · {{ p.dias|num(1) }} d{% for c in certificados.get(p.id, []) %} · <a href="{{ url_for('admin_certificado', id_=c.id) }}" target="_blank" rel="noopener">Ver certificado</a>{% endfor %}<span class="chico">{{ p.respuesta or '' }}</span></td>
         <td class="der">
           {% if p.estado == 'aprobada' %}<span class="etiqueta ok">aprobado</span>
             <button class="btn suave chico" type="button" onclick="var e=document.getElementById('ep{{ p.id }}');e.hidden=!e.hidden">Corregir</button>

@@ -4,6 +4,7 @@
 <h1>{{ t.nombre }}
   <small>cédula {{ t.cedula }}{% if t.area %} · {{ t.area }}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
   {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
+  <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a></span>
 </h1>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
@@ -31,7 +32,7 @@
     <ul class="tomados">
       {% for x in vacaciones %}
         <li id="v{{ x.id }}">
-          <span class="t-que">{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %}<small>{{ x.nota }}</small>{% endif %}</span>
+          <span class="t-que">{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if x.nota %}<small>{{ x.nota }}</small>{% endif %}{% for c in certificados.get(x.id, []) %}<small><a href="{{ url_for('admin_certificado', id_=c.id) }}" target="_blank" rel="noopener">Ver certificado</a> · {{ c.subido_por }} {{ c.subido_en|fecha }}</small>{% endfor %}{% if x.tipo == 'enfermedad' and not certificados.get(x.id) %}<small class="negativo">sin certificado</small>{% endif %}</span>
           <span class="t-fechas">{{ x.desde|fecha }} – {{ x.hasta|fecha }}</span>
           <span class="t-dias">{{ x.dias|num(1) }}{% if not TIPOS_AUSENCIA[x.tipo][1] %}<small>no descuenta</small>{% endif %}</span>
           <span class="t-acciones">
@@ -48,6 +49,11 @@
             <div><label class="campo">Días</label><input name="dias" value="{{ x.dias|num(1) }}"></div>
             <div style="grid-column:span 2"><label class="campo">Nota</label><input name="nota" value="{{ x.nota or '' }}"></div>
             <div><button class="btn chico" type="submit">Guardar</button></div>
+          </form>
+          <form method="POST" class="formulario" enctype="multipart/form-data" style="margin-top:6px">
+            <input type="hidden" name="accion" value="certificado"><input type="hidden" name="id" value="{{ x.id }}">
+            <div style="grid-column:span 2"><label class="campo">Certificado médico (foto o PDF)</label><input type="file" name="certificado" accept="image/*,.pdf" required></div>
+            <div><button class="btn suave chico" type="submit">Guardar certificado</button></div>
           </form>
         </li>
       {% endfor %}

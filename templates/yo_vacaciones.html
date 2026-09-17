@@ -23,9 +23,9 @@
 <div class="bloque">
   <div class="titulo"><h2>Pedir días</h2><p>Contabilidad le responde aquí mismo.</p></div>
   <div class="relleno">
-    <form method="POST" action="{{ url_for('yo_pedir') }}" class="formulario">
+    <form method="POST" action="{{ url_for('yo_pedir') }}" class="formulario" enctype="multipart/form-data">
       <div class="ancho"><label class="campo">Qué pide</label>
-        <select name="tipo">
+        <select name="tipo" onchange="document.getElementById('cert').hidden = this.value != 'enfermedad'">
           {% for clave, (nombre, descuenta) in TIPOS_AUSENCIA.items() %}
           <option value="{{ clave }}">{{ nombre }}{% if clave == 'enfermedad' %} (con certificado){% endif %}</option>
           {% endfor %}
@@ -33,6 +33,7 @@
       <div><label class="campo">Desde</label><input type="date" name="desde" required></div>
       <div><label class="campo">Hasta</label><input type="date" name="hasta" required></div>
       <div class="ancho"><label class="campo">Para qué</label><input name="nota" maxlength="200" placeholder="por ejemplo: permiso para ir al banco"></div>
+      <div class="ancho" id="cert" hidden><label class="campo">Foto del certificado médico</label><input type="file" name="certificado" accept="image/*,.pdf" capture="environment"><p class="ayuda" style="margin:4px 0 0">Sáquele una foto al certificado. Si no lo tiene ahora, lo puede subir después.</p></div>
       <div class="ancho"><button class="btn" type="submit" style="width:100%">Enviar</button></div>
     </form>
   </div>
@@ -44,6 +45,10 @@
   {% for p in pedidos %}
   <div class="pedido">
     <div class="cuando"><b>{{ TIPOS_AUSENCIA[p.tipo][0] }}</b> · {{ p.desde|fecha }}{% if p.hasta != p.desde %} al {{ p.hasta|fecha }}{% endif %}{% if p.nota %} · <span class="tenue">{{ p.nota }}</span>{% endif %}</div>
+    {% if p.tipo == 'enfermedad' and p.estado in ('pendiente', 'aprobada') %}
+      {% if p.id in con_cert %}<span class="etiqueta ok">Certificado enviado</span>
+      {% else %}<form method="POST" action="{{ url_for('yo_certificado') }}" class="enlinea" enctype="multipart/form-data" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0"><input type="hidden" name="id" value="{{ p.id }}"><input type="file" name="certificado" accept="image/*,.pdf" capture="environment" required style="max-width:190px;font-size:13px"><button class="btn suave chico" type="submit">Subir certificado</button></form>{% endif %}
+    {% endif %}
     {% if p.estado == 'pendiente' %}
       <span class="etiqueta pendiente">Esperando respuesta</span>
       <form method="POST" action="{{ url_for('yo_pedido_cancelar') }}" class="enlinea"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn suave chico" type="submit">Cancelar</button></form>

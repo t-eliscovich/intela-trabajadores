@@ -32,7 +32,8 @@ from functools import wraps
 from zoneinfo import ZoneInfo
 
 from flask import (Flask, abort, flash, g, redirect, render_template, request,
-                   session, url_for)
+                   send_file, session, url_for)
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
@@ -45,7 +46,7 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=config.DIAS_SESION_TRABAJADOR)
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024  # una foto del celular entra; se achica al guardar
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
 
@@ -354,13 +355,51 @@ def yo_vacaciones():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    con_cert = {c["solicitud_id"] for c in store.certificados_de(t["id"]) if c["solicitud_id"]}
     return render_template("yo_vacaciones.html", t=t, v=_resumen(t),
                            vacaciones=store.vacaciones(t["id"]),
-                           pedidos=store.solicitudes(t["id"]))
+                           pedidos=store.solicitudes(t["id"]), con_cert=con_cert)
 
 
 # Hasta cuántos días para atrás se puede pedir (una enfermedad se avisa después).
 DIAS_ATRAS_PEDIDO = 30
+
+# El certificado médico: una foto (se achica a JPEG) o un PDF (se guarda como viene, hasta 5 MB).
+LADO_MAXIMO_FOTO = 1600
+PESO_MAXIMO_PDF = 5 * 1024 * 1024
+
+
+def leer_certificado(archivo) -> tuple[bytes, str, str] | None:
+    """El archivo subido → (datos, tipo, nombre). None si no mandaron nada.
+    Una foto se convierte a JPEG de hasta 1600 px de lado (pesa ~200 KB en vez
+    de 4 MB); un PDF se guarda tal cual. Otra cosa, avisa."""
+    if archivo is None or not archivo.filename:
+        return None
+    datos = archivo.read()
+    if not datos:
+        return None
+    nombre = os.path.basename(archivo.filename)[:120]
+    if datos[:5] == b"%PDF-":
+        if len(datos) > PESO_MAXIMO_PDF:
+            raise ValueError("El PDF pesa más de 5 MB. Mande una foto o un PDF más chico.")
+        return datos, "application/pdf", nombre
+    try:
+        from io import BytesIO
+        from PIL import Image, ImageOps
+        img = Image.open(BytesIO(datos))
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        img.thumbnail((LADO_MAXIMO_FOTO, LADO_MAXIMO_FOTO))
+        salida = BytesIO()
+        img.save(salida, "JPEG", quality=82, optimize=True)
+        return salida.getvalue(), "image/jpeg", os.path.splitext(nombre)[0] + ".jpg"
+    except Exception:  # noqa: BLE001
+        raise ValueError("No pude leer el archivo. Mande una foto (JPG, PNG) o un PDF.")
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def _muy_grande(_e):
+    flash("El archivo es demasiado grande (más de 12 MB). Saque la foto de nuevo con menos resolución.", "error")
+    return redirect(request.referrer or url_for("entrar"))
 
 
 def _periodo_pisado(trabajador_id: int, desde: date, hasta: date, salvo: int | None = None) -> dict | None:
@@ -437,8 +476,13 @@ def yo_pedir():
         if pisado:
             raise ValueError(f"Esos días ya están cargados ({_rango(pisado)}). "
                              "Si hay un error, hable con contabilidad.")
-        store.crear_solicitud(t["id"], tipo, desde, hasta, dias, (f.get("nota") or "").strip()[:200])
-        flash("Pedido enviado. Contabilidad le responde aquí mismo.", "ok")
+        cert = leer_certificado(request.files.get("certificado"))
+        sid = store.crear_solicitud(t["id"], tipo, desde, hasta, dias, (f.get("nota") or "").strip()[:200])
+        if cert:
+            store.guardar_certificado(t["id"], *cert, "trabajador", solicitud_id=sid)
+            flash("Pedido enviado con el certificado. Contabilidad le responde aquí mismo.", "ok")
+        else:
+            flash("Pedido enviado. Contabilidad le responde aquí mismo.", "ok")
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("yo_vacaciones"))
@@ -458,6 +502,26 @@ def yo_pedido_cancelar():
         flash("Pedido cancelado. Los días vuelven a su saldo.", "ok")
     elif p and p["trabajador_id"] == t["id"] and p["estado"] == "aprobada":
         flash("Ese pedido ya empezó: para cancelarlo hable con contabilidad.", "error")
+    return redirect(url_for("yo_vacaciones"))
+
+
+@app.route("/yo/certificado", methods=["POST"])
+def yo_certificado():
+    """La foto del certificado médico, para un pedido que ya mandó (pendiente o aprobado)."""
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    p = store.solicitud(int(request.form.get("id", 0) or 0))
+    try:
+        if not p or p["trabajador_id"] != t["id"] or p["estado"] not in ("pendiente", "aprobada"):
+            raise ValueError("Ese pedido no está.")
+        cert = leer_certificado(request.files.get("certificado"))
+        if not cert:
+            raise ValueError("Elija la foto del certificado.")
+        store.guardar_certificado(t["id"], *cert, "trabajador", solicitud_id=p["id"], vacacion_id=p.get("vacacion_id"))
+        flash("Certificado guardado. Contabilidad ya lo puede ver.", "ok")
+    except ValueError as exc:
+        flash(str(exc), "error")
     return redirect(url_for("yo_vacaciones"))
 
 
@@ -837,8 +901,35 @@ def admin_trabajador(id_):
         except ValueError as exc:
             flash(str(exc), "error")
         return redirect(url_for("admin_trabajador", id_=id_))
+    certs: dict[int, list] = {}
+    for c in store.certificados_de(id_):
+        if c["vacacion_id"]:
+            certs.setdefault(c["vacacion_id"], []).append(c)
     return render_template("admin_trabajador.html", t=t, v=_resumen(t),
-                           vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_))
+                           vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs)
+
+
+@app.route("/admin/trabajador/<int:id_>/imprimir")
+@requiere_admin
+def admin_trabajador_imprimir(id_):
+    """La hoja de saldo de vacaciones, para imprimir y firmar."""
+    t = store.trabajador(id_)
+    if not t:
+        abort(404)
+    return render_template("admin_trabajador_imprimir.html", t=t, v=_resumen(t),
+                           vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_),
+                           emitido=datetime.now(ZoneInfo(config.ZONA)), quien=g.usuario["nombre"])
+
+
+@app.route("/admin/certificado/<int:id_>")
+@requiere_admin
+def admin_certificado(id_):
+    """La foto o el PDF del certificado, sólo para contabilidad."""
+    c = store.certificado(id_)
+    if not c:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(bytes(c["datos"])), mimetype=c["tipo_archivo"], download_name=c["nombre"])
 
 
 def _accion_trabajador(t: dict, accion: str) -> None:
@@ -846,6 +937,17 @@ def _accion_trabajador(t: dict, accion: str) -> None:
     quien = g.usuario["usuario"]
     if accion == "invitados":
         store.poner_puede_invitar(t["id"], f.get("puede_invitar") == "1")
+        return
+    if accion == "certificado":
+        vid = int(f.get("id", 0) or 0)
+        if not any(v["id"] == vid for v in store.vacaciones(t["id"])):
+            raise ValueError("Ese período no está.")
+        cert = leer_certificado(request.files.get("certificado"))
+        if not cert:
+            raise ValueError("Elija la foto o el PDF del certificado.")
+        p = store.solicitud_por_vacacion(vid)
+        store.guardar_certificado(t["id"], *cert, quien, solicitud_id=p["id"] if p else None, vacacion_id=vid)
+        flash("Certificado guardado.", "ok")
         return
     if accion == "editar":
         nombre = (f.get("nombre") or "").strip()
@@ -1122,6 +1224,7 @@ def admin_solicitudes():
                 vid = store.agregar_vacacion(p["trabajador_id"], p["desde"], p["hasta"], dias,
                                              nota, quien, p["tipo"])
                 store.responder_solicitud(p["id"], "aprobada", (f.get("respuesta") or "").strip(), quien, vid)
+                store.ligar_certificados_a_vacacion(p["id"], vid)
                 flash(f"Aprobado: {num(dias)} días de {store.TIPOS_AUSENCIA[p['tipo']][0].lower()} "
                       f"para {p['nombre']}.", "ok")
                 _avisar(aviso)
@@ -1153,7 +1256,7 @@ def admin_solicitudes():
     return render_template("admin_solicitudes.html", pendientes=pendientes,
                            respondidas=store.solicitudes_respondidas(),
                            cambios=store.cambios_perfil_sin_ver(), avisar=avisar,
-                           trabajadores=store.trabajadores())
+                           trabajadores=store.trabajadores(), certificados=store.certificados_por_solicitud())
 
 
 def _texto_aviso(p: dict) -> str:
@@ -1271,6 +1374,105 @@ def admin_comidas_imprimir():
     totales["invitados"] = sum(i["cantidad"] for v in inv.values() for i in v)
     return render_template("admin_comidas_imprimir.html", anio=anio, mes=mes, dias=dias, filas=filas,
                            totales=totales, feriados=store.feriados(anio))
+
+
+@app.route("/admin/comidas/excel")
+@requiere_admin
+def admin_comidas_excel():
+    """El mes en Excel, para pagarle al comedor: por día, por trabajador (día por
+    día), invitados. Los mismos números que la pantalla."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    anio, mes = leer_mes(request.values.get("mes"))
+    dias = [date(anio, mes, d) for d in range(1, calendar.monthrange(anio, mes)[1] + 1)]
+    marcados = store.comidas_de_todos(anio, mes)
+    inv = store.invitados_del_mes(anio, mes)
+    fer = store.feriados(anio)
+    gente = store.trabajadores(incluir_inactivos=True)
+    negrita, gris = Font(bold=True), PatternFill("solid", fgColor="EEEEEE")
+    centro = Alignment(horizontal="center")
+
+    wb = Workbook()
+    # --- Por día ---
+    h = wb.active
+    h.title = "Por día"
+    h.append([f"Comidas de {MESES[mes]} {anio} — Intela"])
+    h["A1"].font = Font(bold=True, size=13)
+    h.append([])
+    h.append(["Día", "Fecha", "Almuerzos", "Cenas", "Invitados", "Total", "Feriado"])
+    for c in h[3]:
+        c.font = negrita
+    tot = {"a": 0, "c": 0, "i": 0}
+    for d in dias:
+        if d > hoy():
+            break
+        a = sum(1 for m in marcados.values() if (d, "almuerzo") in m)
+        c_ = sum(1 for m in marcados.values() if (d, "cena") in m)
+        i_ = sum(i["cantidad"] for i in inv.get(d, []))
+        tot["a"] += a; tot["c"] += c_; tot["i"] += i_
+        h.append([DIAS_TRES[d.weekday()], d, a, c_, i_, a + c_ + i_, fer.get(d, "")])
+        h.cell(row=h.max_row, column=2).number_format = "DD/MM/YYYY"
+        if d.weekday() >= 5 or d in fer:
+            for c in h[h.max_row]:
+                c.fill = gris
+    h.append(["Total", "", tot["a"], tot["c"], tot["i"], tot["a"] + tot["c"] + tot["i"], ""])
+    for c in h[h.max_row]:
+        c.font = negrita
+    for col, ancho in zip("ABCDEFG", (6, 12, 11, 8, 10, 8, 28)):
+        h.column_dimensions[col].width = ancho
+
+    # --- Por trabajador (A = almorzó, C = cenó, AC = las dos) ---
+    h = wb.create_sheet("Por trabajador")
+    h.append(["Nombre", "Cédula", "Área"] + [d.day for d in dias] + ["Almuerzos", "Cenas", "Total"])
+    for c in h[1]:
+        c.font = negrita
+        c.alignment = centro
+    h.append(["", "", ""] + [DIAS_CORTOS[d.weekday()] for d in dias] + ["", "", ""])
+    for i, d in enumerate(dias, start=4):
+        h.cell(row=2, column=i).alignment = centro
+        if d.weekday() >= 5 or d in fer:
+            h.cell(row=1, column=i).fill = gris
+            h.cell(row=2, column=i).fill = gris
+    for t in gente:
+        suyos = marcados.get(t["id"], {})
+        if not t["activo"] and not suyos:
+            continue
+        fila = [t["nombre"], t["cedula"], t.get("area") or ""]
+        for d in dias:
+            fila.append(("A" if (d, "almuerzo") in suyos else "") + ("C" if (d, "cena") in suyos else ""))
+        a = sum(1 for (_d, x) in suyos if x == "almuerzo")
+        c_ = sum(1 for (_d, x) in suyos if x == "cena")
+        h.append(fila + [a, c_, a + c_])
+        for i in range(4, 4 + len(dias)):
+            h.cell(row=h.max_row, column=i).alignment = centro
+    h.column_dimensions["A"].width = 30
+    h.column_dimensions["B"].width = 12
+    h.column_dimensions["C"].width = 6
+    for i in range(4, 4 + len(dias)):
+        h.column_dimensions[get_column_letter(i)].width = 3.5
+    h.freeze_panes = "D3"
+
+    # --- Invitados ---
+    h = wb.create_sheet("Invitados")
+    h.append(["Fecha", "Comida", "Horario", "Cantidad", "Quiénes", "Con quién", "Lo registró"])
+    for c in h[1]:
+        c.font = negrita
+    for d in sorted(inv):
+        for i in inv[d]:
+            h.append([d, "Almuerzo" if i["tipo"] == "almuerzo" else "Cena", i.get("turno") or "", i["cantidad"],
+                      i["descripcion"], i["nombre"], i["cargado_por"]])
+            h.cell(row=h.max_row, column=1).number_format = "DD/MM/YYYY"
+    for col, ancho in zip("ABCDEFG", (12, 10, 8, 9, 30, 30, 12)):
+        h.column_dimensions[col].width = ancho
+
+    salida = BytesIO()
+    wb.save(salida)
+    salida.seek(0)
+    return send_file(salida, as_attachment=True, download_name=f"comidas-{anio}-{mes:02d}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/admin/feriados", methods=["GET", "POST"])

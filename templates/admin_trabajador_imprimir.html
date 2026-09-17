@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block titulo %}Saldo de vacaciones · {{ t.nombre }}{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block contenido %}
+<style>
+  .hoja-saldo h1{display:block;margin-bottom:2px}
+  .hoja-saldo .cab{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .hoja-saldo .cab .marca-hoja{font-weight:800;letter-spacing:.14em;font-size:11px;color:#64748b}
+  .hoja-saldo table td{padding:7px 12px}
+  .hoja-saldo .firmas{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:56px}
+  .hoja-saldo .firmas div{border-top:1px solid #0f172a;padding-top:6px;font-size:13px;text-align:center}
+  @media print{ .hoja-saldo{font-size:13px} .hoja-saldo .vac-saldo b{font-size:28px} }
+</style>
+<div class="hoja-saldo">
+<div class="cab no-imprime" style="justify-content:flex-end">
+  <a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=t.id) }}">Volver a la ficha</a>
+  <button class="btn chico" type="button" onclick="window.print()">Imprimir</button>
+</div>
+
+<div class="cab">
+  <div>
+    <div class="marca-hoja">INTELA · SALDO DE VACACIONES</div>
+    <h1>{{ t.nombre }}</h1>
+    <div class="tenue">Cédula {{ t.cedula }}{% if t.area %} · {{ t.area }}{% endif %} · en Intela desde el {{ t.fecha_ingreso|fecha }} ({{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }})</div>
+  </div>
+  <div class="tenue" style="text-align:right;white-space:nowrap">Al {{ emitido|fecha }}<br><span class="chico">{{ emitido.strftime('%H:%M') }} · {{ quien }}</span></div>
+</div>
+
+<div class="bloque">
+  <ul class="vac-resumen">
+    {% if v.primer_anio %}
+    <li><span class="vac-que">Cumple el año</span><span class="vac-cuanto">{{ v.aniversario|fecha }}<small>ese día se le acreditan {{ v.proxima_cantidad|num }}</small></span></li>
+    {% else %}
+    <li><span class="vac-que">Le corresponden por año</span><span class="vac-cuanto">{{ v.este_anio|num }} días<small>{% if v.fijo is not none %}número fijo acordado{% elif v.este_anio > 15 %}15 + {{ (v.este_anio - 15)|num }} por más de 5 años{% else %}15 por ley{% endif %}</small></span></li>
+    <li><span class="vac-que">{% if v.arrastre >= 0 %}Traía de años anteriores{% else %}Debía de años anteriores{% endif %}</span><span class="vac-cuanto">{{ (v.arrastre if v.arrastre >= 0 else -v.arrastre)|num(1) }}</span></li>
+    <li><span class="vac-que">Tomó este año</span><span class="vac-cuanto">{{ v.tomados_anio|num(1) }}</span></li>
+    {% endif %}
+    {% if v.ajustes %}<li><span class="vac-que">Ajustes</span><span class="vac-cuanto">{{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }}</span></li>{% endif %}
+  </ul>
+  <div class="vac-saldo"><span>Le quedan</span><b class="{{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b></div>
+  {% if v.fecha_saldo %}<div class="nota">Saldo inicial al {{ v.fecha_saldo|fecha }}: {{ v.inicial|num(1) }}. Desde entonces: +{{ v.ganados|num(1) }} acreditados, −{{ v.tomados|num(1) }} tomados{% if v.ajustes %}, {{ '+' if v.ajustes > 0 }}{{ v.ajustes|num(1) }} de ajustes{% endif %}.</div>{% endif %}
+</div>
+
+<div class="bloque">
+  <div class="titulo"><h2>Días tomados</h2><p>{{ vacaciones|length }} {{ 'período' if vacaciones|length == 1 else 'períodos' }}</p></div>
+  {% if vacaciones %}
+  <table>
+    <thead><tr><th>Qué</th><th>Desde</th><th>Hasta</th><th class="der">Días</th><th>Nota</th></tr></thead>
+    <tbody>
+    {% for x in vacaciones %}
+      <tr><td>{{ TIPOS_AUSENCIA[x.tipo][0] }}{% if not TIPOS_AUSENCIA[x.tipo][1] %} <span class="chico">no descuenta</span>{% endif %}{% if v.fecha_saldo and x.desde < v.fecha_saldo %} <span class="chico">antes del saldo inicial</span>{% endif %}</td>
+          <td>{{ x.desde|fecha }}</td><td>{{ x.hasta|fecha }}</td><td class="der"><b>{{ x.dias|num(1) }}</b></td><td class="tenue">{{ x.nota or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="nota">Todavía no tomó vacaciones.</div>{% endif %}
+</div>
+
+{% if ajustes %}
+<div class="bloque">
+  <div class="titulo"><h2>Ajustes</h2></div>
+  <table><tbody>
+  {% for x in ajustes %}
+    <tr><td class="der" style="width:70px"><b>{{ '+' if x.dias > 0 }}{{ x.dias|num(1) }}</b></td><td>{{ x.motivo }}</td><td class="tenue">{{ x.creado_en|fecha }} · {{ x.cargado_por }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
+<div class="firmas">
+  <div>{{ t.nombre }}<br><span class="tenue">Trabajador</span></div>
+  <div>Contabilidad<br><span class="tenue">Intela</span></div>
+</div>
+</div>
+{% endblock %}

@@ -237,6 +237,21 @@ ESQUEMA = """
         ('2026-11-03', 'Independencia de Cuenca'), ('2026-12-25', 'Navidad')
         ON CONFLICT DO NOTHING;
 
+    -- La foto del certificado médico (o el PDF), a mano para contabilidad.
+    -- Va ligada al trabajador, y si se sabe, al pedido y al período.
+    CREATE TABLE IF NOT EXISTS trabajadores.certificado (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        solicitud_id   integer REFERENCES trabajadores.solicitud(id) ON DELETE SET NULL,
+        vacacion_id    integer REFERENCES trabajadores.vacacion(id) ON DELETE SET NULL,
+        tipo_archivo   text NOT NULL,
+        nombre         text NOT NULL,
+        datos          bytea NOT NULL,
+        subido_por     text NOT NULL,
+        subido_en      timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS certificado_trabajador_idx ON trabajadores.certificado (trabajador_id);
+
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
         clave  text PRIMARY KEY,
@@ -565,6 +580,43 @@ def borrar_ajuste(id_: int, quien: str = "?") -> None:
 
 def recuperar_ajuste(id_: int) -> None:
     _ejecutar("UPDATE trabajadores.ajuste_vacacion SET borrado_en=NULL, borrado_por=NULL WHERE id=%s", (id_,))
+
+
+# --------------------------------------------------------------------------
+# Certificados médicos
+# --------------------------------------------------------------------------
+def guardar_certificado(trabajador_id: int, datos: bytes, tipo_archivo: str, nombre: str, subido_por: str,
+                        solicitud_id: int | None = None, vacacion_id: int | None = None) -> int:
+    fila = _ejecutar("INSERT INTO trabajadores.certificado (trabajador_id, solicitud_id, vacacion_id, tipo_archivo, "
+                     "nombre, datos, subido_por) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                     (trabajador_id, solicitud_id, vacacion_id, tipo_archivo, nombre, datos, subido_por))
+    return fila["id"]
+
+
+def certificado(id_: int) -> dict | None:
+    """Con los datos (para mostrarlo)."""
+    return _uno("SELECT * FROM trabajadores.certificado WHERE id=%s", (id_,))
+
+
+def certificados_de(trabajador_id: int) -> list[dict]:
+    """Sin los datos: para poner el link al lado del pedido o del período."""
+    return _todos("SELECT id, trabajador_id, solicitud_id, vacacion_id, tipo_archivo, nombre, subido_por, subido_en "
+                  "FROM trabajadores.certificado WHERE trabajador_id=%s ORDER BY subido_en", (trabajador_id,))
+
+
+def certificados_por_solicitud() -> dict[int, list[dict]]:
+    """Todos, sin datos, agrupados por pedido (para la bandeja)."""
+    filas = _todos("SELECT id, solicitud_id, vacacion_id, subido_en FROM trabajadores.certificado "
+                   "WHERE solicitud_id IS NOT NULL ORDER BY subido_en")
+    salida: dict[int, list[dict]] = {}
+    for f in filas:
+        salida.setdefault(f["solicitud_id"], []).append(f)
+    return salida
+
+
+def ligar_certificados_a_vacacion(solicitud_id: int, vacacion_id: int) -> None:
+    """Al aprobar el pedido, el certificado queda también en el período."""
+    _ejecutar("UPDATE trabajadores.certificado SET vacacion_id=%s WHERE solicitud_id=%s", (vacacion_id, solicitud_id))
 
 
 # --------------------------------------------------------------------------
