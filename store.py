@@ -203,7 +203,6 @@ ESQUEMA = """
     CREATE INDEX IF NOT EXISTS comida_fecha_idx ON trabajadores.comida (fecha);
     -- turno: el horario del almuerzo ('12:00', '12:30', '13:00', '13:30'); la cena por ahora sin turno.
     ALTER TABLE trabajadores.comida ADD COLUMN IF NOT EXISTS turno text;
-    ALTER TABLE trabajadores.invitado ADD COLUMN IF NOT EXISTS turno text;
     -- Sólo algunos trabajadores pueden traer invitados (se marca en la ficha).
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS puede_invitar boolean NOT NULL DEFAULT false;
 
@@ -218,9 +217,12 @@ ESQUEMA = """
         descripcion    text NOT NULL,
         cargado_por    text NOT NULL,
         creado_en      timestamptz NOT NULL DEFAULT now(),
-        borrado_en     timestamptz
+        borrado_en     timestamptz,
+        turno          text
     );
     CREATE INDEX IF NOT EXISTS invitado_fecha_idx ON trabajadores.invitado (fecha);
+    -- (la tabla ya existía en producción sin `turno`; el ALTER va DESPUÉS del CREATE)
+    ALTER TABLE trabajadores.invitado ADD COLUMN IF NOT EXISTS turno text;
 
     -- Feriados: para que el resumen de comidas los muestre en gris.
     CREATE TABLE IF NOT EXISTS trabajadores.feriado (
@@ -510,6 +512,25 @@ def cancelar_solicitud_aprobada(id_: int, respuesta: str, quien: str) -> None:
               "respondido_en=now() WHERE id=%s", (respuesta, quien, id_))
 
 
+def solicitud_por_vacacion(vacacion_id: int) -> dict | None:
+    """El pedido (si lo hubo) del que nació un período."""
+    return _uno("SELECT * FROM trabajadores.solicitud WHERE vacacion_id=%s", (vacacion_id,))
+
+
+def cambiar_fechas_solicitud(id_: int, desde: date, hasta: date, dias: float) -> None:
+    """Cuando contabilidad corrige el período de un pedido aprobado, el pedido
+    dice lo mismo (es lo que el trabajador ve)."""
+    _ejecutar("UPDATE trabajadores.solicitud SET desde=%s, hasta=%s, dias=%s WHERE id=%s",
+              (desde, hasta, dias, id_))
+
+
+def reabrir_solicitud_cancelada(id_: int) -> None:
+    """Se recuperó desde Historial el período de un pedido cancelado: el pedido
+    vuelve a «aprobada»."""
+    _ejecutar("UPDATE trabajadores.solicitud SET estado='aprobada', respuesta=NULL "
+              "WHERE id=%s AND estado='cancelada'", (id_,))
+
+
 def borrar_solicitud(id_: int) -> bool:
     """Sólo un pedido rechazado o cancelado (no tiene período atrás): desaparece
     de la lista del trabajador y de la de contabilidad."""
@@ -678,6 +699,11 @@ def desmarcar_comida(trabajador_id: int, fecha: date, tipo: str) -> None:
 def usuarios() -> list[dict]:
     return _todos("SELECT id, usuario, nombre, activo, rol, creado_en FROM trabajadores.usuario "
                   "ORDER BY usuario")
+
+
+def usuario(id_: int) -> dict | None:
+    """Un usuario por id, esté activo o no (la sesión se revalida con esto)."""
+    return _uno("SELECT id, usuario, nombre, activo, rol FROM trabajadores.usuario WHERE id=%s", (id_,))
 
 
 def usuario_por_nombre(usuario: str) -> dict | None:

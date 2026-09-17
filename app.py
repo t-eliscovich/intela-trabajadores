@@ -9,7 +9,7 @@ Para el trabajador (desde el celular, sólo con la cédula):
 Para el comedor:
 
     /comedor/t/<clave>       la tablet: cédula → confirmar → invitados (sin sesión, link con clave)
-    /comedor/dia             quién comió cada día (usuario del comedor o contabilidad)
+    /comedor/dia             los comensales de cada día (el usuario del comedor sólo mira)
 
 Para contabilidad (con usuario y clave):
 
@@ -18,7 +18,7 @@ Para contabilidad (con usuario y clave):
     /admin/solicitudes       los pedidos de los trabajadores (aprobar / rechazar / deshacer)
     /admin/historial         lo borrado (períodos, ajustes), para recuperarlo si hizo falta
     /admin/carga             pegar la planilla para cargar a todos de una vez
-    /admin/comidas           el cuadro del mes para pagarle a la cafetería
+    /admin/comidas           el cuadro del mes para pagarle al comedor
     /admin/usuarios          quién entra a esta parte
 """
 from __future__ import annotations
@@ -118,20 +118,40 @@ def _frenar_si_no_hay_base():
 
 @app.before_request
 def _cargar_usuario():
-    g.usuario = session.get("usuario")
+    """La sesión se revalida contra la base en cada pedido: si el usuario se
+    desactivó o le cambiaron el rol, la cookie deja de servir al instante (antes
+    un usuario del comedor desactivado seguía entrando 30 días)."""
+    g.usuario = None
+    u = session.get("usuario")
+    if not u or ERROR_ARRANQUE or not u.get("id") or not u.get("rol"):
+        if u:
+            session.pop("usuario", None)
+        return
+    try:
+        vivo = store.usuario(u["id"])
+    except Exception:  # noqa: BLE001
+        vivo = None
+    if not vivo or not vivo["activo"] or vivo["rol"] != u["rol"]:
+        session.pop("usuario", None)
+        return
+    g.usuario = u
 
 
 # --------------------------------------------------------------------------
 # Ayudas
 # --------------------------------------------------------------------------
+def es_contabilidad() -> bool:
+    return bool(g.get("usuario")) and g.usuario.get("rol") == "contabilidad"
+
+
 def requiere_admin(f):
+    """Sólo contabilidad. Un usuario del comedor va a Comensales."""
     @wraps(f)
     def wrapper(*a, **kw):
         u = g.get("usuario")
         if not u:
             return redirect(url_for("admin_entrar", next=request.path))
-        # Una sesión abierta antes de que existieran los roles no trae rol: es de contabilidad.
-        if (u.get("rol") or "contabilidad") != "contabilidad":
+        if u.get("rol") != "contabilidad":
             return redirect(url_for("comedor_dia"))
         return f(*a, **kw)
     return wrapper
@@ -307,7 +327,8 @@ def entrar():
         if not t or not t["activo"]:
             flash("No encontramos esa cédula. Pregunte en contabilidad.", "error")
             return render_template("entrar.html")
-        session.clear()
+        # Sólo se reemplaza la sesión del trabajador: si contabilidad prueba una
+        # cédula en el mismo navegador, no se desloguea.
         session["trabajador_id"] = t["id"]
         session.permanent = True  # 30 días sin volver a poner la cédula
         return redirect(url_for("yo"))
@@ -342,6 +363,57 @@ def yo_vacaciones():
 DIAS_ATRAS_PEDIDO = 30
 
 
+def _periodo_pisado(trabajador_id: int, desde: date, hasta: date, salvo: int | None = None) -> dict | None:
+    """El período ya cargado en la ficha que se pisa con [desde, hasta], si hay
+    (sin contar `salvo`, el que se está corrigiendo)."""
+    for v in store.vacaciones(trabajador_id):
+        if v["id"] != salvo and v["desde"] <= hasta and desde <= v["hasta"]:
+            return v
+    return None
+
+
+def _rango(x: dict) -> str:
+    """«02/02 al 16/02», o «19/02» si es un solo día."""
+    d, h = x["desde"].strftime("%d/%m"), x["hasta"].strftime("%d/%m")
+    return d if d == h else f"{d} al {h}"
+
+
+def _controlar_periodo(t: dict, tipo: str, desde: date, hasta: date, salvo: int | None = None) -> str | None:
+    """Lo que contabilidad tiene que saber al cargar o aprobar un período: si se
+    pisa con uno ya cargado se FRENA (ValueError); si es anterior al saldo
+    inicial NO descuenta, y devuelve el aviso para mostrarlo una vez guardado."""
+    pisado = _periodo_pisado(t["id"], desde, hasta, salvo)
+    if pisado:
+        raise ValueError(f"{t['nombre']} ya tiene cargado {store.TIPOS_AUSENCIA[pisado['tipo']][0].lower()} "
+                         f"del {_rango(pisado)}: se pisan. Corrija ese período en la ficha, o rechace el pedido.")
+    if _anterior_al_saldo_inicial(t, tipo, desde):
+        return (f"Ojo: empieza antes del saldo inicial ({t['fecha_saldo_inicial'].strftime('%d/%m/%Y')}), así que "
+                "NO descuenta del saldo (ya está contado en ese número). Si tiene que descontar, cargue un ajuste.")
+    return None
+
+
+def _anterior_al_saldo_inicial(t: dict, tipo: str, desde: date) -> bool:
+    """Un período que descontaría pero empieza antes de la foto del saldo inicial
+    no resta (la foto ya lo incluye)."""
+    corte = t.get("fecha_saldo_inicial")
+    return bool(corte and desde < corte and store.TIPOS_AUSENCIA[tipo][1])
+
+
+def _avisar(aviso: str | None) -> None:
+    if aviso:
+        flash(aviso, "error")
+
+
+def nombre_de_pila(nombre: str | None) -> str:
+    """Cómo saludarlo por WhatsApp. El padrón viene como en la nómina,
+    APELLIDO APELLIDO NOMBRE (NOMBRE): con tres o más palabras, la tercera; con
+    menos, la primera. Una sola regla para todos los avisos."""
+    partes = (nombre or "").split()
+    if not partes:
+        return ""
+    return partes[2] if len(partes) >= 3 else partes[0]
+
+
 @app.route("/yo/pedir", methods=["POST"])
 def yo_pedir():
     t = _mi_trabajador()
@@ -361,6 +433,10 @@ def yo_pedir():
         for p in store.solicitudes(t["id"]):
             if p["estado"] == "pendiente" and p["desde"] <= hasta and desde <= p["hasta"]:
                 raise ValueError("Ya tiene un pedido pendiente para esos días.")
+        pisado = _periodo_pisado(t["id"], desde, hasta)
+        if pisado:
+            raise ValueError(f"Esos días ya están cargados ({_rango(pisado)}). "
+                             "Si hay un error, hable con contabilidad.")
         store.crear_solicitud(t["id"], tipo, desde, hasta, dias, (f.get("nota") or "").strip()[:200])
         flash("Pedido enviado. Contabilidad le responde aquí mismo.", "ok")
     except ValueError as exc:
@@ -413,8 +489,8 @@ def salir():
 #   * la tablet del mostrador abre /comedor/t/<clave> (un link con clave
 #     adentro, sin sesión, que no vence): el trabajador escribe su cédula,
 #     confirma, y puede anotar invitados;
-#   * la persona del comedor (usuario con rol «comedor») o contabilidad entra
-#     con su usuario y ve quién comió cada día.
+#   * la persona del comedor (usuario con rol «comedor») entra con su usuario y
+#     SÓLO VE los comensales de cada día; contabilidad además registra y quita.
 # ==========================================================================
 HORA_CENA = 15  # desde las 15:00 (de Ecuador) la comida es la cena; antes, el almuerzo
 MINUTOS_PARA_DESHACER = 10
@@ -616,12 +692,21 @@ def comedor_invitados():
 @app.route("/comedor/dia", methods=["GET", "POST"])
 @requiere_sesion
 def comedor_dia():
-    """Los comensales de un día, por horario: para el comedor y para contabilidad."""
+    """Los comensales de un día, por horario.
+
+    El usuario del comedor SÓLO MIRA (decisión Tamara 17/09/2026: «no debe ver
+    nada más que quién comió, nada de celulares»): ni registra, ni quita, ni ve
+    la lista de los que faltan. Registrar y quitar es de contabilidad.
+    """
     try:
         fecha = leer_fecha(request.values.get("fecha", "")) if request.values.get("fecha") else hoy()
     except ValueError:
         fecha = hoy()
+    if fecha > hoy():
+        fecha = hoy()  # no hay comensales de mañana
     if request.method == "POST":
+        if not es_contabilidad():
+            abort(403)
         try:
             accion = request.form.get("accion", "")
             if accion == "marcar":
@@ -651,20 +736,23 @@ def comedor_dia():
             if turno or gente or inv:
                 cols.append((turno, gente, inv))
         columnas[tipo] = cols
-    marcaron = {c["trabajador_id"] for c in comieron}
-    faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_no_se_anoto(t, fecha)))
-              for t in store.trabajadores() if t["id"] not in marcaron]
+    faltan = []
+    if es_contabilidad():  # el comedor no ve quién falta ni ningún celular
+        marcaron = {c["trabajador_id"] for c in comieron}
+        faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha)))
+                  for t in store.trabajadores() if t["id"] not in marcaron]
     return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, columnas=columnas,
-                           faltan=faltan, invitados=invitados,
+                           faltan=faltan, invitados=invitados, edita=es_contabilidad(),
                            total_invitados=sum(i["cantidad"] for i in invitados),
                            feriado=store.feriados(fecha.year).get(fecha),
-                           ayer=(fecha - timedelta(days=1)).isoformat(), manana=(fecha + timedelta(days=1)).isoformat())
+                           ayer=(fecha - timedelta(days=1)).isoformat(),
+                           manana=(fecha + timedelta(days=1)).isoformat() if fecha < hoy() else None)
 
 
-def _texto_no_se_anoto(t: dict, fecha: date) -> str:
-    nombre = t["nombre"].split()[-2] if len(t["nombre"].split()) >= 3 else t["nombre"].split()[0]
+def _texto_sin_registrar(t: dict, fecha: date) -> str:
     cuando = "hoy" if fecha == hoy() else f"el {fecha.strftime('%d/%m')}"
-    return f"Hola {nombre}, {cuando} no registró su comida en el comedor. Si va a comer, pase por la tablet. Saludos, Intela."
+    return (f"Hola {nombre_de_pila(t['nombre'])}, {cuando} no registró su comida en el comedor. "
+            "Si va a comer, pase por la tablet. Saludos, Intela.")
 
 
 @app.route("/cafeteria")
@@ -777,10 +865,10 @@ def _accion_trabajador(t: dict, accion: str) -> None:
             if fecha > hoy():
                 raise ValueError("La fecha del saldo no puede ser futura.")
             store.poner_saldo_inicial(t["id"], leer_decimal(saldo, "El saldo"), fecha)
-            flash("Saldo al arrancar guardado.", "ok")
+            flash("Saldo inicial guardado.", "ok")
         else:
             store.poner_saldo_inicial(t["id"], None, None)
-            flash("Sin saldo al arrancar: se cuenta desde el ingreso.", "ok")
+            flash("Sin saldo inicial: se cuenta desde el ingreso.", "ok")
     elif accion == "baja":
         store.dar_de_baja(t["id"], leer_fecha(f.get("fecha_salida", "")))
         flash(f"{t['nombre']} dado de baja.", "ok")
@@ -794,19 +882,34 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         if dias <= 0:
             raise ValueError("Los días tienen que ser más que cero.")
         tipo = leer_tipo_ausencia(f.get("tipo") or "vacaciones")
+        aviso = _controlar_periodo(t, tipo, desde, hasta)
         store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip(), quien, tipo)
         flash(f"{num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
+        _avisar(aviso)
     elif accion == "vacacion_editar":
         tipo = leer_tipo_ausencia(f.get("tipo"))
         desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
         dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
         if dias <= 0:
             raise ValueError("Los días tienen que ser más que cero.")
-        store.editar_vacacion(int(f.get("id", 0)), tipo, desde, hasta, dias, (f.get("nota") or "").strip())
+        vid = int(f.get("id", 0))
+        aviso = _controlar_periodo(t, tipo, desde, hasta, salvo=vid)
+        store.editar_vacacion(vid, tipo, desde, hasta, dias, (f.get("nota") or "").strip())
+        p = store.solicitud_por_vacacion(vid)
+        if p and p["estado"] == "aprobada":
+            store.cambiar_fechas_solicitud(p["id"], desde, hasta, dias)
         flash("Período corregido.", "ok")
+        _avisar(aviso)
     elif accion == "vacacion_borrar":
-        store.borrar_vacacion(int(f.get("id", 0)), quien)
-        flash("Período borrado. Queda en Historial por si hay que recuperarlo.", "ok")
+        vid = int(f.get("id", 0))
+        p = store.solicitud_por_vacacion(vid)
+        if p and p["estado"] == "aprobada":
+            # nació de un pedido: el pedido pasa a cancelado, así el trabajador no sigue viendo «Aprobado»
+            store.cancelar_solicitud_aprobada(p["id"], "el período se borró de la ficha", quien)
+            flash("Período borrado y el pedido quedó cancelado. Queda en Historial por si hay que recuperarlo.", "ok")
+        else:
+            store.borrar_vacacion(vid, quien)
+            flash("Período borrado. Queda en Historial por si hay que recuperarlo.", "ok")
     elif accion == "ajuste":
         dias = leer_decimal(f.get("dias", ""), "Los días")
         motivo = (f.get("motivo") or "").strip()
@@ -972,9 +1075,11 @@ def admin_solicitudes():
                 dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
                 if dias <= 0:
                     raise ValueError("Los días tienen que ser más que cero.")
+                aviso = _controlar_periodo(t, tipo, desde, hasta)
                 store.agregar_vacacion(t["id"], desde, hasta, dias, (f.get("nota") or "").strip() or "cargado en la oficina",
                                        g.usuario["usuario"], tipo)
                 flash(f"{t['nombre']}: {num(dias)} días de {store.TIPOS_AUSENCIA[tipo][0].lower()} cargados.", "ok")
+                _avisar(aviso)
                 return redirect(url_for("admin_solicitudes"))
             if accion == "editar":
                 p = store.solicitud(int(f.get("id", 0) or 0))
@@ -984,8 +1089,11 @@ def admin_solicitudes():
                 dias = leer_decimal(f.get("dias") or str(vacaciones.dias_entre(desde, hasta)), "Los días")
                 if dias <= 0:
                     raise ValueError("Los días tienen que ser más que cero.")
+                aviso = _controlar_periodo(store.trabajador(p["trabajador_id"]), p["tipo"], desde, hasta, salvo=p["vacacion_id"])
                 store.editar_vacacion(p["vacacion_id"], p["tipo"], desde, hasta, dias, f"pedido #{p['id']}" + (f" · {p['nota']}" if p.get("nota") else ""))
+                store.cambiar_fechas_solicitud(p["id"], desde, hasta, dias)  # el trabajador ve lo mismo
                 flash(f"Corregido: {p['nombre']}, {num(dias)} días del {desde.strftime('%d/%m')} al {hasta.strftime('%d/%m')}.", "ok")
+                _avisar(aviso)
                 return redirect(url_for("admin_solicitudes"))
             if accion == "deshacer":
                 p = store.solicitud(int(f.get("id", 0) or 0))
@@ -1003,12 +1111,20 @@ def admin_solicitudes():
                 dias = leer_decimal(f.get("dias") or str(p["dias"]), "Los días")
                 if dias <= 0:
                     raise ValueError("Los días tienen que ser más que cero.")
+                t = store.trabajador(p["trabajador_id"])
+                aviso = _controlar_periodo(t, p["tipo"], p["desde"], p["hasta"])
+                saldo = _resumen(t)["saldo"]
+                descuenta = store.TIPOS_AUSENCIA[p["tipo"]][1] and not aviso
+                if descuenta and dias > saldo and f.get("igual") != "1":
+                    raise ValueError(f"A {p['nombre']} le quedan {num(saldo, 1)} y pide {num(dias, 1)}: quedaría en "
+                                     f"{num(saldo - dias, 1)}. Marque «Aprobar aunque no le alcance» si es así.")
                 nota = f"pedido #{p['id']}" + (f" · {p['nota']}" if p.get("nota") else "")
                 vid = store.agregar_vacacion(p["trabajador_id"], p["desde"], p["hasta"], dias,
                                              nota, quien, p["tipo"])
                 store.responder_solicitud(p["id"], "aprobada", (f.get("respuesta") or "").strip(), quien, vid)
                 flash(f"Aprobado: {num(dias)} días de {store.TIPOS_AUSENCIA[p['tipo']][0].lower()} "
                       f"para {p['nombre']}.", "ok")
+                _avisar(aviso)
             elif accion == "rechazar":
                 motivo = (f.get("respuesta") or "").strip()
                 if not motivo:
@@ -1021,8 +1137,13 @@ def admin_solicitudes():
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("admin_solicitudes"))
-    pendientes = [dict(p, saldo=_resumen(store.trabajador(p["trabajador_id"]))["saldo"])
-                  for p in store.solicitudes_pendientes()]
+    pendientes = []
+    for p in store.solicitudes_pendientes():
+        t = store.trabajador(p["trabajador_id"])
+        pisado = _periodo_pisado(t["id"], p["desde"], p["hasta"])
+        pendientes.append(dict(p, saldo=_resumen(t)["saldo"],
+                               pisado=_rango(pisado) if pisado else None,
+                               anterior_al_arranque=_anterior_al_saldo_inicial(t, p["tipo"], p["desde"])))
     avisar = None
     id_avisar = request.args.get("avisar")
     if id_avisar and id_avisar.isdigit():
@@ -1036,7 +1157,7 @@ def admin_solicitudes():
 
 
 def _texto_aviso(p: dict) -> str:
-    nombre = p["nombre"].split()[0] if p["nombre"] else ""
+    nombre = nombre_de_pila(p["nombre"])
     que = store.TIPOS_AUSENCIA[p["tipo"]][0].lower()
     cuando = f"del {p['desde'].strftime('%d/%m')} al {p['hasta'].strftime('%d/%m')}"
     if p["estado"] == "aprobada":
@@ -1054,6 +1175,9 @@ def admin_historial():
         que, id_ = request.form.get("que"), int(request.form.get("id", 0) or 0)
         if que == "periodo":
             store.recuperar_vacacion(id_)
+            p = store.solicitud_por_vacacion(id_)
+            if p and p["estado"] == "cancelada":
+                store.reabrir_solicitud_cancelada(p["id"])
         elif que == "ajuste":
             store.recuperar_ajuste(id_)
         flash("Recuperado: vuelve a contar en la ficha.", "ok")
@@ -1065,7 +1189,7 @@ def admin_historial():
 # El cuadro de comidas del mes
 # --------------------------------------------------------------------------
 @app.route("/admin/comidas", methods=["GET", "POST"])
-@requiere_sesion
+@requiere_admin
 def admin_comidas():
     anio, mes = leer_mes(request.values.get("mes"))
     if request.method == "POST":
@@ -1126,9 +1250,9 @@ def _por_semana(filas: list[dict]) -> list[dict]:
 
 
 @app.route("/admin/comidas/imprimir")
-@requiere_sesion
+@requiere_admin
 def admin_comidas_imprimir():
-    """El cuadro trabajador × día, para pagarle a la cafetería."""
+    """El cuadro trabajador × día, para pagarle al comedor."""
     anio, mes = leer_mes(request.values.get("mes"))
     dias = [date(anio, mes, d) for d in range(1, calendar.monthrange(anio, mes)[1] + 1)]
     marcados = store.comidas_de_todos(anio, mes)

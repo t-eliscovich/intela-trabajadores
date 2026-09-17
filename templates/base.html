@@ -109,8 +109,8 @@
   details > summary::before{content:"▸ ";color:var(--gris-claro)}
   details[open] > summary::before{content:"▾ "}
 
-  /* ---------- la tablet de la cafetería ---------- */
-  .hoja.cafeteria{max-width:560px}
+  /* ---------- la tablet del comedor ---------- */
+  .hoja.comedor{max-width:560px}
   .kiosco{text-align:center;padding-top:8px}
   .kiosco-comida{font-size:34px;font-weight:800;color:var(--azul);letter-spacing:-.02em;margin-top:6px}
   .kiosco-fecha{font-size:17px;color:var(--gris);margin-bottom:18px}
@@ -290,8 +290,6 @@
     {% if g.usuario and g.usuario.rol == 'comedor' %}
     <nav>
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Comensales</a>
-      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir') }}">Por mes</a>
-      <a href="{{ url_for('comedor') }}" class="{{ 'activo' if request.endpoint=='comedor' }}">Registrar</a>
     </nav>
     <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
     {% elif g.token %}
@@ -303,7 +301,7 @@
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir','admin_feriados') }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
-      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comedor</a>
+      <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comensales</a>
       <a href="{{ url_for('admin_historial') }}" class="{{ 'activo' if request.endpoint=='admin_historial' }}">Historial</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>
     </nav>

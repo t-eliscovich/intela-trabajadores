@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block titulo %}Comidas {{ MESES[mes] }}{% endblock %}
 {% block contenido %}
-<h1>Comidas
+<h1>Comidas del mes
   <span class="no-imprime" style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span class="mes-nav"><a href="{{ url_for('admin_comidas', mes=anterior) }}">‹</a><b>{{ MESES[mes]|capitalize }} {{ anio }}</b><a href="{{ url_for('admin_comidas', mes=siguiente) }}">›</a></span>
     <a class="btn suave chico" href="{{ url_for('admin_comidas_imprimir', mes=anio ~ '-' ~ '%02d' % mes) }}">Cuadro para pagar</a>
-    {% if g.usuario.rol != 'comedor' %}<a class="btn suave chico" href="{{ url_for('admin_feriados') }}">Feriados</a>{% endif %}
+    <a class="btn suave chico" href="{{ url_for('admin_feriados') }}">Feriados</a>
   </span>
 </h1>
 
@@ -54,7 +54,7 @@
       </div>
       <div>
         <h4>Invitados</h4>
-        <ul>{% for i in f.lista_invitados %}<li>{{ i.cantidad }} · {{ i.descripcion }}<small>con {{ i.nombre }} · {{ i.tipo }}</small></li>{% else %}<li class="nadie">—</li>{% endfor %}</ul>
+        <ul>{% for i in f.lista_invitados %}<li>{{ i.cantidad }} · {{ i.descripcion }}<small>con {{ i.nombre }} · {{ 'almuerzo' if i.tipo == 'almuerzo' else 'cena' }}{% if i.turno %} {{ i.turno }}{% endif %}</small></li>{% else %}<li class="nadie">—</li>{% endfor %}</ul>
       </div>
     </div>
   </details>

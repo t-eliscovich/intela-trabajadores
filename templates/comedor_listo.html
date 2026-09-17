@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block titulo %}Comedor{% endblock %}
-{% block clase_hoja %}angosta cafeteria{% endblock %}
+{% block clase_hoja %}angosta comedor{% endblock %}
 {% block contenido %}
 <div class="kiosco">
   <div class="kiosco-fecha">{{ hoy|fecha_larga }}</div>
@@ -8,7 +8,7 @@
     <div class="tilde">{{ '!' if ya_estaba else '✓' }}</div>
     <b>{{ t.nombre }}</b>
     <p>
-      {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado anotado' if invitados_anotados == 1 else 'invitados anotados' }}. ¡Buen provecho!
+      {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado registrado' if invitados_anotados == 1 else 'invitados registrados' }}. ¡Buen provecho!
       {% elif ya_estaba %}Ya registró {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
       {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado. ¡Buen provecho!{% endif %}
     </p>

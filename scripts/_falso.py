@@ -45,6 +45,7 @@ class BaseFalsa:
         self.conf: dict[str, str] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
+        self.alm_quien: dict[tuple, str] = {}
         self._n = 0
 
     def _id(self):
@@ -227,6 +228,16 @@ class BaseFalsa:
             self.borrar_vacacion(s["vacacion_id"], quien)
         s.update(estado="cancelada", respuesta=respuesta, respondido_por=quien, respondido_en=datetime.now())
 
+    def solicitud_por_vacacion(self, vacacion_id):
+        return next((dict(s) for s in self.sol.values() if s["vacacion_id"] == vacacion_id), None)
+
+    def cambiar_fechas_solicitud(self, id_, desde, hasta, dias):
+        self.sol[id_].update(desde=desde, hasta=hasta, dias=dias)
+
+    def reabrir_solicitud_cancelada(self, id_):
+        if self.sol[id_]["estado"] == "cancelada":
+            self.sol[id_].update(estado="aprobada", respuesta=None)
+
     def borrar_solicitud(self, id_):
         s = self.sol.get(id_)
         if s and s["estado"] in ("rechazada", "cancelada"):
@@ -274,6 +285,7 @@ class BaseFalsa:
         if (trabajador_id, fecha, tipo) not in self.alm:
             self.alm_hora[(trabajador_id, fecha, tipo)] = datetime.now()
             self.alm_turno[(trabajador_id, fecha, tipo)] = turno
+            self.alm_quien[(trabajador_id, fecha, tipo)] = marcado_por
         self.alm.add((trabajador_id, fecha, tipo))
 
     def poner_puede_invitar(self, trabajador_id, puede):
@@ -285,7 +297,7 @@ class BaseFalsa:
             if f == fecha:
                 t = self.trab[tid]
                 filas.append({"trabajador_id": tid, "tipo": tipo, "turno": self.alm_turno.get((tid, f, tipo)),
-                              "marcado_por": "?", "creado_en": self.alm_hora.get((tid, f, tipo)),
+                              "marcado_por": self.alm_quien.get((tid, f, tipo), "?"), "creado_en": self.alm_hora.get((tid, f, tipo)),
                               "nombre": t["nombre"], "area": t.get("area"), "celular": t.get("celular")})
         return sorted(filas, key=lambda x: (x["turno"] is None, x["turno"] or "", x["nombre"]))
 
@@ -345,6 +357,10 @@ class BaseFalsa:
     # --- usuarios ---
     def usuarios(self):
         return sorted((dict(u) for u in self.usu.values()), key=lambda u: u["usuario"])
+
+    def usuario(self, id_):
+        u = self.usu.get(id_)
+        return dict(u) if u else None
 
     def usuario_por_nombre(self, usuario):
         for u in self.usu.values():

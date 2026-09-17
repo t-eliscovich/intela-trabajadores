@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block titulo %}Comedor{% endblock %}
-{% block clase_hoja %}angosta cafeteria{% endblock %}
+{% block clase_hoja %}angosta comedor{% endblock %}
 {% block contenido %}
 <div class="kiosco">
   <div class="kiosco-comida">{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</div>
@@ -15,7 +15,8 @@
   </form>
 </div>
 <script>
-  {% if aviso or error %}setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 8000);{% endif %}
+  {% if aviso or error %}setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 8000);
+  {% else %}setTimeout(function(){ if (!document.getElementById('cedula').value) location.href = "{{ u('comedor') }}"; }, 300000);{% endif %}
   document.getElementById('cedula').focus();
 </script>
 {% endblock %}
