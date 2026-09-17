@@ -13,7 +13,7 @@
     <form method="POST" action="{{ url_for('admin_carga', que='vacaciones') }}">
       <textarea name="texto" rows="8" placeholder="1712345678	02/02/2026	16/02/2026	15
 1712345678	19/02/2026	19/02/2026	1	permiso">{{ texto }}</textarea>
-      <p class="ayuda">Sin días, se cuentan corridos entre las dos fechas. Un período que ya está cargado (mismo trabajador, desde y hasta) se saltea: se puede pegar dos veces sin duplicar. Los períodos anteriores al saldo al arrancar quedan como historia y no se restan.</p>
+      <p class="ayuda">Sin días, se cuentan corridos entre las dos fechas. Un período que ya está cargado (mismo trabajador, desde y hasta) se saltea: se puede pegar dos veces sin duplicar. Los períodos anteriores al saldo inicial quedan como historia y no se restan.</p>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn suave" type="submit" name="confirmar" value="0">Ver qué entendí</button>
         {% if buenas %}<button class="btn" type="submit" name="confirmar" value="1">Cargar {{ buenas|length }} {{ 'período' if buenas|length == 1 else 'períodos' }}</button>{% endif %}

@@ -47,8 +47,8 @@ línea ahí, y el test lo prueba contra la base falsa que repite la misma tabla.
 **Nunca `DELETE` en vacacion / ajuste_vacacion.** `borrar_*` marca `borrado_en`
 + `borrado_por`; toda lectura filtra `borrado_en IS NULL`; /admin/historial recupera.
 
-**En pantalla, palabras de RRHH**: disponibles, tomados, acumulados, generados
-(en contabilidad). «Ganados» no (pedido de Tamara 14/09).
+**En pantalla, palabras de RRHH**: disponibles, tomados, acumulados, acreditados
+(en contabilidad). «Ganados» ni «generados» no (pedido de Tamara 14/09).
 
 **Los avisos al trabajador no son automáticos**: no hay API de WhatsApp. Al
 responder un pedido, la pantalla ofrece un link `wa.me` con el mensaje armado.
@@ -72,11 +72,36 @@ invitados llevan el turno de quien los trae.
 
 **Palabras del comedor** (Tamara, 16/09: «muy poco profesional»): comensales,
 registrar/registrado, horario, sin registrar, quitar. No «quién comió»,
-«marcar», «se anotó», «nadie todavía». El usuario con `rol = 'comedor'`
-(antes `cafeteria`; el esquema lo renombra) ve /comedor/dia: quién comió,
-invitados, quién no se anotó (aviso por wa.me). Sábados, domingos y `feriado`
+«marcar», «se anotó», «nadie todavía». Sábados, domingos y `feriado`
 (precargados los nacionales de Ecuador, editables en /admin/feriados) salen en
 gris en Comidas del mes y se ocultan si no comió nadie.
+
+**El usuario del comedor SÓLO MIRA** (Tamara, 17/09/2026: «no debe ver nada más
+que quién comió, nada de celulares»). Con `rol = 'comedor'` (antes `cafeteria`;
+el esquema lo renombra) entra a /comedor/dia y ve los comensales del día, nada
+más: sin «Sin registrar», sin celulares ni wa.me, sin botones de registrar o
+quitar, sin Comidas del mes ni cuadro para pagar, sin ir a días futuros. Un POST
+suyo a /comedor/dia da 403. Registrar y quitar desde Comensales es de
+contabilidad (`es_contabilidad()`), y queda con su usuario a la vista («· conta»).
+La tablet registra por su propio link, no por este usuario.
+
+**La sesión se revalida en cada pedido** (`_cargar_usuario` relee
+`store.usuario(id)`): un usuario desactivado o con otro rol se cae al instante,
+también el del comedor con su cookie de 30 días. Una cookie sin rol vuelve a entrar.
+
+**Pedido y período van siempre juntos.** Corregir uno (desde Pedidos o con el
+lápiz de la ficha) corrige el otro; borrar desde la ficha el período de un
+pedido aprobado cancela el pedido; recuperarlo desde Historial lo vuelve a
+«aprobada». `_controlar_periodo` frena todo período que se pisa con uno ya
+cargado (también el pedido del trabajador, en `yo_pedir`), y avisa cuando
+empieza antes del saldo inicial (no descuenta). Aprobar más días de los que
+tiene exige marcar «Aprobar aunque no le alcance».
+
+**Un solo nombre por cosa en pantalla**: «le corresponden» (los días del año),
+«se acreditan» / «Acreditados» (sumar días), «saldo inicial» (la foto al
+cargarlo; nunca «al arrancar» en pantalla), «tomados», «Comensales» y «Comidas
+del mes» iguales en el menú y en el título. El nombre de pila para WhatsApp sale
+de `nombre_de_pila` (tercera palabra si hay 3 o más, si no la primera).
 
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.

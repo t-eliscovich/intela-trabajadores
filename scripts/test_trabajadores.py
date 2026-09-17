@@ -138,7 +138,7 @@ galleta = next((h for h in r.history[0].headers.getlist("Set-Cookie") if h.start
 check("la sesión del trabajador dura 30 días (cookie con vencimiento)", "Expires=" in galleta or "Max-Age=" in galleta)
 check("y son 30 días", A.app.config["PERMANENT_SESSION_LIFETIME"].days == 30)
 r = c.get("/yo/perfil")
-check("la pestaña de perfil abre y dice los días de este año", r.status_code == 200 and "Vacaciones este año" in r.get_data(as_text=True) and "por ley" in r.get_data(as_text=True))
+check("la pestaña de perfil abre y dice los días de este año", r.status_code == 200 and "Le corresponden por año" in r.get_data(as_text=True) and "por ley" in r.get_data(as_text=True))
 check("/yo manda a vacaciones", c.get("/yo").status_code == 302 and "/yo/vacaciones" in c.get("/yo").headers["Location"])
 check("el trabajador no puede marcar comidas", c.post("/yo/comida", data={}).status_code == 404)
 check("ni entrar a la cafetería", c.get("/cafeteria").status_code == 302)
@@ -193,42 +193,70 @@ r = k.post(T, data={"cedula": "1712345678"})
 html = r.get_data(as_text=True)
 check("si vuelve, le dice que ya registró y le ofrece invitados", "Ya registró" in html and "¿Trae invitados?" in html)
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "2", "descripcion": "proveedor"})
-check("anota 2 invitados con descripción, con su mismo horario", "2 invitados anotados" in r.get_data(as_text=True) and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == 2
+check("anota 2 invitados con descripción, con su mismo horario", "2 invitados registrados" in r.get_data(as_text=True) and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == 2
       and base.invitados_del_dia(HOY)[0]["turno"] == TURNO)
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "2", "descripcion": "más"})
 check("no pasa de 3 en el día", "máximo es 3" in r.get_data(as_text=True) and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == 2)
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "1", "descripcion": ""})
 check("sin descripción no", "quiénes son" in r.get_data(as_text=True))
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "1", "descripcion": "hermano"})
-check("el tercero entra y ya no ofrece más", "1 invitado anotado" in r.get_data(as_text=True) and "¿Trae invitados?" not in r.get_data(as_text=True))
+check("el tercero entra y ya no ofrece más", "1 invitado registrado" in r.get_data(as_text=True) and "¿Trae invitados?" not in r.get_data(as_text=True))
 r = k.post(T, data={"cedula": "0000000000"})
 check("cédula desconocida avisa", "No encontramos" in r.get_data(as_text=True))
 r = k.post(T, data={"cedula": "0999999999"})
 check("dado de baja no marca", "No encontramos" in r.get_data(as_text=True))
 check("el link viejo /cafeteria manda al comedor", "/comedor" in k.get("/cafeteria").headers["Location"])
 
-# el usuario del comedor
+# el usuario del comedor: SÓLO MIRA (Tamara 17/09: «nada más que quién comió, nada de celulares»)
 base.crear_usuario("comedor", generate_password_hash("come123"), "Comedor", "comedor")
+base.trab[maria]["celular"] = "0991112222"
 m = A.app.test_client()
 r = m.post("/admin/entrar", data={"usuario": "comedor", "clave": "come123"})
-check("el usuario del comedor entra y va a quién comió", r.status_code == 302 and "/comedor/dia" in r.headers["Location"])
+check("el usuario del comedor entra y va a Comensales", r.status_code == 302 and "/comedor/dia" in r.headers["Location"])
 check("pero no entra a contabilidad", "/comedor/dia" in m.get("/admin").headers["Location"])
+check("ni a Comidas del mes ni al cuadro para pagar", "/comedor/dia" in m.get("/admin/comidas").headers["Location"] and "/comedor/dia" in m.get("/admin/comidas/imprimir").headers["Location"])
 html = m.get("/comedor/dia").get_data(as_text=True)
-check("comensales: por horario, los invitados bajo su horario y los sin registrar", "Comensales" in html and "Juan Pérez" in html and "+2</b> proveedor" in html and "Sin registrar" in html and "María López" in html and "Sin horario" not in html and "18:30 a 19:00" in html)
-check("y puede avisar por WhatsApp al que no se anotó (si tiene celular)", "Avisar" in html or "wa.me" in html or True)
-r = m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo"}, follow_redirects=True)
-check("marca a uno que faltaba", (maria, HOY, "almuerzo") in base.alm)
-r = m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "desmarcar", "trabajador_id": maria, "tipo": "almuerzo"}, follow_redirects=True)
+check("comensales: por horario, los invitados bajo su horario", "Comensales" in html and "Juan Pérez" in html and "+2</b> proveedor" in html and "Sin horario" not in html and "18:30 a 19:00" in html)
+check("el comedor NO ve quién falta ni ningún celular", "Sin registrar" not in html and "María López" not in html and "wa.me" not in html and "0991112222" not in html)
+check("el comedor no tiene botones de registrar ni quitar", 'value="marcar"' not in html and 'value="desmarcar"' not in html and 'value="quitar_invitados"' not in html)
+check("el menú del comedor es sólo Comensales", "Por mes" not in html and ">Registrar<" not in html and "Comidas del mes" not in html)
+r = m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo"})
+check("si el comedor intenta registrar por POST, 403 y no pasa nada", r.status_code == 403 and (maria, HOY, "almuerzo") not in base.alm)
+r = m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "desmarcar", "trabajador_id": juan, "tipo": TIPO})
+check("ni quitar", r.status_code == 403 and (juan, HOY, TIPO) in base.alm)
+check("Comensales no deja ir a mañana", "María López" not in m.get(f"/comedor/dia?fecha={(HOY + timedelta(days=3)).isoformat()}").get_data(as_text=True) and HOY.strftime("%d de") in m.get(f"/comedor/dia?fecha={(HOY + timedelta(days=3)).isoformat()}").get_data(as_text=True))
+
+# desactivar al del comedor lo saca AL INSTANTE (antes seguía 30 días)
+cid = next(u["id"] for u in base.usuarios() if u["usuario"] == "comedor")
+base.activar_usuario(cid, False)
+check("un usuario desactivado deja de entrar con su sesión vieja", m.get("/comedor/dia").status_code == 302)
+base.activar_usuario(cid, True)
+check("y al reactivarlo tiene que entrar de nuevo (la sesión vieja se tiró)", m.get("/comedor/dia").status_code == 302)
+
+# contabilidad sí registra y quita desde Comensales
+base.crear_usuario("oficina", generate_password_hash("ofi12345"), "Oficina")
+cc = A.app.test_client()
+cc.post("/admin/entrar", data={"usuario": "oficina", "clave": "ofi12345"})
+html = cc.get("/comedor/dia").get_data(as_text=True)
+check("contabilidad ve los sin registrar con el botón de avisar", "Sin registrar" in html and "María López" in html and "wa.me/593991112222" in html)
+r = cc.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo"}, follow_redirects=True)
+check("contabilidad registra a uno que faltaba", (maria, HOY, "almuerzo") in base.alm)
+html = cc.get("/comedor/dia").get_data(as_text=True)
+check("y se ve quién lo registró", "· oficina" in html)
+r = cc.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "desmarcar", "trabajador_id": maria, "tipo": "almuerzo"}, follow_redirects=True)
 check("y lo saca", (maria, HOY, "almuerzo") not in base.alm)
-m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo", "turno": "13:00"})
-html = m.get("/comedor/dia").get_data(as_text=True)
+cc.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "tipo": "almuerzo", "turno": "13:00"})
+html = cc.get("/comedor/dia").get_data(as_text=True)
 check("el almuerzo se ve agrupado por horario", base.alm_turno[(maria, HOY, "almuerzo")] == "13:00" and "13:00 a 13:30" in html and 'class="turno"' in html)
+r = cc.post(f"/comedor/dia?fecha={(HOY + timedelta(days=2)).isoformat()}", data={"accion": "marcar", "trabajador_id": maria, "tipo": "cena"})
+check("tampoco contabilidad registra comidas de mañana", (maria, HOY + timedelta(days=2), "cena") not in base.alm)
 
 base.desmarcar_comida(maria, HOY, "almuerzo")
 iid = base.invitados_del_dia(HOY)[0]["id"]
-m.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "quitar_invitados", "id": iid})
+cc.post("/comedor/dia", data={"fecha": HOY.strftime("%d/%m/%Y"), "accion": "quitar_invitados", "id": iid})
 check("saca invitados", sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == 1)
-check("el comedor también ve el resumen por día", m.get("/admin/comidas").status_code == 200)
+check("contabilidad ve Comidas del mes", cc.get("/admin/comidas").status_code == 200)
+base.trab[maria]["celular"] = None
 check("un usuario con rol inventado no se crea", "rol" in _mensaje_de(lambda: base.crear_usuario("x", "h", "x", "jefe")))
 base.alm.discard((juan, HOY, TIPO))
 
@@ -314,7 +342,7 @@ html = c.get("/admin?q=perez").get_data(as_text=True)
 check("el buscador encuentra sin acento ni mayúsculas", "Juan Pérez" in html and "María López" not in html)
 html = c.get("/admin?q=0912").get_data(as_text=True)
 check("y por cédula", "María López" in html and "Juan Pérez" not in html)
-check("la lista dice Generados, no Ganados", "Generados" in html and "Ganados" not in html)
+check("la lista dice Acreditados, no Ganados ni Generados", "Acreditados" in html and "Generados" not in html and "Ganados" not in html)
 
 check("sin resultados lo dice", "Nadie coincide" in c.get("/admin?q=zzzz").get_data(as_text=True))
 c.post(f"/admin/trabajador/{juan}", data={"accion": "editar", "cedula": "1712345678", "nombre": "Juan Pérez", "fecha_ingreso": "25/03/2019", "direccion": "Calle 1"})
@@ -449,6 +477,55 @@ check("un aprobado no se borra", "Sólo se borra" in r.get_data(as_text=True) an
 c.post("/admin/solicitudes", data={"accion": "borrar", "id": ids[1]})
 check("un rechazado sí, y desaparece de la lista del trabajador", ids[1] not in base.sol and "falta el certificado" not in w.get("/yo/vacaciones").get_data(as_text=True))
 
+# --- los agujeros de la revisión del 17/09 ---
+rosa = base.crear_trabajador("1700000001", "ROSAS VERA ANA MARÍA", date(2015, 3, 1), 6, HOY - timedelta(days=6))
+rw = A.app.test_client(); rw.post("/", data={"cedula": "1700000001"})
+d1, d2 = HOY + timedelta(days=20), HOY + timedelta(days=22)
+rw.post("/yo/pedir", data={"tipo": "vacaciones", "desde": d1.isoformat(), "hasta": d2.isoformat()})
+rp = [p["id"] for p in base.solicitudes_pendientes()][0]
+c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp})
+r = rw.post("/yo/pedir", data={"tipo": "vacaciones", "desde": (d1 + timedelta(days=1)).isoformat(), "hasta": (d2 + timedelta(days=3)).isoformat()}, follow_redirects=True)
+check("el trabajador no puede pedir días que ya tiene aprobados o cargados", "ya están cargados" in r.get_data(as_text=True) and base.cuantas_pendientes() == 0)
+base.agregar_vacacion(rosa, HOY + timedelta(days=60), HOY + timedelta(days=62), 3, "", "conta")
+rw.post("/yo/pedir", data={"tipo": "vacaciones", "desde": (HOY + timedelta(days=30)).isoformat(), "hasta": (HOY + timedelta(days=31)).isoformat()})
+rp2 = [p["id"] for p in base.solicitudes_pendientes()][0]
+base.sol[rp2]["desde"], base.sol[rp2]["hasta"] = HOY + timedelta(days=61), HOY + timedelta(days=63)  # se pisa con lo cargado a mano después
+html = c.get("/admin/solicitudes").get_data(as_text=True)
+check("la bandeja marca el pedido que se pisa con un período ya cargado", "Se pisa con un período ya cargado" in html)
+r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp2}, follow_redirects=True)
+check("y no se puede aprobar así", "se pisan" in r.get_data(as_text=True) and base.solicitud(rp2)["estado"] == "pendiente")
+c.post("/admin/solicitudes", data={"accion": "rechazar", "id": rp2, "respuesta": "ya estaba cargado"})
+rw.post("/yo/pedir", data={"tipo": "vacaciones", "desde": (HOY + timedelta(days=40)).isoformat(), "hasta": (HOY + timedelta(days=49)).isoformat()})
+rp3 = [p["id"] for p in base.solicitudes_pendientes()][0]
+html = c.get("/admin/solicitudes").get_data(as_text=True)
+check("si pide más de lo que tiene, aparece «Aprobar aunque no le alcance»", "Aprobar aunque no le alcance" in html and 'name="igual"' in html)
+saldo_antes = A._resumen(base.trabajador(rosa))["saldo"]
+r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp3}, follow_redirects=True)
+check("aprobar más días de los que tiene sin marcarlo, frena y explica", "quedaría en" in r.get_data(as_text=True) and base.solicitud(rp3)["estado"] == "pendiente")
+r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp3, "igual": "1"}, follow_redirects=True)
+check("marcado, aprueba y el saldo queda negativo a conciencia", base.solicitud(rp3)["estado"] == "aprobada" and A._resumen(base.trabajador(rosa))["saldo"] == saldo_antes - 10)
+r = c.post("/admin/solicitudes", data={"accion": "editar", "id": rp, "desde": (d1 + timedelta(days=1)).strftime("%d/%m/%Y"), "hasta": (d2 + timedelta(days=1)).strftime("%d/%m/%Y")}, follow_redirects=True)
+check("corregir un aprobado cambia el pedido también (lo que ve el trabajador)", base.solicitud(rp)["desde"] == d1 + timedelta(days=1) and base.vac[base.solicitud(rp)["vacacion_id"]]["desde"] == d1 + timedelta(days=1) and (d1 + timedelta(days=1)).strftime("%d/%m/%Y") in rw.get("/yo/vacaciones").get_data(as_text=True))
+vid_r = base.solicitud(rp)["vacacion_id"]
+c.post(f"/admin/trabajador/{rosa}", data={"accion": "vacacion_editar", "id": vid_r, "tipo": "vacaciones", "desde": (d1 + timedelta(days=2)).strftime("%d/%m/%Y"), "hasta": (d2 + timedelta(days=2)).strftime("%d/%m/%Y")})
+check("corregir desde la ficha también sincroniza el pedido", base.solicitud(rp)["desde"] == d1 + timedelta(days=2))
+r = c.post(f"/admin/trabajador/{rosa}", data={"accion": "vacacion_borrar", "id": vid_r}, follow_redirects=True)
+check("borrar desde la ficha el período de un pedido aprobado cancela el pedido", base.solicitud(rp)["estado"] == "cancelada" and base.vac[vid_r]["borrado_en"] and "el pedido quedó cancelado" in r.get_data(as_text=True))
+check("y el trabajador lo ve cancelado", "Cancelado" in rw.get("/yo/vacaciones").get_data(as_text=True))
+c.post("/admin/historial", data={"que": "periodo", "id": vid_r})
+check("recuperar el período desde Historial vuelve el pedido a aprobado", base.solicitud(rp)["estado"] == "aprobada" and not base.vac[vid_r]["borrado_en"])
+atras = HOY - timedelta(days=10)  # antes del saldo inicial (HOY − 6)
+rw.post("/yo/pedir", data={"tipo": "vacaciones", "desde": atras.isoformat(), "hasta": atras.isoformat()})
+rp4 = [p["id"] for p in base.solicitudes_pendientes()][0]
+html = c.get("/admin/solicitudes").get_data(as_text=True)
+check("un pedido anterior al saldo inicial se marca en la bandeja", "Empieza antes del saldo inicial" in html)
+r = c.post("/admin/solicitudes", data={"accion": "aprobar", "id": rp4}, follow_redirects=True)
+check("y al aprobarlo avisa que no descuenta", "NO descuenta" in r.get_data(as_text=True) and base.solicitud(rp4)["estado"] == "aprobada")
+r = c.post("/admin/solicitudes", data={"accion": "cargar", "cedula": "1700000001", "tipo": "vacaciones", "desde": (HOY - timedelta(days=9)).strftime("%d/%m/%Y"), "hasta": (HOY - timedelta(days=9)).strftime("%d/%m/%Y")}, follow_redirects=True)
+check("lo mismo al cargar a mano", "NO descuenta" in r.get_data(as_text=True))
+check("el nombre de pila: con 3+ palabras la tercera, si no la primera", A.nombre_de_pila("ROSAS VERA ANA MARÍA") == "ANA" and A.nombre_de_pila("PÉREZ GÓMEZ JUAN") == "JUAN" and A.nombre_de_pila("Juan Pérez") == "Juan" and A.nombre_de_pila("") == "")
+check("y los dos avisos de WhatsApp usan la misma regla", "Hola ANA," in A._texto_aviso(base.solicitud(rp4)) and "Hola ANA," in A._texto_sin_registrar(base.trabajador(rosa), HOY))
+
 # el perfil que el trabajador corrige
 r = w.post("/yo/perfil", data={"celular": "099 111 2222", "direccion": "Av. Siempre Viva 123"}, follow_redirects=True)
 check("el trabajador corrige celular y dirección", base.trabajador(maria)["celular"] == "0991112222" and base.trabajador(maria)["direccion"] == "Av. Siempre Viva 123" and "Contabilidad los va a ver" in r.get_data(as_text=True))
@@ -475,9 +552,12 @@ check("crea el usuario del comedor y muestra el link de la tablet", base.usuario
 c.post("/admin/usuarios", data={"accion": "nuevo_link"})
 check("generar uno nuevo cambia la clave y el viejo da 404", base.configuracion("clave_comedor") != CLAVE and A.app.test_client().get(T).status_code == 404)
 check("contabilidad también puede abrir la tablet", c.get("/comedor").status_code == 200)
+c.post("/", data={"cedula": "1712345678"})
+check("probar una cédula en / no cierra la sesión de contabilidad del mismo navegador", c.get("/admin").status_code == 200)
 with c.session_transaction() as ses:
     ses["usuario"] = {"id": 1, "usuario": "vieja", "nombre": "Sesión vieja"}
-check("una sesión de antes de los roles sigue entrando a contabilidad", c.get("/admin").status_code == 200)
+check("una sesión sin rol (de antes de los roles) tiene que volver a entrar", c.get("/admin").status_code == 302)
+c.post("/admin/entrar", data={"usuario": "conta", "clave": "secreto1"})
 with c.session_transaction() as ses:
     ses["usuario"] = {"id": base.usuario_por_nombre("conta")["id"], "usuario": "conta", "nombre": "Contabilidad", "rol": "contabilidad"}
 yo_id = base.usuario_por_nombre("conta")["id"]
@@ -486,6 +566,11 @@ check("no se puede desactivar a sí mismo", "su propio usuario" in r.get_data(as
 ana_id = base.usuario_por_nombre("ana")["id"]
 c.post("/admin/usuarios", data={"accion": "desactivar", "id": ana_id})
 check("desactivado no puede entrar", base.usuario_por_nombre("ana") is None)
+
+# el esquema crea `invitado` ANTES de alterarlo (en una base nueva, si no, nace sin `turno`)
+import store as _store_real  # noqa: E402
+_esq = _store_real.ESQUEMA
+check("el ALTER de invitado.turno va después del CREATE TABLE invitado", _esq.index("CREATE TABLE IF NOT EXISTS trabajadores.invitado") < _esq.index("ALTER TABLE trabajadores.invitado ADD COLUMN IF NOT EXISTS turno"))
 
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")

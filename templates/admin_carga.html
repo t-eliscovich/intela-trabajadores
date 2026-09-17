@@ -13,7 +13,7 @@
     <form method="POST">
       <textarea name="texto" rows="8" placeholder="1712345678	Juan Pérez	25/03/2019	12	Tejeduría	12/08/1990	0991234567	20
 0912345678	María López	01/08/2023">{{ texto }}</textarea>
-      <p class="ayuda">Si la primera fila son los títulos, se salta sola. Los que ya están cargados se actualizan (nombre y fecha); el saldo sólo se carga a los nuevos. «Días que ya tiene» es el saldo de HOY: de ahí en adelante la cuenta sigue sola.</p>
+      <p class="ayuda">Si la primera fila son los títulos, se salta sola. Los que ya están cargados se actualizan (nombre y fecha); el saldo sólo se carga a los nuevos. «Días que le quedan hoy» es el saldo inicial: de ahí en adelante la cuenta sigue sola.</p>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn suave" type="submit" name="confirmar" value="0">Ver qué entendí</button>
         {% if buenas %}<button class="btn" type="submit" name="confirmar" value="1">Cargar {{ buenas|length }} {{ 'trabajador' if buenas|length == 1 else 'trabajadores' }}</button>{% endif %}
@@ -27,7 +27,7 @@
   <div class="titulo"><h2>Entran ({{ buenas|length }})</h2></div>
   <div class="desliza">
   <table>
-    <thead><tr><th>Fila</th><th>Cédula</th><th>Nombre</th><th>Ingreso</th><th class="der">Le quedan hoy</th><th>Área</th><th>Nacimiento</th><th>Celular</th><th class="der">Por año</th><th></th></tr></thead>
+    <thead><tr><th>Fila</th><th>Cédula</th><th>Nombre</th><th>Ingreso</th><th class="der">Saldo inicial</th><th>Área</th><th>Nacimiento</th><th>Celular</th><th class="der">Por año</th><th></th></tr></thead>
     <tbody>
     {% for b in buenas %}
       <tr>

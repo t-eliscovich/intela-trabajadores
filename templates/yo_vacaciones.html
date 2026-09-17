@@ -11,10 +11,10 @@
     <div style="font-size:15px;font-weight:700;margin-top:4px">días de vacaciones disponibles</div>
     <p class="tenue" style="margin:10px 0 0;font-size:14px">
       {% if v.primer_anio %}
-        Cumple un año en Intela el {{ v.aniversario|fecha }}: ese día se le suman {{ v.proxima_cantidad|num }}.
+        Cumple un año en Intela el {{ v.aniversario|fecha }}: ese día se le acreditan {{ v.proxima_cantidad|num }}.
       {% else %}
-        Este año le tocan {{ v.este_anio|num }}{% if v.tomados_anio %} y ya tomó {{ v.tomados_anio|num(1) }}{% endif %}.
-        El 1 de enero se suman {{ v.proxima_cantidad|num }} más.
+        Este año le corresponden {{ v.este_anio|num }}{% if v.tomados_anio %} y ya tomó {{ v.tomados_anio|num(1) }}{% endif %}.
+        El 1 de enero se acreditan {{ v.proxima_cantidad|num }} más.
       {% endif %}
     </p>
   </div>

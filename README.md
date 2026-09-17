@@ -21,7 +21,7 @@ tiene 10 minutos para deshacer. Puede anotar hasta 3 invitados (quiénes son, si
 también después de haber comido. Eso es lo que después se le paga al comedor.
 
 **El usuario del comedor** entra con usuario y clave y ve, día por día, quién almorzó, quién
-cenó, los invitados y quién no se anotó (con un botón para avisarle por WhatsApp).
+cenó y los invitados; contabilidad además ve quién no registró (con un botón para avisarle por WhatsApp).
 
 **Contabilidad** entra con usuario y clave a `/admin` y tiene:
 
@@ -36,7 +36,7 @@ cenó, los invitados y quién no se anotó (con un botón para avisarle por What
 - **Comidas del mes**: una fila por día con almuerzos, cenas e invitados (sábados, domingos y
   feriados en gris); el «Cuadro para pagar» trabajador × día se imprime aparte. Los feriados
   se editan ahí mismo;
-- **Comedor**: lo mismo que ve el usuario del comedor, por si hay que marcar desde la oficina;
+- **Comensales**: lo mismo que ve el usuario del comedor, más registrar o quitar desde la oficina;
 - **Historial**: lo que se borró (períodos, ajustes), con quién y cuándo; se recupera con un botón;
 - **Usuarios**: quién más entra a esta parte.
 
