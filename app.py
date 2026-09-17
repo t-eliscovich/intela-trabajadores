@@ -1189,10 +1189,14 @@ def admin_historial():
 # El cuadro de comidas del mes
 # --------------------------------------------------------------------------
 @app.route("/admin/comidas", methods=["GET", "POST"])
-@requiere_admin
+@requiere_sesion
 def admin_comidas():
+    """El resumen del mes: por semana y por día, con quiénes. Lo ven igual el
+    comedor y contabilidad (Tamara 17/09); registrar a mano es de contabilidad."""
     anio, mes = leer_mes(request.values.get("mes"))
     if request.method == "POST":
+        if not es_contabilidad():
+            abort(403)
         try:
             fecha = leer_fecha(request.form.get("fecha", ""))
             tipo = leer_tipo_comida(request.form.get("tipo"))
@@ -1232,7 +1236,7 @@ def admin_comidas():
     totales["total"] = totales["almuerzo"] + totales["cena"] + totales["invitados"]
     return render_template("admin_comidas.html", anio=anio, mes=mes, filas=filas, totales=totales, semanas=semanas,
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes),
-                           trabajadores=store.trabajadores())
+                           trabajadores=store.trabajadores(), edita=es_contabilidad())
 
 
 def _por_semana(filas: list[dict]) -> list[dict]:

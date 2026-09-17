@@ -290,6 +290,7 @@
     {% if g.usuario and g.usuario.rol == 'comedor' %}
     <nav>
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Comensales</a>
+      <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
     </nav>
     <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
     {% elif g.token %}

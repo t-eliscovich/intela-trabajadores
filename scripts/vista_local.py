@@ -89,6 +89,7 @@ guardar("comedor_invitados", k.post(T + "/invitados", data={"cedula": "171234567
 m = A.app.test_client()
 m.post("/admin/entrar", data={"usuario": "comedor", "clave": "x"})
 guardar("comedor_dia", m.get("/comedor/dia").get_data(as_text=True))
+guardar("comedor_comidas_mes", m.get("/admin/comidas").get_data(as_text=True))
 
 # contabilidad
 c = A.app.test_client()

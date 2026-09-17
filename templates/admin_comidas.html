@@ -4,8 +4,8 @@
 <h1>Comidas del mes
   <span class="no-imprime" style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span class="mes-nav"><a href="{{ url_for('admin_comidas', mes=anterior) }}">‹</a><b>{{ MESES[mes]|capitalize }} {{ anio }}</b><a href="{{ url_for('admin_comidas', mes=siguiente) }}">›</a></span>
-    <a class="btn suave chico" href="{{ url_for('admin_comidas_imprimir', mes=anio ~ '-' ~ '%02d' % mes) }}">Cuadro para pagar</a>
-    <a class="btn suave chico" href="{{ url_for('admin_feriados') }}">Feriados</a>
+    {% if edita %}<a class="btn suave chico" href="{{ url_for('admin_comidas_imprimir', mes=anio ~ '-' ~ '%02d' % mes) }}">Cuadro para pagar</a>
+    <a class="btn suave chico" href="{{ url_for('admin_feriados') }}">Feriados</a>{% endif %}
   </span>
 </h1>
 
@@ -65,6 +65,7 @@
   <div class="nota">Toque el + para ver quiénes. Sábados, domingos y feriados en gris; si no comió nadie, no aparecen.</div>
 </div>
 
+{% if edita %}
 <div class="bloque no-imprime">
   <details>
     <summary>Registrar una comida a mano</summary>
@@ -79,4 +80,5 @@
     </div>
   </details>
 </div>
+{% endif %}
 {% endblock %}

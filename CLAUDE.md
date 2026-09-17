@@ -80,8 +80,10 @@ gris en Comidas del mes y se ocultan si no comió nadie.
 que quién comió, nada de celulares»). Con `rol = 'comedor'` (antes `cafeteria`;
 el esquema lo renombra) entra a /comedor/dia y ve los comensales del día, nada
 más: sin «Sin registrar», sin celulares ni wa.me, sin botones de registrar o
-quitar, sin Comidas del mes ni cuadro para pagar, sin ir a días futuros. Un POST
-suyo a /comedor/dia da 403. Registrar y quitar desde Comensales es de
+quitar, sin ir a días futuros. También ve **Comidas del mes** (el resumen por
+semana y por día, IGUAL que contabilidad — pedido de Tamara del mismo día), sin
+el formulario de registrar a mano, sin Feriados ni cuadro para pagar. Un POST
+suyo a /comedor/dia o /admin/comidas da 403. Registrar y quitar desde Comensales es de
 contabilidad (`es_contabilidad()`), y queda con su usuario a la vista («· conta»).
 La tablet registra por su propio link, no por este usuario.
 
