@@ -1872,6 +1872,49 @@ def _constancia(r: dict) -> dict:
     return {"intacto": r.get("firma_huella") == roles.huella(r), "equipo": roles.dispositivo(r.get("firmado_desde"))}
 
 
+def _para_imprimir(recibos: list[dict]) -> list[dict]:
+    """Le agrega a cada recibo lo de la constancia (equipo, si sigue igual)."""
+    for r in recibos:
+        c = _constancia(r)
+        r["equipo"], r["intacto"] = c["equipo"], c["intacto"]
+    return recibos
+
+
+@app.route("/admin/roles/<int:id_>/imprimir")
+@requiere_admin
+def admin_rol_imprimir(id_):
+    r = store.rol_pago(id_)
+    if not r:
+        abort(404)
+    return render_template("rol_imprimir.html", recibos=_para_imprimir([r]), anio=r["anio"], mes=r["mes"],
+                           url_firma=lambda i: url_for("admin_rol_firma", id_=i), auto=request.args.get("auto") == "1",
+                           volver=url_for("admin_rol", id_=id_))
+
+
+@app.route("/admin/roles/imprimir")
+@requiere_admin
+def admin_roles_imprimir():
+    """El mes entero, dos recibos por hoja A4."""
+    anio, mes = leer_mes(request.args.get("mes"))
+    return render_template("rol_imprimir.html", recibos=_para_imprimir(store.roles_del_mes(anio, mes)), anio=anio, mes=mes,
+                           url_firma=lambda i: url_for("admin_rol_firma", id_=i), auto=False,
+                           volver=url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
+
+
+@app.route("/yo/rol/<int:id_>/imprimir")
+def yo_rol_imprimir(id_):
+    """El recibo del trabajador para imprimir o guardar en PDF. Sólo el suyo."""
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    r = store.rol_pago(id_)
+    if not r or r["trabajador_id"] != t["id"]:
+        abort(404)
+    return render_template("rol_imprimir.html", recibos=_para_imprimir([r]), anio=r["anio"], mes=r["mes"], t=t,
+                           url_firma=lambda i: url_for("yo_rol_firma", id_=i), auto=request.args.get("auto") == "1",
+                           volver=url_for("yo_rol", mes=f"{r['anio']}-{r['mes']:02d}"))
+
+
 @app.route("/admin/roles/<int:id_>/firma.png")
 @requiere_admin
 def admin_rol_firma(id_):

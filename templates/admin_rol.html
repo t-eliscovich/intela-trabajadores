@@ -5,7 +5,8 @@
 {% include "_recibo_estilos.html" %}
 <div style="display:flex;gap:8px;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap">
   <a class="btn suave chico" href="{{ url_for('admin_roles', mes='%d-%02d'|format(r.anio, r.mes)) }}">‹ {{ nombre_mes(r.anio, r.mes) }}</a>
-  <a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
+  <span style="display:flex;gap:8px"><a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
+  <a class="btn chico" href="{{ url_for('admin_rol_imprimir', id_=r.id, auto=1) }}">Imprimir o guardar PDF</a></span>
 </div>
 <div class="bloque">{% include "_recibo.html" %}</div>
 {% if r.firmado_en %}

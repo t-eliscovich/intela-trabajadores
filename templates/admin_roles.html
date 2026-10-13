@@ -4,6 +4,7 @@
 <h1>Roles de pago
   <span class="mes-nav"><a href="{{ url_for('admin_roles', mes=anterior) }}" title="Mes anterior">‹</a>{{ nombre_mes(anio, mes) }}<a href="{{ url_for('admin_roles', mes=siguiente) }}" title="Mes siguiente">›</a></span>
   <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+    {% if filas %}<a class="btn suave chico" href="{{ url_for('admin_roles_imprimir', mes='%d-%02d'|format(anio, mes)) }}">Imprimir el mes</a>{% endif %}
     <a class="btn chico" href="{{ url_for('admin_roles_cargar') }}">Cargar el rol del mes</a>
   </span>
 </h1>
@@ -37,7 +38,7 @@
   <div class="titulo"><h2>Últimas firmas</h2><p>{{ firmados }} de {{ piden }} ya firmaron{% if firmados < piden %} · faltan {{ piden - firmados }}{% endif %}</p></div>
   <table><tbody>
   {% for r in recientes %}
-    <tr><td><span class="etiqueta ok">✓</span> <b>{{ r.nombre }}</b></td><td class="tenue">{{ r.firmado_en|fecha_hora }}</td>
+    <tr><td><span class="etiqueta ok">✓</span> <b>{{ r.nombre }}</b><span class="chico" style="margin-left:30px">{{ r.firmado_en|fecha_hora }}</span></td>
         <td class="der"><a href="{{ url_for('admin_rol', id_=r.id) }}">Ver constancia</a></td></tr>
   {% endfor %}
   </tbody></table>
@@ -54,18 +55,18 @@
 <div class="bloque">
   <div class="desliza">
   <table>
-    <thead><tr><th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th><th>Firma</th><th></th></tr></thead>
+    <thead><tr><th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th><th>Firma</th><th class="oculta-chico"></th></tr></thead>
     <tbody>
     {% for r in filas %}
       <tr class="fila-rol" data-q="{{ (r.nombre ~ ' ' ~ r.cedula)|lower }}" data-firmado="{{ 'si' if r.firmado_en else ('no' if r.pide_firma else 'h') }}">
-        <td><a href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}" style="color:inherit;text-decoration:none"><b>{{ r.nombre }}</b></a><span class="chico">{{ r.cedula }}{% if r.area %} · {{ r.area }}{% endif %}</span></td>
+        <td><a href="{{ url_for('admin_rol', id_=r.id) }}" style="color:inherit;text-decoration:none"><b>{{ r.nombre }}</b></a><span class="chico">{{ r.cedula }}{% if r.area %} · {{ r.area }}{% endif %}</span></td>
         <td class="der oculta-chico">{{ r.total_ingresos|dinero }}</td>
         <td class="der oculta-chico">{{ r.total_descuentos|dinero }}</td>
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
         <td>{% if not r.pide_firma %}<span class="etiqueta ok">✓ En papel</span><span class="chico">firmado fuera de la app</span>
             {% elif r.firmado_en %}<span class="etiqueta ok">✓ Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>
             {% else %}<span class="etiqueta pendiente">Sin firmar</span>{% if r.wa %} <a class="chico" style="display:inline" href="{{ r.wa }}" target="_blank" rel="noopener">avisarle por WhatsApp</a>{% endif %}{% endif %}</td>
-        <td class="der"><a class="btn suave chico" href="{{ url_for('admin_rol', id_=r.id) }}">{{ 'Ver constancia' if r.firmado_en else 'Ver recibo' }}</a></td>
+        <td class="der oculta-chico"><a class="btn suave chico" href="{{ url_for('admin_rol', id_=r.id) }}">{{ 'Ver constancia' if r.firmado_en else 'Ver recibo' }}</a></td>
       </tr>
     {% endfor %}
     </tbody>

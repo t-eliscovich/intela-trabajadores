@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block titulo %}Rol de pagos · {% if recibos|length == 1 %}{{ recibos[0].nombre }} · {% endif %}{{ nombre_mes(anio, mes) }}{% endblock %}
+{% block contenido %}
+<style>
+  /* La hoja impresa del rol (Tamara 13/10: «que pueda imprimir el trabajador y admin»).
+     En pantalla se ve como en papel; al imprimir, A4, dos recibos por hoja. */
+  .papel{max-width:780px;margin:0 auto}
+  .acciones{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .acciones p{margin:0;font-size:13px;color:var(--gris);flex:1;min-width:200px}
+  .recibo-p{background:#fff;border:1px solid #cfd6df;border-radius:6px;padding:18px 22px 16px;margin-bottom:14px;color:#0f172a;
+            display:flex;flex-direction:column;font-size:13px}
+  .rp-top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #0f172a;padding-bottom:6px}
+  .rp-emp{font-weight:800;font-size:17px;letter-spacing:.08em}
+  .rp-tit{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#64748b;font-weight:700}
+  .rp-per{font-weight:800;font-size:15px}
+  .rp-datos{display:grid;grid-template-columns:2.4fr 1fr 1fr;gap:12px;margin:10px 0 4px}
+  .rp-datos span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700}
+  .rp-extra{font-size:11px;color:#64748b;margin-bottom:2px}
+  .rp-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:6px;align-items:start}
+  .rp-cols table{width:100%;border-collapse:collapse}
+  .rp-cols th{background:none;color:#0f172a;padding:4px 0;border-bottom:1px solid #0f172a;font-size:10px}
+  .rp-cols td{padding:3.5px 0;border-bottom:1px dotted #d5dbe3;font-size:12.5px}
+  .rp-cols tfoot td{border-top:1px solid #0f172a;border-bottom:0;font-weight:800;padding-top:5px}
+  .rp-det{color:#94a3b8;font-size:11px;margin-left:5px}
+  .rp-liq{display:flex;justify-content:space-between;align-items:center;background:#eef2f7;border-radius:6px;padding:8px 12px;margin-top:10px;
+          -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rp-liq span{font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+  .rp-liq b{font-size:20px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .rp-pie{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:14px;align-items:end}
+  .rp-firma{text-align:center;font-size:11px;color:#475569}
+  .rp-firma .trazo{height:58px;display:flex;align-items:flex-end;justify-content:center}
+  .rp-firma .trazo img{max-height:58px;max-width:100%}
+  .rp-firma .linea{border-top:1px solid #0f172a;padding-top:3px}
+  .rp-papel{font-size:12px;font-weight:700;color:#15803d;height:58px;display:flex;align-items:flex-end;justify-content:center}
+  .rp-const{font-size:10px;color:#475569;line-height:1.45}
+  .rp-const b{color:#0f172a}
+  .rp-const .huella{font-family:ui-monospace,Menlo,monospace;font-size:8.5px;word-break:break-all;color:#64748b}
+  .rp-const .ok{color:#15803d;font-weight:700}
+  @media print{
+    @page{size:A4;margin:9mm 11mm}
+    .papel{max-width:none}
+    .recibo-p{border:1px solid #999;border-radius:3px;height:136mm;margin-bottom:5mm;padding:14px 18px;page-break-inside:avoid}
+    .recibo-p:nth-of-type(2n){page-break-after:always;margin-bottom:0}
+    .recibo-p:last-of-type{page-break-after:auto}
+  }
+  @media(max-width:600px){
+    .recibo-p{padding:14px 14px}
+    .rp-datos{grid-template-columns:1fr 1fr}
+    .rp-datos div:first-child{grid-column:1/-1}
+    .rp-cols{grid-template-columns:1fr;gap:10px}
+    .rp-pie{grid-template-columns:1fr;gap:12px}
+  }
+</style>
+
+<div class="papel">
+  <div class="acciones no-imprime">
+    <a class="btn suave chico" href="{{ volver }}">‹ Volver</a>
+    <p>{% if recibos|length > 1 %}{{ recibos|length }} recibos, dos por hoja. {% endif %}En el celular: «Imprimir» y elija la impresora, o «Guardar como PDF» para guardarlo o mandarlo.</p>
+    <button class="btn chico" type="button" onclick="window.print()">Imprimir o guardar PDF</button>
+  </div>
+
+  {% if not recibos %}<div class="bloque"><div class="vacio"><h3>No hay roles cargados para {{ nombre_mes(anio, mes).lower() }}.</h3></div></div>{% endif %}
+
+  {% for r in recibos %}
+  <section class="recibo-p">
+    <div class="rp-top">
+      <div><div class="rp-emp">INTELA</div><div class="rp-tit">Rol de pagos</div></div>
+      <div class="rp-per">{{ nombre_mes(r.anio, r.mes) }}</div>
+    </div>
+    <div class="rp-datos">
+      <div><span>Trabajador</span><b>{{ r.nombre }}</b></div>
+      <div><span>Cédula</span>{{ r.cedula }}</div>
+      <div><span>Sueldo nominal</span>{{ r.sueldo|dinero if r.sueldo else '—' }}</div>
+    </div>
+    {% if r.atrasos or r.otros %}<div class="rp-extra">{% if r.atrasos %}Atrasos: {{ r.atrasos|num(2) }}{% endif %}{% if r.atrasos and r.otros %} · {% endif %}{% if r.otros %}Otros: {{ r.otros|num(2) }}{% endif %}</div>{% endif %}
+    <div class="rp-cols">
+      <table><thead><tr><th>Ingresos</th><th class="der">Valor</th></tr></thead>
+        <tbody>{% for x in r.ingresos %}<tr><td>{{ x.concepto }}{% if x.detalle %}<span class="rp-det">{{ x.detalle }}</span>{% endif %}</td><td class="der">{{ x.valor|dinero }}</td></tr>{% endfor %}</tbody>
+        <tfoot><tr><td>Total ingresos</td><td class="der">{{ r.total_ingresos|dinero }}</td></tr></tfoot></table>
+      <table><thead><tr><th>Descuentos</th><th class="der">Valor</th></tr></thead>
+        <tbody>{% for x in r.descuentos %}<tr><td>{{ x.concepto }}</td><td class="der">{{ x.valor|dinero }}</td></tr>{% else %}<tr><td style="color:#94a3b8">—</td><td></td></tr>{% endfor %}</tbody>
+        <tfoot><tr><td>Total descuentos</td><td class="der">{{ r.total_descuentos|dinero }}</td></tr></tfoot></table>
+    </div>
+    <div class="rp-liq"><span>Líquido a recibir</span><b>$ {{ r.liquido|dinero }}</b></div>
+    <div class="rp-pie">
+      <div class="rp-firma">
+        {% if r.firmado_en %}<div class="trazo"><img src="{{ url_firma(r.id) }}" alt="Firma"></div>
+        {% elif r.pide_firma is sameas false %}<div class="rp-papel">✓ Firmado en papel</div>
+        {% else %}<div class="trazo"></div>{% endif %}
+        <div class="linea">Recibí conforme · {{ r.nombre }}</div>
+      </div>
+      {% if r.firmado_en %}
+      <div class="rp-const">
+        <b>Firmado en la aplicación</b> el {{ r.firmado_en|fecha_hora }} (hora de Ecuador){% if r.equipo %}, desde {{ r.equipo }}{% endif %}.<br>
+        {% if r.intacto %}<span class="ok">✓ El recibo es el mismo que se firmó.</span>{% elif r.intacto is not none %}<b style="color:#b91c1c">El recibo cambió después de firmarse.</b>{% endif %}
+        {% if r.firma_huella %}<br>Huella: <span class="huella">{{ r.firma_huella }}</span>{% endif %}
+      </div>
+      {% else %}
+      <div class="rp-firma"><div class="trazo"></div><div class="linea">Contabilidad</div></div>
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% if auto %}<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 300); });</script>{% endif %}
+{% endblock %}

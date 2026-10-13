@@ -14,7 +14,7 @@
 {% for tipo, letra in TIPOS_COMIDA %}
 <div class="bloque">
   <div class="titulo"><h2>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}</h2><p>{{ por_tipo[tipo]|length }} {{ 'comensal' if por_tipo[tipo]|length == 1 else 'comensales' }}</p></div>
-  <div class="turnos" style="grid-template-columns:repeat({{ columnas[tipo]|length }},1fr)">
+  <div class="turnos" style="grid-template-columns:repeat({{ columnas[tipo]|length }},minmax(0,1fr))">
     {% for turno, gente, inv in columnas[tipo] %}
     <div class="turno">
       {% set ninv = inv|sum(attribute='cantidad') %}<h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ gente|length }}{% if ninv %} <small class="chico">+{{ ninv }}</small>{% endif %}</b></h3>

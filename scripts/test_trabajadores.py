@@ -741,13 +741,13 @@ html = r.get_data(as_text=True)
 roles_sep = base.roles_del_mes(2026, 9)
 check("confirmado: carga Juan, María, Rosa y el elegido a mano", r.status_code == 200 and "cargado para 4" in html and len(roles_sep) == 4)
 check("al elegido a mano le queda el código de WinAfin", base.trabajador(pedro["id"])["codigo_rol"] == 4)
-check("la lista del mes muestra totales y firmas, sin imprimir", "0 de 4" in html and "Sin firmar" in html and "Imprimir" not in html)
+check("la lista del mes muestra totales y firmas, e «Imprimir el mes»", "0 de 4" in html and "Sin firmar" in html and "Imprimir el mes" in html)
 check("el menú de contabilidad avisa cuántos faltan firmar", "4 sin firmar en el último mes" in html)
 check("con celular, ofrece avisarle por WhatsApp", "wa.me/593990001111" in html)
 rid_rosa = next(x["id"] for x in roles_sep if x["trabajador_id"] == rosa)
 html = c.get(f"/admin/roles/{rid_rosa}").get_data(as_text=True)
-check("el recibo dice ingresos, descuentos y líquido; sin provisiones ni imprimir", "Impuesto a la renta" in html and "533,30" in html
-      and "Todavía no lo firmó" in html and "Provisi" not in html and "Aporte Patr" not in html and "window.print" not in html)
+check("el recibo dice ingresos, descuentos y líquido; sin provisiones; con «Imprimir»", "Impuesto a la renta" in html and "533,30" in html
+      and "Todavía no lo firmó" in html and "Provisi" not in html and "Aporte Patr" not in html and "Imprimir o guardar PDF" in html)
 check("la ficha muestra los roles", "Roles de pago" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
 # el trabajador
 html = rw.get("/yo/rol").get_data(as_text=True)
@@ -902,6 +902,23 @@ check("confirmado: septiembre queda firmado en papel, ya no pide firma a nadie",
 check("el trabajador lo ve firmado en papel, sin recuadro", "firmado en papel" in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True)
       and 'id="lienzo"' not in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True))
 check("el comedor no puede marcarlo", m.post("/admin/roles/papel", data={"mes": "2026-09", "confirmo": "1"}).status_code == 302)
+# --- imprimir (Tamara 13/10: «que pueda imprimir el trabajador y admin») ---
+_rid = next(x["id"] for x in base.roles_del_mes(2026, 9) if x["trabajador_id"] == rosa)
+html = rw.get(f"/yo/rol/{_rid}/imprimir").get_data(as_text=True)
+check("el trabajador imprime su recibo: INTELA, conceptos, líquido, sin provisiones", "INTELA" in html and "Líquido a recibir" in html
+      and "Recibí conforme" in html and "Aporte Patr" not in html and "window.print" in html)
+_otro = next(x["id"] for x in base.roles_del_mes(2026, 7) if x["trabajador_id"] != rosa)
+check("y NO el de otro (404)", rw.get(f"/yo/rol/{_otro}/imprimir").status_code == 404)
+check("sin sesión, a la cédula", A.app.test_client().get(f"/yo/rol/{_rid}/imprimir").status_code == 302)
+check("el botón está en su pantalla", f"/yo/rol/{_rid}/imprimir" in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True))
+html = c.get("/admin/roles/imprimir?mes=2026-09").get_data(as_text=True)
+check("contabilidad imprime el mes entero, un recibo por trabajador", html.count('class="recibo-p"') == len(base.roles_del_mes(2026, 9)))
+check("y uno solo", c.get(f"/admin/roles/{_otro}/imprimir").status_code == 200)
+check("el comedor no imprime roles", m.get("/admin/roles/imprimir?mes=2026-09").status_code == 302 and m.get(f"/admin/roles/{_otro}/imprimir").status_code == 302)
+_firm = next((x for x in base.roles_del_mes(2026, 9) if x["firmado_en"]), None)
+if _firm:
+    check("si firmó en la app, la hoja lleva la firma y la constancia", "Firmado en la aplicación" in c.get(f"/admin/roles/{_firm['id']}/imprimir").get_data(as_text=True))
+check("un mes firmado en papel lo dice en la hoja", "Firmado en papel" in c.get(f"/admin/roles/{base.roles_del_mes(2026, 7)[0]['id']}/imprimir").get_data(as_text=True))
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
 check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}), cl.get("/yo/rol").get_data(as_text=True))[2])(A.app.test_client()))
 

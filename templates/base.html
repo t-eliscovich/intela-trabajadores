@@ -246,7 +246,9 @@
   .dia-quienes li small{display:block;font-size:12px;color:var(--gris-claro)}
   .dia-quienes li small.turno{display:inline;margin-left:6px}
   .turnos{display:grid;gap:0}
-  @media (max-width:640px){.turnos{grid-template-columns:1fr 1fr !important}}
+  @media (max-width:640px){.turnos{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important}}
+  .turnos .turno{min-width:0}
+  .turno-nombre.invitado span{white-space:normal}
   .turnos .turno{border-right:1px solid var(--borde);padding:0 0 8px}
   .turnos .turno:last-child{border-right:0}
   .turno h3{margin:0;font-size:13px;font-weight:700;padding:8px 12px;background:#f4f6f9;border-bottom:1px solid var(--borde);
@@ -261,7 +263,7 @@
   .turno-nombre.invitado{background:#fbfaf3}
   .turno-nombre.invitado b{color:var(--acento)}
   .turno-nadie{margin:0;padding:10px 12px;font-size:13px;color:var(--gris)}
-  .turnos-abajo{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start}
+  .turnos-abajo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px;align-items:start}
   .dia-quienes .nadie{color:var(--gris-claro)}
   .dias-total{font-weight:800;padding-top:10px;padding-bottom:10px;border-top:1px solid var(--borde);background:#fafbfc}
   @media(max-width:600px){
@@ -271,12 +273,24 @@
   }
 
   @media(max-width:760px){
+    /* El menú va en su propio renglón (antes quedaba aplastado: «Tra…»). */
+    .barra{flex-wrap:wrap;gap:0 12px;padding:0 12px}
+    .barra nav{order:3;flex:1 0 100%;margin:0 -12px;padding:0 6px;border-top:1px solid rgba(255,255,255,.08)}
+    .barra nav:empty{display:none}
+    .barra nav a{padding:10px 10px 8px}
+    .quien{max-width:none;flex:1;text-align:right}
     .hoja{padding:12px 11px 28px}
     h1{font-size:17px}
     .cifras{flex-wrap:wrap}
     .cifra{flex:1 1 50%;border-bottom:1px solid var(--borde)}
     .oculta-chico{display:none}
     td,th{padding:9px 8px}
+  }
+  /* En pantallas táctiles, los botoncitos (✎, ×) tienen que entrar con el dedo: 40 px como mínimo. */
+  @media (pointer:coarse), (max-width:760px){
+    .borrar-fila,.t-acciones .borrar-fila,.turno-nombre .borrar-fila{min-width:40px;min-height:40px;
+        display:inline-flex;align-items:center;justify-content:center;font-size:19px}
+    .btn.chico{min-height:36px}
   }
   @media print{
     header,.no-imprime,.mensaje{display:none!important}

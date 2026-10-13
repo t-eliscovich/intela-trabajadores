@@ -171,6 +171,15 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   ofrece «Marcar como firmado en papel» (con «Confirmo…»); pone `pide_firma = false`
   a los que no firmaron. En pantalla los meses sin firma en la app se ven como
   «✓ En papel» / «Este rol ya está firmado en papel».
+- **Imprimir** (Tamara 13/10: «que pueda imprimir el trabajador y admin»): una sola
+  hoja, `rol_imprimir.html` (A4, dos por hoja), con la firma y la constancia si firmó
+  en la app, «✓ Firmado en papel» o líneas para firmar a mano. El trabajador:
+  `/yo/rol/N/imprimir` (sólo el suyo, botón «Imprimir o guardar en PDF» cuando ya está
+  firmado); contabilidad: `/admin/roles/N/imprimir` y «Imprimir el mes».
+- **Diseño en el celular** (revisión del 13/10, todas las pantallas a 390 y 1280 px,
+  todos los links con cada usuario): los botoncitos ✎ y × miden 40 px en pantallas
+  chicas; el menú de arriba va en su propio renglón; las columnas de Comensales usan
+  `minmax(0,1fr)` (antes la derecha se cortaba con invitados de nombre largo).
 - **Cédulas mal tipeadas en el padrón**: `roles.cedula_valida` (dígito verificador
   ecuatoriano). Al cargar el historial, si la del padrón no es válida y la de WinAfin
   sí, al confirmar se corrige en el padrón (`store.corregir_cedula`, si nadie más la
