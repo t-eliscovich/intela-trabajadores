@@ -822,6 +822,11 @@ check("un mes que no es suyo o no existe cae en el último", "Septiembre 2026" i
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
 check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (cl.post("/", data={"cedula": "0912345678"}), cl.get("/yo/rol").get_data(as_text=True))[1])(A.app.test_client()))
 
+import re as _re0  # noqa: E402
+_pegadas = [x[:60] for x in _store_real._sentencias(_store_real.ESQUEMA)
+            if len(_re0.findall(r"^\s*(CREATE|ALTER|UPDATE|INSERT|DROP)\b", x, _re0.M)) > 1]
+check("el esquema no tiene sentencias pegadas (falta un ;)" + (f": {_pegadas}" if _pegadas else ""), not _pegadas)
+
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
 for ruta in ("/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",

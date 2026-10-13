@@ -313,7 +313,7 @@ ESQUEMA = """
     UPDATE trabajadores.trabajador t SET nombre_rol = r.nombre_rol
       FROM (SELECT DISTINCT ON (trabajador_id) trabajador_id, nombre_rol FROM trabajadores.rol_pago
              WHERE borrado_en IS NULL ORDER BY trabajador_id, anio DESC, mes DESC) r
-     WHERE r.trabajador_id = t.id AND t.nombre_rol IS NULL
+     WHERE r.trabajador_id = t.id AND t.nombre_rol IS NULL;
 
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
