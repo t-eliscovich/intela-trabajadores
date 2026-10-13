@@ -13,18 +13,19 @@ from datetime import date
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from psycopg2.pool import SimpleConnectionPool
+from psycopg2.pool import ThreadedConnectionPool
 
 import config
 
-_pool: SimpleConnectionPool | None = None
+_pool: ThreadedConnectionPool | None = None
 
 
 def init_pool() -> None:
     global _pool
     if not config.DATABASE_URL:
         raise RuntimeError("Falta TRABAJADORES_DATABASE_URL")
-    _pool = SimpleConnectionPool(1, 4, config.DATABASE_URL)
+    # Waitress atiende con varios hilos: el pool tiene que ser el de hilos.
+    _pool = ThreadedConnectionPool(1, 6, config.DATABASE_URL)
     bootstrap()
 
 
@@ -304,6 +305,9 @@ ESQUEMA = """
     -- El código del trabajador en WinAfin (jno). Se guarda al cargar el primer
     -- rol y de ahí en adelante el cruce va por código, no por nombre.
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS codigo_rol integer;
+    -- Y el nombre tal como está escrito en WinAfin (puede ser distinto del padrón).
+    -- El mes siguiente entra solo si el código Y este nombre coinciden.
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS nombre_rol text;
 
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
@@ -380,7 +384,7 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
             # Si el recibo de alguien que ya firmó vuelve IGUAL, la firma se queda;
             # si cambió algo, tiene que volver a firmar.
             cur.execute("""SELECT trabajador_id, ingresos, descuentos, liquido, firma, firmado_en, firmado_desde,
-                                  firma_huella
+                                  firma_huella, sueldo, dias, atrasos, otros
                              FROM trabajadores.rol_pago
                             WHERE anio = %s AND mes = %s AND borrado_en IS NULL AND firmado_en IS NOT NULL""",
                         (anio, mes))
@@ -401,7 +405,9 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
                      json.dumps(f["ingresos"]), json.dumps(f["descuentos"]),
                      f["total_ingresos"], f["total_descuentos"], f["liquido"], quien))
                 antes = firmados.get(f["trabajador_id"])
-                if antes and mismo_recibo(antes[1], antes[2], antes[3], f):
+                if antes and mismo_recibo({"ingresos": antes[1], "descuentos": antes[2], "liquido": antes[3],
+                                           "sueldo": antes[8], "dias": antes[9], "atrasos": antes[10],
+                                           "otros": antes[11]}, f):
                     cur.execute("""UPDATE trabajadores.rol_pago
                                       SET firma = %s, firmado_en = %s, firmado_desde = %s, firma_huella = %s
                                     WHERE trabajador_id = %s AND anio = %s AND mes = %s AND borrado_en IS NULL""",
@@ -409,19 +415,25 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
                     firmas_que_quedan += 1
                 cur.execute("""UPDATE trabajadores.trabajador SET codigo_rol = NULL
                                 WHERE codigo_rol = %s AND id <> %s""", (f["codigo"], f["trabajador_id"]))
-                cur.execute("UPDATE trabajadores.trabajador SET codigo_rol = %s WHERE id = %s",
-                            (f["codigo"], f["trabajador_id"]))
+                cur.execute("UPDATE trabajadores.trabajador SET codigo_rol = %s, nombre_rol = %s WHERE id = %s",
+                            (f["codigo"], f["nombre_rol"], f["trabajador_id"]))
             con.commit()
         except Exception:
             con.rollback()
             raise
+    presentes = {f["trabajador_id"] for f in filas}
     return {"cargados": len(filas), "reemplazados": reemplazados,
-            "firmas_perdidas": len(firmados) - firmas_que_quedan}
+            "firmas_perdidas": len(set(firmados) & presentes) - firmas_que_quedan,
+            "firmados_quitados": len(set(firmados) - presentes)}
 
 
-def mismo_recibo(ingresos, descuentos, liquido, f: dict) -> bool:
-    return (ingresos == f["ingresos"] and descuentos == f["descuentos"]
-            and abs(float(liquido) - f["liquido"]) < 0.005)
+def mismo_recibo(antes: dict, f: dict) -> bool:
+    """Todo lo que el trabajador ve en el recibo es igual: si cambió cualquier
+    cosa (también el sueldo nominal o los atrasos), tiene que volver a firmar."""
+    if antes["ingresos"] != f["ingresos"] or antes["descuentos"] != f["descuentos"]:
+        return False
+    return all(abs(float(antes[k] or 0) - float(f[k] or 0)) < 0.005
+               for k in ("liquido", "sueldo", "dias", "atrasos", "otros"))
 
 
 def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str) -> bool:

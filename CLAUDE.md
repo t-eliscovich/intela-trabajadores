@@ -126,18 +126,31 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   totales no cierran NO entra. Columnas `campr22…45` con valor = concepto nuevo
   → la fila queda afuera con el motivo. **Las provisiones (`campp`) no se guardan
   ni se muestran.**
-- **El cruce con el padrón**: código de WinAfin guardado (`trabajador.codigo_rol`)
-  → mismo nombre → mismas palabras en otro orden → «parecido» (para revisar).
-  Nunca dos filas al mismo trabajador. La primera vez algunos se eligen a mano
-  en la revisión; al cargar se guarda el código y **desde el mes siguiente se
-  unen solos**. Siempre se revisa antes de guardar (el archivo viaja escondido
-  en el formulario: lo que se guarda es lo mismo que se revisó).
+- **El cruce con el padrón — NUNCA cargarle el rol de una persona a otra**
+  (Tamara, 13/10/2026: «muy importante que nadie vea nada de otra persona»; la
+  entrada sigue siendo sólo con la cédula, decisión suya). Entran solos: el
+  código de WinAfin guardado (`trabajador.codigo_rol`) **si además el nombre
+  coincide** (con el padrón o con `trabajador.nombre_rol`, el nombre de WinAfin
+  que se confirmó), el mismo nombre, o las mismas palabras en otro orden. Un
+  nombre «parecido», alguien de baja o uno elegido a mano entra **sólo si se
+  marca «Es la misma persona»**. Un código guardado con otro nombre no se usa
+  (se avisa). Nunca dos filas al mismo trabajador; dos homónimos activos → ninguno.
+  La revisión muestra la cédula del padrón. Al cargar se guardan código y nombre
+  de WinAfin → **desde el mes siguiente se unen solos**. El mes queda trabado:
+  si se cambia en la revisión, pide revisar de nuevo antes de cargar. El archivo
+  viaja escondido en el formulario (`MAX_FORM_MEMORY_SIZE` = 8 MB).
 - Volver a cargar un mes lo reemplaza entero (lo viejo queda con `borrado_en`).
-  Un recibo firmado que vuelve IGUAL conserva la firma; si cambió, hay que volver a firmar.
+  Un recibo firmado que vuelve IGUAL (conceptos, líquido, sueldo, días, atrasos,
+  otros) conserva la firma; si cambió algo, hay que volver a firmar.
 - **La firma**: PNG del trazo + `firmado_en` + `firmado_desde` (user agent) +
   `firma_huella` (SHA-256 del recibo firmado, `roles.huella`). La «Constancia de
   firma» muestra si el recibo sigue igual a lo firmado. Se firma una vez. La firma
   la ven el dueño (`/yo/rol/N/firma.png`) y contabilidad, nadie más.
+- **El recibo entra en una pantalla de celular** (Tamara: «que no haya que
+  scrollear mucho»): líquido arriba con el estado, una línea de datos, renglones
+  bajos, recuadro de firma de 150 px. Medido en 390×844.
+- La imagen de la firma se mira el tamaño ANTES de descomprimir (≤3000×1500):
+  un PNG de 20 KB puede ser una imagen de 13000×13000 que tumba el server.
 - El trabajador ve arriba los meses como botones (Septiembre, Octubre…; punto rojo
   = sin firmar) y abre el último por defecto. Sólo ve los suyos.
 - Contabilidad ve en el menú un globo naranja con cuántos faltan firmar del último
@@ -153,7 +166,7 @@ al dar de baja, permisos por horas.
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.
 
-**El pool prueba la conexión antes de usarla** (`SELECT 1` en `store._conn`): el
+**El pool es `ThreadedConnectionPool`** (Waitress usa varios hilos) **y prueba la conexión antes de usarla** (`SELECT 1` en `store._conn`): el
 13/10/2026 la primera entrada a contabilidad después de horas sin uso dio
 «Internal Server Error» porque el RDS había cerrado la conexión quieta.
 

@@ -59,6 +59,8 @@ document.getElementById('archivo').addEventListener('change', function(){
 <form method="POST">
   <input type="hidden" name="archivo_b64" value="{{ archivo_b64 }}">
   <input type="hidden" name="archivo_nombre" value="{{ archivo_nombre }}">
+  <input type="hidden" name="anio_revisado" value="{{ anio }}">
+  <input type="hidden" name="mes_revisado" value="{{ mes }}">
 
   <div class="bloque">
     <div class="titulo"><h2>{{ archivo_nombre }}</h2><p>{{ buenas|length + malas|length }} filas en el archivo</p></div>
@@ -78,7 +80,7 @@ document.getElementById('archivo').addEventListener('change', function(){
   <div class="cifras">
     <div class="cifra"><b class="grande">{{ entran|length }}</b><small>entran</small></div>
     <div class="cifra"><b {% if sin_encontrar %}style="color:var(--rojo)"{% endif %}>{{ sin_encontrar|length }}</b><small>sin encontrar</small></div>
-    <div class="cifra"><b {% if a_revisar %}style="color:var(--ambar)"{% endif %}>{{ a_revisar|length }}</b><small>para revisar</small></div>
+    <div class="cifra"><b {% if sin_confirmar %}style="color:var(--ambar)"{% endif %}>{{ sin_confirmar|length }}</b><small>sin confirmar</small></div>
     <div class="cifra"><b>{{ total|dinero }}</b><small>líquido de los que entran</small></div>
   </div>
 
@@ -95,11 +97,11 @@ document.getElementById('archivo').addEventListener('change', function(){
 
   {% if sin_encontrar %}
   <div class="bloque">
-    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Elija a quién corresponde cada uno. Si no está, déjelo en «No cargar» y dé de alta al trabajador en Cargar planilla.</p></div>
+    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Elija a quién corresponde y toque «Revisar de nuevo»: va a pasar abajo para que confirme. Si no está, déjelo en «No cargar» y dé de alta al trabajador en Cargar planilla.</p></div>
     <div class="desliza"><table>
       <thead><tr><th>En el rol</th><th class="der">Código</th><th class="der">Líquido</th><th>Es</th></tr></thead>
       <tbody>{% for b in sin_encontrar %}
-        <tr><td><b>{{ b.nombre_rol }}</b></td><td class="der tenue">{{ b.codigo }}</td><td class="der">{{ b.liquido|dinero }}</td><td>{{ elegir(b) }}</td></tr>
+        <tr><td><b>{{ b.nombre_rol }}</b>{% if b.aviso %}<span class="chico" style="color:var(--ambar)">{{ b.aviso }}</span>{% endif %}</td><td class="der tenue">{{ b.codigo }}</td><td class="der">{{ b.liquido|dinero }}</td><td>{{ elegir(b) }}</td></tr>
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -107,11 +109,14 @@ document.getElementById('archivo').addEventListener('change', function(){
 
   {% if a_revisar %}
   <div class="bloque">
-    <div class="titulo"><h2 style="color:var(--ambar)">Revise que sea la misma persona ({{ a_revisar|length }})</h2><p>El nombre no es exactamente igual. Si no es, cámbielo.</p></div>
+    <div class="titulo"><h2 style="color:var(--ambar)">Confirme que sea la misma persona ({{ a_revisar|length }})</h2><p>Sólo se carga si marca «Es la misma persona». Así nunca le llega el rol de uno a otro.</p></div>
     <div class="desliza"><table>
-      <thead><tr><th>En el rol</th><th class="der">Código</th><th>En el padrón</th><th></th></tr></thead>
+      <thead><tr><th>En el rol</th><th class="der">Código</th><th>En el padrón</th><th>¿Es la misma persona?</th></tr></thead>
       <tbody>{% for b in a_revisar %}
-        <tr><td><b>{{ b.nombre_rol }}</b></td><td class="der tenue">{{ b.codigo }}</td><td>{{ elegir(b) }}</td><td class="tenue" style="font-size:12px">{{ 'elegido a mano' if b.como == 'elegido' else COMO[b.como] }}</td></tr>
+        <tr><td><b>{{ b.nombre_rol }}</b>{% if b.aviso %}<span class="chico" style="color:var(--ambar)">{{ b.aviso }}</span>{% endif %}</td>
+            <td class="der tenue">{{ b.codigo }}</td>
+            <td>{{ elegir(b) }}{% if b.cedula_padron %}<span class="chico">C.I. {{ b.cedula_padron }}</span>{% endif %}</td>
+            <td><label style="display:flex;gap:8px;align-items:center;white-space:nowrap;font-weight:600"><input type="checkbox" name="ok_{{ b.fila }}" value="1" {{ 'checked' if b.confirmado }} style="width:20px;height:20px"> Es la misma persona</label></td></tr>
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -143,7 +148,7 @@ document.getElementById('archivo').addEventListener('change', function(){
       <div class="desliza"><table>
         <thead><tr><th>En el rol</th><th>En el padrón</th><th></th><th class="der">Líquido</th></tr></thead>
         <tbody>{% for b in seguros %}
-          <tr><td>{{ b.nombre_rol }}</td><td><b>{{ b.nombre_padron }}</b><input type="hidden" name="t_{{ b.fila }}" value="{{ b.trabajador_id }}"></td><td class="tenue" style="font-size:12px">{{ COMO[b.como] }}</td><td class="der">{{ b.liquido|dinero }}</td></tr>
+          <tr><td>{{ b.nombre_rol }}</td><td><b>{{ b.nombre_padron }}</b><span class="chico">C.I. {{ b.cedula_padron }}</span><input type="hidden" name="t_{{ b.fila }}" value="{{ b.trabajador_id }}"></td><td class="tenue" style="font-size:12px">{{ COMO[b.como] }}</td><td class="der">{{ b.liquido|dinero }}</td></tr>
         {% endfor %}</tbody>
       </table></div>
     </details>
@@ -156,7 +161,7 @@ document.getElementById('archivo').addEventListener('change', function(){
       <button class="btn verde" type="submit" name="confirmar" value="1" {{ 'disabled' if repetidos }}>Cargar el rol de {{ nombre_mes(anio, mes).lower() }} ({{ entran|length }} trabajadores)</button>
       <a class="btn suave" href="{{ url_for('admin_roles_cargar') }}">Elegir otro archivo</a>
     </div>
-    <div class="nota">Si cambió a alguien en las listas de arriba, toque «Revisar de nuevo» para ver los números antes de cargar.</div>
+    <div class="nota">Si cambió a alguien, marcó una confirmación o cambió el mes, toque «Revisar de nuevo» para ver los números antes de cargar.{% if sin_confirmar %} Los {{ sin_confirmar|length }} sin confirmar no se cargan.{% endif %}</div>
   </div>
 </form>
 {% endif %}

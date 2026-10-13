@@ -6,15 +6,15 @@
 {% include "_pestanas_yo.html" %}
 {% include "_recibo_estilos.html" %}
 <style>
-  .pad{position:relative;border:2px dashed #cbd5e1;border-radius:12px;background:#fbfcfe;height:190px;touch-action:none}
+  .pad{position:relative;border:2px dashed #cbd5e1;border-radius:12px;background:#fbfcfe;height:150px;touch-action:none}
   .pad canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:10px;cursor:crosshair}
-  .pad .linea{position:absolute;left:18px;right:18px;bottom:44px;border-bottom:1px solid #cbd5e1;pointer-events:none}
-  .pad .x{position:absolute;left:20px;bottom:48px;color:#94a3b8;font-size:20px;pointer-events:none}
-  .pad .guia{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-size:13px;color:var(--gris-claro);pointer-events:none}
+  .pad .linea{position:absolute;left:18px;right:18px;bottom:34px;border-bottom:1px solid #cbd5e1;pointer-events:none}
+  .pad .x{position:absolute;left:20px;bottom:38px;color:#94a3b8;font-size:20px;pointer-events:none}
+  .pad .guia{position:absolute;left:0;right:0;bottom:10px;text-align:center;font-size:13px;color:var(--gris-claro);pointer-events:none}
   .pad.firmando .guia{display:none}
-  .meses{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 12px;padding-bottom:2px}
+  .meses{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 8px;padding-bottom:2px}
   .meses::-webkit-scrollbar{display:none}
-  .meses a{flex:0 0 auto;padding:7px 14px;border-radius:999px;background:var(--papel);border:1px solid var(--borde);
+  .meses a{flex:0 0 auto;padding:5px 13px;border-radius:999px;background:var(--papel);border:1px solid var(--borde);
            text-decoration:none;color:var(--azul);font-weight:700;font-size:14px;white-space:nowrap}
   .meses a.activo{background:#e8eef6;border-color:#9fb3cc}
   .meses .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rojo);margin-left:6px;vertical-align:2px}
@@ -40,14 +40,13 @@
   {% with url_firma = url_for('yo_rol_firma', id_=r.id) %}{% include "_constancia.html" %}{% endwith %}
 {% else %}
 <div class="bloque">
-  <div class="titulo"><h2>Firmar</h2><p>Revise los valores y firme con el dedo.</p></div>
-  <div class="relleno">
+  <div class="relleno" style="padding:10px 12px">
     <form method="POST" action="{{ url_for('yo_rol_firmar') }}" id="form-firma">
       <input type="hidden" name="id" value="{{ r.id }}">
       <input type="hidden" name="mes" value="{{ '%d-%02d'|format(r.anio, r.mes) }}">
       <input type="hidden" name="firma" id="firma">
-      <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Firme aquí con el dedo</div></div>
-      <p class="ayuda" style="margin:8px 0 12px">Al firmar confirma que recibió su rol de pagos de {{ nombre_mes(r.anio, r.mes).lower() }} por $ {{ r.liquido|dinero }}. Después de firmar no se puede cambiar.</p>
+      <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Revise los valores y firme aquí con el dedo</div></div>
+      <p class="ayuda" style="margin:6px 0 8px">Al firmar confirma que recibió su rol de {{ nombre_mes(r.anio, r.mes).lower() }} por $ {{ r.liquido|dinero }}. No se puede cambiar después.</p>
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
         <button class="btn suave" type="button" id="borrar">Borrar</button>
         <button class="btn verde" type="submit" id="firmar" disabled>Firmar · Recibí conforme</button>

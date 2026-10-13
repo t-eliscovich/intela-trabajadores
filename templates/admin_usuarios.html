@@ -7,9 +7,9 @@
   <div class="titulo"><h2>La tablet del comedor</h2><p>Entra por este link, sin usuario ni clave. Guárdelo como favorito en la tablet.</p></div>
   <div class="relleno" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <code style="font-size:14px;word-break:break-all">{{ link_comedor }}</code>
-    <form method="POST" class="enlinea"><input type="hidden" name="accion" value="nuevo_link"><button class="btn suave chico" type="submit">Generar uno nuevo</button></form>
+    <form method="POST" class="enlinea"><input type="hidden" name="accion" value="nuevo_link"><button class="btn suave chico" type="submit" onclick="return confirm('¿Generar un link nuevo? El que tiene la tablet deja de servir y hay que abrir el nuevo allá.')">Generar uno nuevo</button></form>
   </div>
-  <div class="nota">Si el link se filtra, genere uno nuevo: el anterior deja de servir al instante.</div>
+  <div class="nota">Este link no cambia solo: es siempre el mismo. Toque «Generar uno nuevo» únicamente si alguien de afuera lo consiguió; el anterior deja de servir al instante y hay que abrir el nuevo en la tablet.</div>
 </div>
 
 <div class="bloque">

@@ -23,16 +23,20 @@ def stub_psycopg2(pool_ok: bool = True) -> None:
         class P:
             def __init__(s, *a, **k): pass
         sys.modules["psycopg2.pool"].SimpleConnectionPool = P
+        sys.modules["psycopg2.pool"].ThreadedConnectionPool = P
     else:
         def roto(*a, **k):
             raise RuntimeError("could not connect to server: Connection refused")
         sys.modules["psycopg2.pool"].SimpleConnectionPool = roto
+        sys.modules["psycopg2.pool"].ThreadedConnectionPool = roto
     sys.modules["psycopg2"].extras = sys.modules["psycopg2.extras"]
     sys.modules["psycopg2"].pool = sys.modules["psycopg2.pool"]
 
 
-def store_mismo_recibo(ingresos, descuentos, liquido, f):
-    return ingresos == f["ingresos"] and descuentos == f["descuentos"] and abs(float(liquido) - f["liquido"]) < 0.005
+def store_mismo_recibo(antes, f):
+    if antes["ingresos"] != f["ingresos"] or antes["descuentos"] != f["descuentos"]:
+        return False
+    return all(abs(float(antes[k] or 0) - float(f[k] or 0)) < 0.005 for k in ("liquido", "sueldo", "dias", "atrasos", "otros"))
 
 
 class BaseFalsa:
@@ -109,7 +113,7 @@ class BaseFalsa:
                              "cargado_en": datetime.now(), "borrado_en": None, "borrado_por": None,
                              "firma": None, "firmado_en": None, "firmado_desde": None, "firma_huella": None}
             antes = firmados.get(f["trabajador_id"])
-            if antes and store_mismo_recibo(antes["ingresos"], antes["descuentos"], antes["liquido"], f):
+            if antes and store_mismo_recibo(antes, f):
                 self.rol[id_].update(firma=antes["firma"], firmado_en=antes["firmado_en"],
                                      firmado_desde=antes["firmado_desde"], firma_huella=antes["firma_huella"])
                 quedan += 1
@@ -117,7 +121,11 @@ class BaseFalsa:
                 if t.get("codigo_rol") == f["codigo"] and t["id"] != f["trabajador_id"]:
                     t["codigo_rol"] = None
             self.trab[f["trabajador_id"]]["codigo_rol"] = f["codigo"]
-        return {"cargados": len(filas), "reemplazados": reemplazados, "firmas_perdidas": len(firmados) - quedan}
+            self.trab[f["trabajador_id"]]["nombre_rol"] = f["nombre_rol"]
+        presentes = {f["trabajador_id"] for f in filas}
+        return {"cargados": len(filas), "reemplazados": reemplazados,
+                "firmas_perdidas": len(set(firmados) & presentes) - quedan,
+                "firmados_quitados": len(set(firmados) - presentes)}
 
     def firmar_rol(self, id_, trabajador_id, png, desde, huella):
         r = self.rol.get(id_)
@@ -175,7 +183,7 @@ class BaseFalsa:
                           "fecha_ingreso": fecha_ingreso, "activo": True, "puede_invitar": False,
                           "fecha_salida": None, "saldo_inicial": saldo_inicial,
                           "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now(),
-                          "codigo_rol": None,
+                          "codigo_rol": None, "nombre_rol": None,
                           **{k: perfil.get(k) for k in self.PERFIL}}
         return id_
 

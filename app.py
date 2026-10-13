@@ -48,6 +48,9 @@ app.secret_key = config.SECRET_KEY
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=config.DIAS_SESION_TRABAJADOR)
 app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024  # una foto del celular entra; se achica al guardar
+# El rol de pagos viaja escondido en el formulario entre «Revisar» y «Cargar»
+# (base64): sin esto Werkzeug corta los campos de texto en 500 KB.
+app.config["MAX_FORM_MEMORY_SIZE"] = 8 * 1024 * 1024
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
 
@@ -408,6 +411,8 @@ def leer_certificado(archivo) -> tuple[bytes, str, str] | None:
         from io import BytesIO
         from PIL import Image, ImageOps
         img = Image.open(BytesIO(datos))
+        if img.width * img.height > 50_000_000:  # más que cualquier cámara de celular
+            raise ValueError("demasiado grande")
         img = ImageOps.exif_transpose(img).convert("RGB")
         img.thumbnail((LADO_MAXIMO_FOTO, LADO_MAXIMO_FOTO))
         salida = BytesIO()
@@ -1560,7 +1565,8 @@ def admin_usuarios():
             flash(str(exc), "error")
         return redirect(url_for("admin_usuarios"))
     return render_template("admin_usuarios.html", usuarios=store.usuarios(),
-                           link_comedor=url_for("comedor_t", token=clave_comedor(), _external=True))
+                           link_comedor=url_for("comedor_t", token=clave_comedor(), _external=True,
+                                                 _scheme="http" if request.host.startswith(("127.", "localhost")) else "https"))
 
 
 # --------------------------------------------------------------------------
@@ -1594,7 +1600,7 @@ app.jinja_env.globals["nombre_mes"] = nombre_mes
 
 # El archivo que se subió viaja escondido en el formulario entre «Revisar» y
 # «Cargar», así lo que se guarda sale del MISMO archivo que se revisó.
-PESO_MAXIMO_ROL = 4 * 1024 * 1024
+PESO_MAXIMO_ROL = 3 * 1024 * 1024
 
 
 def _mes_por_defecto(nombre_archivo: str) -> tuple[int, int]:
@@ -1675,45 +1681,58 @@ def admin_roles_cargar():
     padron = store.trabajadores(incluir_inactivos=True)
     roles.cruzar(buenas, padron)
     por_id = {t["id"]: t for t in padron}
-    # Lo que eligió contabilidad a mano pisa al cruce automático.
+    # Lo que eligió contabilidad a mano pisa al cruce automático. Un «parecido»
+    # (o alguien elegido a mano) sólo entra si se marcó «Es la misma persona»:
+    # nunca cargarle el rol de una persona a otra (Tamara, 13/10/2026).
     if f.get("archivo_b64"):
         for b in buenas:
             elegido = f.get(f"t_{b['fila']}")
             if elegido is None:
-                continue
-            if elegido == "":
+                pass
+            elif elegido == "":
                 b["trabajador_id"], b["como"], b["nombre_padron"] = None, None, None
             elif elegido.isdigit() and int(elegido) in por_id:
                 if int(elegido) != b["trabajador_id"]:
                     b["trabajador_id"], b["como"] = int(elegido), "elegido"
                     b["nombre_padron"] = por_id[int(elegido)]["nombre"]
+                    b["aviso"] = None
+    for b in buenas:
+        b["confirmado"] = bool(f.get(f"ok_{b['fila']}")) if b["como"] in ("parecido", "elegido") else True
+        if b["trabajador_id"]:
+            b["cedula_padron"] = por_id[b["trabajador_id"]]["cedula"]
     repetidos = {}
     for b in buenas:
-        if b["trabajador_id"]:
+        if b["trabajador_id"] and b["confirmado"]:
             repetidos.setdefault(b["trabajador_id"], []).append(b)
     repetidos = {k: v for k, v in repetidos.items() if len(v) > 1}
 
     ya = next((m for m in store.meses_con_rol() if (m["anio"], m["mes"]) == (anio, mes)), None)
-    if f.get("confirmar") == "1":
+    revisado = (f.get("anio_revisado"), f.get("mes_revisado"))
+    if f.get("confirmar") == "1" and revisado != (str(anio), str(mes)):
+        flash(f"Cambió el mes a {nombre_mes(anio, mes).lower()}. Revise de nuevo antes de cargar.", "error")
+    elif f.get("confirmar") == "1":
         if repetidos:
             flash("Hay un trabajador elegido para dos filas del rol. Corríjalo antes de cargar.", "error")
         else:
-            entran = [b for b in buenas if b["trabajador_id"]]
+            entran = [b for b in buenas if b["trabajador_id"] and b["confirmado"]]
             r = store.cargar_roles(anio, mes, entran, g.usuario["usuario"])
             msg = f"Listo: rol de {nombre_mes(anio, mes).lower()} cargado para {r['cargados']} trabajadores."
             if r["reemplazados"]:
                 msg += " Reemplazó al que estaba cargado."
             if r["firmas_perdidas"]:
                 msg += f" {r['firmas_perdidas']} recibos cambiaron y tienen que volver a firmarse."
+            if r.get("firmados_quitados"):
+                msg += f" {r['firmados_quitados']} que ya habían firmado no están en este archivo y quedaron sin rol este mes."
             flash(msg, "ok")
             return redirect(url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
 
-    entran = [b for b in buenas if b["trabajador_id"]]
+    entran = [b for b in buenas if b["trabajador_id"] and b["confirmado"]]
     return render_template(
         "admin_roles_cargar.html", anio=anio, mes=mes, revision=True,
         archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
         buenas=buenas, malas=malas, entran=entran, ya=ya, repetidos=repetidos,
         sin_encontrar=[b for b in buenas if not b["trabajador_id"]],
+        sin_confirmar=[b for b in buenas if b["trabajador_id"] and not b["confirmado"]],
         a_revisar=[b for b in buenas if b["como"] in ("parecido", "elegido")],
         seguros=[b for b in buenas if b["como"] in ("codigo", "nombre", "orden")],
         sin_rol=roles.sin_rol(padron, buenas), padron=sorted(padron, key=lambda t: t["nombre"]),
@@ -1765,6 +1784,10 @@ def leer_firma(texto: str) -> bytes:
     from PIL import Image
     try:
         img = Image.open(BytesIO(crudo))
+        # Un PNG chico puede esconder una imagen gigante: se mira el tamaño ANTES
+        # de descomprimir (un recuadro de firma real no pasa de ~1500 × 700).
+        if img.width > 3000 or img.height > 1500:
+            raise ValueError("demasiado grande")
         img.load()
     except Exception:  # noqa: BLE001
         raise ValueError("La firma no se pudo leer. Bórrela y vuelva a firmar.") from None
@@ -1803,8 +1826,11 @@ def yo_rol_firmar():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    id_txt = request.form.get("id", "")
+    if not id_txt.isdigit():
+        return redirect(url_for("yo_rol"))
     try:
-        id_ = int(request.form.get("id", "0"))
+        id_ = int(id_txt)
         r = store.rol_pago(id_)
         if not r or r["trabajador_id"] != t["id"]:
             abort(404)

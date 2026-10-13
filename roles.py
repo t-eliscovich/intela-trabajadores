@@ -164,12 +164,19 @@ COMO = {"codigo": "por código del rol", "nombre": "mismo nombre",
 
 
 def cruzar(filas: list[dict], padron: list[dict]) -> None:
-    """Le pone a cada fila `trabajador_id` y `como` (o None si no aparece).
+    """Le pone a cada fila `trabajador_id`, `como` y `aviso` (o None si no aparece).
 
-    Orden: el código del rol que ya quedó guardado en la ficha (`codigo_rol`,
-    de un mes anterior) → el mismo nombre → las mismas palabras en otro orden →
-    un nombre parecido (contenido o casi igual), sólo si hay UN candidato.
-    Nunca dos filas al mismo trabajador.
+    Lo más importante es NO cargarle el rol de una persona a otra (Tamara,
+    13/10/2026). Por eso:
+      * el código de WinAfin guardado de un mes anterior (`codigo_rol`) sólo
+        vale si el NOMBRE también coincide (con el padrón, o con el nombre de
+        WinAfin que contabilidad confirmó ese mes, `nombre_rol`); si el código
+        apunta a otra persona, se avisa y se busca por nombre;
+      * sólo «codigo», «nombre» y «orden» entran solos. «parecido» (un nombre
+        que no es exactamente igual, o alguien dado de baja) entra únicamente
+        si contabilidad lo confirma a mano en la revisión;
+      * nunca dos filas al mismo trabajador, y con dos personas del mismo
+        nombre no se elige ninguna.
     """
     por_codigo = {t["codigo_rol"]: t for t in padron if t.get("codigo_rol") is not None}
     norm = {t["id"]: normalizar(t["nombre"]) for t in padron}
@@ -182,42 +189,63 @@ def cruzar(filas: list[dict], padron: list[dict]) -> None:
             cands = activos if len(activos) == 1 else cands
         return cands[0] if len(cands) == 1 else None
 
-    for f in filas:
-        f["trabajador_id"], f["como"], f["nombre_padron"] = None, None, None
+    def poner(f, t, como, aviso=None):
+        if not t.get("activo", True):
+            como, aviso = "parecido", aviso or "está dado de baja en el padrón"
+        f["trabajador_id"], f["como"], f["nombre_padron"] = t["id"], como, t["nombre"]
+        if aviso:
+            f["aviso"] = aviso
+        usados.add(t["id"])
 
-    pasos = (
-        ("codigo", lambda f: [por_codigo[f["codigo"]]] if f["codigo"] in por_codigo else []),
-        ("nombre", lambda f: [t for t in padron if norm[t["id"]] == normalizar(f["nombre_rol"])]),
-        ("orden", lambda f: [t for t in padron
-                             if sorted(norm[t["id"]].split()) == sorted(normalizar(f["nombre_rol"]).split())]),
-        ("parecido", _parecidos(padron, norm)),
-    )
-    for como, buscar in pasos:
+    for f in filas:
+        f["trabajador_id"], f["como"], f["nombre_padron"], f["aviso"] = None, None, None, None
+
+    # 1. el código guardado, pero sólo si el nombre acompaña
+    for f in filas:
+        t = por_codigo.get(f["codigo"])
+        if not t or t["id"] in usados:
+            continue
+        parecido = comparar_nombres(f["nombre_rol"], t["nombre"])
+        if t.get("nombre_rol") and normalizar(t["nombre_rol"]) == normalizar(f["nombre_rol"]):
+            parecido = "nombre"  # el mismo código y el mismo nombre de WinAfin que se confirmó antes
+        if parecido in ("nombre", "orden"):
+            poner(f, t, "codigo")
+        elif parecido == "parecido":
+            poner(f, t, "parecido", "mismo código de WinAfin, nombre distinto")
+        else:
+            f["aviso"] = f"el código {f['codigo']} de WinAfin estaba guardado en {t['nombre']}"
+
+    # 2. por nombre: igual, en otro orden, parecido
+    for como in ("nombre", "orden", "parecido"):
         for f in filas:
             if f["trabajador_id"] is not None:
                 continue
-            t = libre(buscar(f))
+            cands = [t for t in padron if comparar_nombres(f["nombre_rol"], t["nombre"], norm[t["id"]]) == como]
+            if como == "parecido" and len([t for t in cands if t["id"] not in usados]) != 1:
+                continue  # parecido sólo si es UNO
+            t = libre(cands)
             if t:
-                f["trabajador_id"], f["como"], f["nombre_padron"] = t["id"], como, t["nombre"]
-                usados.add(t["id"])
+                poner(f, t, como, f.get("aviso"))
 
 
-def _parecidos(padron, norm):
-    def buscar(f):
-        rol = normalizar(f["nombre_rol"])
-        palabras = set(rol.split())
-        cands = []
-        for t in padron:
-            p = norm[t["id"]]
-            pp = set(p.split())
-            # uno contiene al otro (le falta un segundo nombre o un apellido)
-            if len(pp & palabras) >= 2 and (pp <= palabras or palabras <= pp):
-                cands.append(t)
-            # o casi igual letra por letra (una tilde, una letra cambiada)
-            elif difflib.SequenceMatcher(None, " ".join(sorted(pp)), " ".join(sorted(palabras))).ratio() >= 0.9:
-                cands.append(t)
-        return cands
-    return buscar
+def comparar_nombres(nombre_rol: str, nombre_padron: str, norm_padron: str | None = None) -> str | None:
+    """«nombre» (igual), «orden» (mismas palabras en otro orden), «parecido»
+    (le falta un nombre o cambia una letra) o None."""
+    rol = normalizar(nombre_rol)
+    pad = norm_padron if norm_padron is not None else normalizar(nombre_padron)
+    if rol == pad:
+        return "nombre"
+    palabras, pp = rol.split(), pad.split()
+    if sorted(palabras) == sorted(pp):
+        return "orden"
+    a, b = set(palabras), set(pp)
+    # uno contiene al otro (le falta un segundo nombre o un apellido)
+    if len(a & b) >= 2 and (a <= b or b <= a):
+        return "parecido"
+    # o casi igual letra por letra (una tilde, una letra cambiada)
+    if difflib.SequenceMatcher(None, " ".join(sorted(pp)), " ".join(sorted(palabras))).ratio() >= 0.9:
+        return "parecido"
+    return None
 
 
 def sin_rol(padron: list[dict], filas: list[dict]) -> list[dict]:
@@ -236,7 +264,9 @@ def huella(r: dict) -> str:
     import hashlib
     import json
     contenido = {"trabajador_id": r["trabajador_id"], "anio": r["anio"], "mes": r["mes"], "ingresos": r["ingresos"],
-                 "descuentos": r["descuentos"], "total_ingresos": round(float(r["total_ingresos"]), 2),
+                 "descuentos": r["descuentos"], "sueldo": round(float(r.get("sueldo") or 0), 2),
+                 "dias": round(float(r.get("dias") or 0), 2), "atrasos": round(float(r.get("atrasos") or 0), 2),
+                 "otros": round(float(r.get("otros") or 0), 2), "total_ingresos": round(float(r["total_ingresos"]), 2),
                  "total_descuentos": round(float(r["total_descuentos"]), 2), "liquido": round(float(r["liquido"]), 2)}
     return hashlib.sha256(json.dumps(contenido, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
