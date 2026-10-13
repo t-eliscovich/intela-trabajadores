@@ -2,7 +2,7 @@
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block contenido %}
 <h1>{{ t.nombre }}
-  <small>cédula {{ t.cedula }}{% if t.area %} · {{ t.area }}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
+  <small>cédula {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida, revísela</span>{% endif %}{% if t.area %} · {{ t.area }}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
   {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
   <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a></span>
 </h1>

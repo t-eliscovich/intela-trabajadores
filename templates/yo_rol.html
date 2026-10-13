@@ -14,9 +14,10 @@
   .pad.firmando .guia{display:none}
   .meses{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 8px;padding-bottom:2px}
   .meses::-webkit-scrollbar{display:none}
-  .meses a{flex:0 0 auto;padding:5px 13px;border-radius:999px;background:var(--papel);border:1px solid var(--borde);
+  .meses a{flex:0 0 auto;padding:5px 12px;border-radius:12px;text-align:center;line-height:1.2;background:var(--papel);border:1px solid var(--borde);
            text-decoration:none;color:var(--azul);font-weight:700;font-size:14px;white-space:nowrap}
   .meses a.activo{background:#e8eef6;border-color:#9fb3cc}
+  .meses a small{display:block;font-size:11px;font-weight:600;color:var(--gris);font-variant-numeric:tabular-nums}
   .meses .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rojo);margin-left:6px;vertical-align:2px}
 </style>
 
@@ -30,13 +31,15 @@
 {% if todos|length > 1 %}
 <div class="meses" role="tablist" aria-label="Meses">
   {% for x in todos %}
-  <a href="{{ url_for('yo_rol', mes='%d-%02d'|format(x.anio, x.mes)) }}" class="{{ 'activo' if x.id == r.id }}">{{ MESES[x.mes]|capitalize }}{% if x.anio != hoy.year %} {{ x.anio }}{% endif %}{% if not x.firmado_en %}<span class="punto" title="Sin firmar"></span>{% endif %}</a>
+  <a href="{{ url_for('yo_rol', mes='%d-%02d'|format(x.anio, x.mes)) }}" class="{{ 'activo' if x.id == r.id }}">{{ MESES[x.mes][:3]|capitalize }}{% if x.anio != hoy.year %} {{ x.anio }}{% endif %}{% if x.pide_firma and not x.firmado_en %}<span class="punto" title="Sin firmar"></span>{% endif %}<small>$ {{ x.liquido|dinero }}</small></a>
   {% endfor %}
 </div>
 {% endif %}
 <div class="bloque">{% with de_trabajador = true %}{% include "_recibo.html" %}{% endwith %}</div>
 
-{% if r.firmado_en %}
+{% if not r.firmado_en and r.pide_firma is sameas false %}
+<p class="tenue" style="text-align:center;font-size:13px;margin:4px 0 12px">Rol de un mes anterior, cargado como historial. No hace falta firmarlo.</p>
+{% elif r.firmado_en %}
   {% with url_firma = url_for('yo_rol_firma', id_=r.id) %}{% include "_constancia.html" %}{% endwith %}
 {% else %}
 <div class="bloque">

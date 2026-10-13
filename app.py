@@ -327,7 +327,7 @@ def _rol_sin_firmar():
         ultimo = store.roles_de(tid)[:1] if tid else []
     except Exception:  # noqa: BLE001
         return {}
-    return {"rol_sin_firmar": bool(ultimo and not ultimo[0]["firmado_en"])}
+    return {"rol_sin_firmar": bool(ultimo and ultimo[0].get("pide_firma", True) and not ultimo[0]["firmado_en"])}
 
 
 def _totales(marcados: set) -> dict:
@@ -1597,6 +1597,7 @@ def nombre_mes(anio: int, mes: int) -> str:
 
 
 app.jinja_env.globals["nombre_mes"] = nombre_mes
+app.jinja_env.globals["cedula_valida"] = roles.cedula_valida
 
 # El archivo que se subió viaja escondido en el formulario entre «Revisar» y
 # «Cargar», así lo que se guarda sale del MISMO archivo que se revisó.
@@ -1638,14 +1639,15 @@ def admin_roles():
         anio, mes = _mes_por_defecto("")
     filas = store.roles_del_mes(anio, mes)
     for r in filas:
-        r["wa"] = None if r["firmado_en"] else link_whatsapp(
+        r["wa"] = None if r["firmado_en"] or not r.get("pide_firma", True) else link_whatsapp(
             r.get("celular"), f"Hola {nombre_de_pila(r['nombre'])}, su rol de pagos de {nombre_mes(anio, mes).lower()} "
             f"ya está en la aplicación de Intela. Por favor revíselo y fírmelo: https://trabajadores.intela.com.ec")
     totales = {k: sum(r[k] for r in filas) for k in ("total_ingresos", "total_descuentos", "liquido")}
+    piden = [r for r in filas if r.get("pide_firma", True)]
     recientes = sorted((r for r in filas if r["firmado_en"]), key=lambda r: r["firmado_en"], reverse=True)[:8]
     return render_template("admin_roles.html", anio=anio, mes=mes, filas=filas, meses=meses, totales=totales,
                            recientes=recientes,
-                           firmados=sum(1 for r in filas if r["firmado_en"]),
+                           firmados=sum(1 for r in piden if r["firmado_en"]), piden=len(piden),
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
 
 
@@ -1664,12 +1666,16 @@ def admin_roles_cargar():
             if len(datos) > PESO_MAXIMO_ROL:
                 raise ValueError("El archivo es demasiado grande para ser un rol de pagos.")
             # Lo elegido en la pantalla manda; sin elegir, el mes del nombre del archivo.
-            anio, mes = _leer_anio_mes(f) if f.get("mes") and f.get("anio") else _mes_por_defecto(nombre)
+            # (El acumulado trae sus meses adentro: el mes de la pantalla no se usa.)
+            anio, mes = ((0, 0) if roles.es_acumulado(datos, nombre) else
+                         _leer_anio_mes(f) if f.get("mes") and f.get("anio") else _mes_por_defecto(nombre))
         elif f.get("archivo_b64"):
             datos, nombre = base64.b64decode(f["archivo_b64"]), f.get("archivo_nombre", "rol.xls")
-            anio, mes = _leer_anio_mes(f)
+            anio, mes = (0, 0) if roles.es_acumulado(datos, nombre) else _leer_anio_mes(f)
         else:
             raise ValueError("Elija el archivo del rol.")
+        if roles.es_acumulado(datos, nombre):
+            return _cargar_historial(datos, nombre, f)
         buenas, malas = roles.leer_rol(datos, nombre)
         if not buenas:
             raise ValueError("El archivo no trae ningún trabajador que se pueda cargar.")
@@ -1737,6 +1743,102 @@ def admin_roles_cargar():
         seguros=[b for b in buenas if b["como"] in ("codigo", "nombre", "orden")],
         sin_rol=roles.sin_rol(padron, buenas), padron=sorted(padron, key=lambda t: t["nombre"]),
         total=sum(b["liquido"] for b in entran), COMO=roles.COMO)
+
+
+def _cargar_historial(datos: bytes, nombre: str, f) -> str:
+    """El ROL ACUMULADO de WinAfin: muchos meses de una vez, con cédula. Se
+    revisa igual que un mes (nada se guarda sin «Cargar»), se eligen los meses,
+    y se cruza POR CÉDULA. Los meses del historial no piden firma."""
+    import base64
+    from collections import defaultdict
+    buenas, malas = roles.leer_acumulado(datos, nombre)
+    if not buenas:
+        raise ValueError("El archivo no trae ningún recibo que se pueda cargar.")
+    # Una persona = una cédula; el cruce se hace una vez por persona y vale para todos sus meses.
+    personas: dict[str, dict] = {}
+    for b in sorted(buenas, key=lambda b: (b["anio"], b["mes"])):
+        p = personas.setdefault(b["cedula"], {"cedula": b["cedula"], "meses": 0, "liquido": 0.0})
+        p.update(codigo=b["codigo"], nombre_rol=b["nombre_rol"])  # lo del último mes
+        p["meses"] += 1
+        p["liquido"] += b["liquido"]
+    lista = sorted(personas.values(), key=lambda p: p["nombre_rol"])
+    padron = store.trabajadores(incluir_inactivos=True)
+    roles.cruzar_por_cedula(lista, padron)
+    por_id = {t["id"]: t for t in padron}
+    revisando = bool(f.get("archivo_b64"))
+    for p in lista:
+        clave = p["cedula"]
+        elegido = f.get(f"t_{clave}") if revisando else None
+        if elegido == "":
+            p["trabajador_id"], p["como"], p["nombre_padron"], p["aviso"] = None, None, None, None
+        elif elegido and elegido.isdigit() and int(elegido) in por_id and int(elegido) != p["trabajador_id"]:
+            p["trabajador_id"], p["como"], p["nombre_padron"] = int(elegido), "elegido", por_id[int(elegido)]["nombre"]
+            p["aviso"] = None
+        p["confirmado"] = p["como"] == "cedula" or bool(f.get(f"ok_{clave}"))
+        if p["trabajador_id"]:
+            p["cedula_padron"] = por_id[p["trabajador_id"]]["cedula"]
+    repetidos = defaultdict(list)
+    for p in lista:
+        if p["trabajador_id"] and p["confirmado"]:
+            repetidos[p["trabajador_id"]].append(p)
+    repetidos = {k: v for k, v in repetidos.items() if len(v) > 1}
+
+    # Los meses del archivo. Por defecto se marcan los nuevos y cerrados; el mes
+    # en curso y los que ya están cargados quedan sin marcar (se pueden marcar).
+    ya = {(m["anio"], m["mes"]): m for m in store.meses_con_rol()}
+    h = hoy()
+    meses = []
+    for (anio, mes) in sorted({(b["anio"], b["mes"]) for b in buenas}, reverse=True):
+        del_mes = [b for b in buenas if (b["anio"], b["mes"]) == (anio, mes)]
+        en_curso = (anio, mes) >= (h.year, h.month)
+        clave = f"{anio}-{mes:02d}"
+        marcado = (bool(f.get(f"m_{clave}")) if revisando
+                   else not en_curso and (anio, mes) not in ya)
+        entran = [b for b in del_mes if personas[b["cedula"]]["trabajador_id"] and personas[b["cedula"]]["confirmado"]]
+        meses.append({"anio": anio, "mes": mes, "clave": clave, "filas": len(del_mes), "entran": len(entran),
+                      "liquido": round(sum(b["liquido"] for b in entran), 2), "en_curso": en_curso,
+                      "ya": ya.get((anio, mes)), "marcado": marcado, "recibos": entran})
+    elegidos = [m for m in meses if m["marcado"]]
+
+    revisados = set(filter(None, (f.get("meses_revisados") or "").split(",")))
+    if f.get("confirmar") == "1" and revisados != {m["clave"] for m in elegidos}:
+        flash("Cambió los meses marcados. Revise los números y toque «Cargar historial» de nuevo.", "error")
+    elif f.get("confirmar") == "1":
+        if repetidos:
+            flash("Hay un trabajador elegido para dos personas del archivo. Corríjalo antes de cargar.", "error")
+        elif not elegidos:
+            flash("Marque al menos un mes para cargar.", "error")
+        else:
+            total = 0
+            corregidas = []
+            for p in lista:
+                if p.get("corregir_cedula") and p["confirmado"] and p["como"] == "parecido":
+                    if store.corregir_cedula(p["trabajador_id"], p["cedula"]):
+                        corregidas.append(p["nombre_padron"])
+            for m in elegidos:
+                filas = []
+                for b in m["recibos"]:
+                    filas.append(dict(b, trabajador_id=personas[b["cedula"]]["trabajador_id"]))
+                r = store.cargar_roles(m["anio"], m["mes"], filas, g.usuario["usuario"], pide_firma=False)
+                total += r["cargados"]
+            nombres = ", ".join(nombre_mes(m["anio"], m["mes"]).lower() for m in sorted(elegidos, key=lambda m: (m["anio"], m["mes"])))
+            flash(f"Listo: historial cargado, {total} recibos de {len(elegidos)} {'mes' if len(elegidos) == 1 else 'meses'} ({nombres}). "
+                  "Cada trabajador ya los ve en su celular.", "ok")
+            if corregidas:
+                flash(f"Se corrigió la cédula en el padrón de {len(corregidas)} "
+                      f"{'trabajador' if len(corregidas) == 1 else 'trabajadores'} (estaba mal tipeada): "
+                      + ", ".join(corregidas) + ". Ahora pueden entrar con su cédula verdadera.", "ok")
+            return redirect(url_for("admin_roles", mes=elegidos[0]["clave"]))
+
+    return render_template(
+        "admin_roles_historial.html", archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
+        meses=meses, elegidos=elegidos, malas=malas, repetidos=repetidos,
+        sin_encontrar=[p for p in lista if not p["trabajador_id"]],
+        a_revisar=[p for p in lista if p["trabajador_id"] and p["como"] != "cedula"],
+        seguros=[p for p in lista if p["como"] == "cedula"],
+        sin_confirmar=[p for p in lista if p["trabajador_id"] and not p["confirmado"]],
+        padron=sorted(padron, key=lambda t: t["nombre"]), personas=lista,
+        total=sum(m["liquido"] for m in elegidos), recibos=sum(m["entran"] for m in elegidos))
 
 
 @app.route("/admin/roles/<int:id_>")
@@ -1836,6 +1938,8 @@ def yo_rol_firmar():
             abort(404)
         if r["firmado_en"]:
             raise ValueError("Este rol ya está firmado.")
+        if not r.get("pide_firma", True):
+            raise ValueError("Este mes es del historial: no hace falta firmarlo.")
         png = leer_firma(request.form.get("firma", ""))
         if not store.firmar_rol(id_, t["id"], png, request.headers.get("User-Agent", ""), roles.huella(r)):
             raise ValueError("No se pudo firmar. Vuelva a abrir la pantalla e intente de nuevo.")

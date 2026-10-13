@@ -48,7 +48,7 @@
       <tr>
         <td><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
             {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}</td>
-        <td class="oculta-chico tenue">{{ f.cedula }}</td>
+        <td class="oculta-chico tenue">{{ f.cedula }}{% if not cedula_valida(f.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador: revise que esté bien escrita">cédula no válida</span>{% endif %}</td>
         <td class="oculta-chico tenue">{{ f.area or '' }}</td>
         <td class="oculta-chico tenue">{{ f.fecha_ingreso|fecha }}</td>
         <td class="der">{{ f.v.anios }}</td>

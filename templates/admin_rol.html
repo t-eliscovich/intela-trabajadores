@@ -10,6 +10,8 @@
 <div class="bloque">{% include "_recibo.html" %}</div>
 {% if r.firmado_en %}
   {% with url_firma = url_for('admin_rol_firma', id_=r.id) %}{% include "_constancia.html" %}{% endwith %}
+{% elif r.pide_firma is sameas false %}
+<div class="bloque"><div class="relleno tenue" style="text-align:center">Mes cargado como historial: no se pide firma.</div></div>
 {% else %}
 <div class="bloque"><div class="relleno tenue" style="text-align:center">Todavía no lo firmó. Lo ve en su celular, en la pestaña «Rol de pagos».</div></div>
 {% endif %}

@@ -11,7 +11,7 @@
   <div class="titulo"><h2>1. Elija el archivo</h2></div>
   <div class="relleno">
     <form method="POST" enctype="multipart/form-data" class="formulario">
-      <div class="ancho"><label class="campo">Archivo del rol (.xls)</label>
+      <div class="ancho"><label class="campo">Archivo del rol (.xls) o rol acumulado (.xlsx)</label>
         <input type="file" name="archivo" id="archivo" accept=".xls,.xlsx" required style="height:auto;padding:8px"></div>
       <div><label class="campo">Mes</label>
         <select name="mes">{% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if i == mes }}>{{ MESES[i]|capitalize }}</option>{% endfor %}</select></div>
@@ -48,6 +48,7 @@ document.getElementById('archivo').addEventListener('change', function(){
         </ul></li>
       <li><b>Toque «Cargar».</b> Desde ese momento cada trabajador ve su recibo en el celular, en la pestaña «Rol de pagos», y lo firma con el dedo.</li>
     </ol>
+    <p style="margin:12px 0 0;padding:10px 12px;background:#f3f7ff;border-radius:10px"><b>¿Tiene el rol acumulado de varios meses?</b> Súbalo aquí mismo (<code>Rol_Acumulado.xlsx</code>): el programa lo reconoce solo, le deja elegir qué meses cargar y une a cada uno por su cédula. Sirve para cargar el historial de una vez.</p>
     <p class="tenue" style="margin:12px 0 0">El primer mes puede haber que elegir a algunos a mano. Desde el segundo mes se encuentran solos por el código de WinAfin.</p>
     <p class="tenue" style="margin:8px 0 0">¿Se equivocó de archivo? Vuelva a cargar el mismo mes: reemplaza al anterior. Si un recibo que ya estaba firmado no cambió, la firma se mantiene; si cambió, el trabajador tiene que volver a firmar.</p>
     <p class="tenue" style="margin:8px 0 0">Las provisiones no se muestran al trabajador.</p>

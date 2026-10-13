@@ -7,9 +7,10 @@
     <div class="rp-frase">líquido a recibir</div>
   </div>
   {% if r.firmado_en %}<span class="rp-estado ok">✓ Firmado<br>{{ r.firmado_en|fecha }}</span>
+  {% elif r.pide_firma is sameas false %}
   {% else %}<span class="rp-estado falta">{{ 'Falta su firma' if de_trabajador else 'Sin firmar' }}</span>{% endif %}
 </div>
-<div class="rp-quien">{{ r.nombre }} · C.I. {{ r.cedula }} · Sueldo {{ r.sueldo|dinero }}{% if r.atrasos %} · Atrasos {{ r.atrasos|num(2) }}{% endif %}{% if r.otros %} · Otros {{ r.otros|num(2) }}{% endif %}</div>
+<div class="rp-quien">{{ r.nombre }} · C.I. {{ r.cedula }}{% if r.sueldo %} · Sueldo {{ r.sueldo|dinero }}{% endif %}{% if r.atrasos %} · Atrasos {{ r.atrasos|num(2) }}{% endif %}{% if r.otros %} · Otros {{ r.otros|num(2) }}{% endif %}</div>
 <div class="rp-grupo">
   <h3><span>Ingresos</span><b>{{ r.total_ingresos|dinero }}</b></h3>
   {% for x in r.ingresos %}<div class="rp-linea"><span>{{ x.concepto }}{% if x.detalle %} <small>{{ x.detalle }}</small>{% endif %}</span><b>{{ x.valor|dinero }}</b></div>{% endfor %}

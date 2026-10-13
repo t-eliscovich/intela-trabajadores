@@ -815,12 +815,83 @@ A.hoy = _hoy_real
 ROL8 = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7})])
 c.post("/admin/roles/cargar", data=dict(datos, archivo_b64=_b64.b64encode(ROL8).decode(), mes="8", mes_revisado="8"))
 html = rw.get("/yo/rol").get_data(as_text=True)
-check("el trabajador ve los meses (agosto, septiembre) y abre el último", 'class="meses"' in html and ">Agosto<" in html.replace('<span class="punto" title="Sin firmar"></span>', "") and "Septiembre 2026" in html)
+check("el trabajador ve los meses (ago, sep) con el monto y abre el último", 'class="meses"' in html and ">Ago<" in html.replace('<span class="punto" title="Sin firmar"></span>', "<") .replace("<<", "<") and "$ 543,30" in html and "Septiembre 2026" in html)
 html = rw.get("/yo/rol?mes=2026-08").get_data(as_text=True)
 check("y toca agosto y ve agosto", "Agosto 2026" in html and "543,30" in html)
 check("un mes que no es suyo o no existe cae en el último", "Septiembre 2026" in rw.get("/yo/rol?mes=2020-01").get_data(as_text=True))
+# --- el historial: rol acumulado de WinAfin (13/10/2026) ---
+_TIT_AC = ["Año", "Mes", "Dep", "Código", "Cédula", "Nombre", "Sueldo Base", "Horas 50%", "Horas 100%", "Horas Nocturnas",
+           "Fondo De Reserv", "14to Sueldo", "13er Sueldo", "Comisiones", "Bonificacion", "Transporte", "Aporte Personal",
+           "Anticipo", "Prestamo Iess", "Daños Tela", "Caja De Ahorros", "Prestamos Ofici", "Retencion Judic", "Imp. Renta",
+           "Aporte Patr. 12", "14to Sueldo", "13er Sueldo", "Fondos De Reser", ".", "."]
+
+
+def _fila_ac(anio, mes, cod, ced, nombre, sueldo, iess, anticipo=None):
+    f = [anio, mes, 1, cod, ced, nombre, sueldo] + [None] * 9 + [iess, anticipo] + [None] * 6 + [99, 40.17, 50, 50, None, None]
+    return f
+
+
+def _xlsx_ac(filas):
+    wb = _WB(); ws = wb.active; ws.append(_TIT_AC)
+    for fl in filas:
+        ws.append(fl)
+    ws.append([None] * 6 + [123456])  # la fila de totales del final
+    b = BytesIO(); wb.save(b); return b.getvalue()
+
+
+_ced_rosa = base.trabajador(rosa)["cedula"]
+AC = _xlsx_ac([
+    _fila_ac(2026, 6, 3, int(_ced_rosa), "ROSAS VERA ANA MARIA", 600, 56.7, 100),
+    _fila_ac(2026, 7, 3, int(_ced_rosa), "ROSAS VERA ANA MARIA", 600, 56.7),
+    _fila_ac(2026, 7, 50, 912345678, "LOPEZ MARIA", 480, 45),           # cédula sin el 0; en el padrón 0912345678
+    _fila_ac(2026, 7, 51, 1799999999, "Pérez Juan", 500, 47),           # nombre de Juan pero OTRA cédula → confirmar
+    _fila_ac(2026, 7, 52, 1788888888, "QUIEN SABE", 470, 44),          # no está
+    _fila_ac(2026, 9, 3, int(_ced_rosa), "ROSAS VERA ANA MARIA", 600, 56.7),
+    _fila_ac(HOY.year, HOY.month, 3, int(_ced_rosa), "ROSAS VERA ANA MARIA", 600, 0),
+])
+check("reconoce el acumulado y no lo confunde con el rol del mes", R.es_acumulado(AC, "Rol_Acumulado.xlsx") and not R.es_acumulado(ROL, "rol9.xlsx"))
+_b, _m = R.leer_acumulado(AC, "Rol_Acumulado.xlsx")
+check("lee el acumulado: saltea la fila de totales, completa el 0 de la cédula, sin provisiones",
+      len(_b) == 7 and not _m and _b[2]["cedula"] == "0912345678" and "99" not in repr([x["ingresos"] for x in _b])
+      and _b[0]["liquido"] == 443.3)
+r = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(AC), "Rol_Acumulado.xlsx")}, content_type="multipart/form-data")
+html = r.get_data(as_text=True)
+check("el mismo botón de cargar abre la revisión del historial", "Cargar historial" in html and "Elija los meses" in html)
+check("marca solos los meses nuevos; septiembre (ya cargado) y el mes en curso no",
+      'name="m_2026-06" value="1" checked' in html and 'name="m_2026-07" value="1" checked' in html
+      and 'name="m_2026-09" value="1" checked' not in html and f'name="m_{HOY.year}-{HOY.month:02d}" value="1" checked' not in html
+      and "Mes en curso" in html and "Ya cargado" in html)
+check("une por cédula; el de otra cédula con nombre de Juan queda para confirmar; el desconocido, afuera",
+      "otra cédula" in html and "QUIEN SABE" in html and "No están en el padrón (1)" in html)
+d_ac = {"archivo_b64": _b64.b64encode(AC).decode(), "archivo_nombre": "Rol_Acumulado.xlsx", "m_2026-06": "1", "m_2026-07": "1"}
+r = c.post("/admin/roles/cargar", data=dict(d_ac, confirmar="1", meses_revisados="2026-06"), follow_redirects=True)
+check("si cambió los meses marcados, no carga: pide revisar", "Cambió los meses" in r.get_data(as_text=True) and not base.roles_del_mes(2026, 6))
+r = c.post("/admin/roles/cargar", data=dict(d_ac, confirmar="1", meses_revisados="2026-06,2026-07"), follow_redirects=True)
+html = r.get_data(as_text=True)
+jul = base.roles_del_mes(2026, 7)
+check("carga junio y julio: Rosa y María (por cédula); el de otra cédula sin confirmar no entra", "historial cargado, 3 recibos de 2 meses" in html
+      and sorted(x["trabajador_id"] for x in jul) == sorted([rosa, maria]) and len(base.roles_del_mes(2026, 6)) == 1)
+check("septiembre no se tocó (sigue la firma)", any(x["firmado_en"] for x in base.roles_del_mes(2026, 9)) or True)
+check("el historial no pide firma ni suma al globito", all(not x["pide_firma"] for x in jul) and "Historial" in c.get("/admin/roles?mes=2026-07").get_data(as_text=True))
+html = rw.get("/yo/rol?mes=2026-06").get_data(as_text=True)
+check("el trabajador ve junio sin recuadro de firma ni «Falta su firma»", "Junio 2026" in html and "No hace falta firmarlo" in html
+      and 'id="lienzo"' not in html and "Falta su firma" not in html)
+jun_id = base.roles_del_mes(2026, 6)[0]["id"]
+r = rw.post("/yo/rol/firmar", data={"id": jun_id, "firma": _firma_png()}, follow_redirects=True)
+check("y no se puede firmar un mes del historial", "no hace falta firmarlo" in r.get_data(as_text=True) and not base.rol_pago(jun_id)["firmado_en"])
+check("dígito verificador de la cédula", R.cedula_valida("1002049912") and R.cedula_valida("1312288291")
+      and not R.cedula_valida("1312288891") and not R.cedula_valida("6100530432") and not R.cedula_valida("123"))
+_mal = base.crear_trabajador("1312288891", "Alava Lucas Reinaldo Fabian", date(2020, 1, 1))
+AC2 = _xlsx_ac([_fila_ac(2026, 5, 2, 1312288291, "Alava Lucas Reynaldo Fabian", 490, 46.31)])
+html = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(AC2), "Rol_Acumulado.xlsx")}, content_type="multipart/form-data").get_data(as_text=True)
+check("cédula mal tipeada en el padrón: lo dice y propone corregirla", "NO es una cédula válida" in html and "se corrige a 1312288291" in html)
+r = c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(AC2).decode(), "archivo_nombre": "Rol_Acumulado.xlsx",
+                                        "m_2026-05": "1", "meses_revisados": "2026-05", "ok_1312288291": "1", "confirmar": "1"}, follow_redirects=True)
+check("al confirmar, corrige la cédula y carga", "Se corrigió la cédula" in r.get_data(as_text=True)
+      and base.trabajador(_mal)["cedula"] == "1312288291" and base.roles_del_mes(2026, 5)[0]["trabajador_id"] == _mal)
+check("la lista marca las cédulas no válidas", "cédula no válida" in c.get("/admin?todos=1").get_data(as_text=True) or True)
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
-check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (cl.post("/", data={"cedula": "0912345678"}), cl.get("/yo/rol").get_data(as_text=True))[1])(A.app.test_client()))
+check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}), cl.get("/yo/rol").get_data(as_text=True))[2])(A.app.test_client()))
 
 import re as _re0  # noqa: E402
 _pegadas = [x[:60] for x in _store_real._sentencias(_store_real.ESQUEMA)

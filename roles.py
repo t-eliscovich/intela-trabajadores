@@ -279,3 +279,153 @@ def dispositivo(user_agent: str | None) -> str:
     navegador = next((n for k, n in (("Edg/", "Edge"), ("SamsungBrowser", "Samsung Internet"), ("CriOS", "Chrome"),
                                      ("Chrome/", "Chrome"), ("Firefox/", "Firefox"), ("Safari/", "Safari")) if k in ua), "")
     return " · ".join(x for x in (equipo, navegador) if x) or "—"
+
+
+# --------------------------------------------------------------------------
+# El ROL ACUMULADO de WinAfin (varios meses, una fila por trabajador y mes,
+# CON CÉDULA). Sirve para cargar el historial de una vez (Tamara, 13/10/2026).
+# Septiembre 2026 de este archivo coincide al centavo con rol9.xls en los 114.
+# --------------------------------------------------------------------------
+# Las columnas, en orden. «14to Sueldo» y «13er Sueldo» aparecen DOS veces (ingreso
+# y provisión), así que se lee por posición después de verificar los títulos.
+COLUMNAS_ACUMULADO = (
+    "ano", "mes", "dep", "codigo", "cedula", "nombre",
+    "sueldo base", "horas 50", "horas 100", "horas nocturnas", "fondo de reserv", "14to sueldo",
+    "13er sueldo", "comisiones", "bonificacion", "transporte",
+    "aporte personal", "anticipo", "prestamo iess", "danos tela", "caja de ahorros",
+    "prestamos ofici", "retencion judic", "imp renta",
+)
+_ING_ACUM = range(6, 16)    # mismos conceptos y orden que INGRESOS
+_DES_ACUM = range(16, 24)   # mismos conceptos y orden que DESCUENTOS (después vienen las provisiones)
+
+
+def _titulo(t) -> str:
+    sin = "".join(c for c in unicodedata.normalize("NFKD", str(t or "")) if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", sin.lower()).split())
+
+
+def es_acumulado(datos: bytes, nombre: str = "") -> bool:
+    try:
+        titulos = _primera_fila(datos, nombre)
+    except Exception:  # noqa: BLE001
+        return False
+    return [_titulo(t) for t in titulos[:6]] == list(COLUMNAS_ACUMULADO[:6])
+
+
+def _primera_fila(datos: bytes, nombre: str) -> list:
+    if nombre.lower().endswith(".xlsx") or datos[:2] == b"PK":
+        from openpyxl import load_workbook
+        hoja = load_workbook(BytesIO(datos), read_only=True, data_only=True).worksheets[0]
+        return list(next(hoja.iter_rows(values_only=True)))
+    import xlrd
+    return xlrd.open_workbook(file_contents=datos).sheet_by_index(0).row_values(0)
+
+
+def cedula_valida(c: str) -> bool:
+    """El dígito verificador de la cédula ecuatoriana (módulo 10). Provincia
+    01–24 o 30, tercer dígito menor que 6."""
+    if not (isinstance(c, str) and len(c) == 10 and c.isdigit()):
+        return False
+    if not (1 <= int(c[:2]) <= 24 or int(c[:2]) == 30) or int(c[2]) >= 6:
+        return False
+    suma = 0
+    for i, d in enumerate(c[:9]):
+        v = int(d) * (2 if i % 2 == 0 else 1)
+        suma += v - 9 if v > 9 else v
+    return (10 - suma % 10) % 10 == int(c[9])
+
+
+def limpiar_cedula(v) -> str:
+    """1002049912 → «1002049912»; 912345678 (se comió el 0) → «0912345678»."""
+    if isinstance(v, float) and v == int(v):
+        v = int(v)
+    d = re.sub(r"\D", "", str(v or ""))
+    return d.zfill(10) if 7 <= len(d) <= 10 else d
+
+
+def leer_acumulado(datos: bytes, nombre: str = "acumulado.xlsx") -> tuple[list[dict], list[dict]]:
+    """Devuelve (buenas, malas). Cada buena: un recibo de un trabajador en un
+    mes, con la misma forma que `leer_rol` más anio, mes y cedula. El archivo no
+    trae totales ni horas: el líquido es ingresos − descuentos."""
+    if nombre.lower().endswith(".xlsx") or datos[:2] == b"PK":
+        from openpyxl import load_workbook
+        hoja = load_workbook(BytesIO(datos), read_only=True, data_only=True).worksheets[0]
+        filas = [list(r) for r in hoja.iter_rows(values_only=True)]
+    else:
+        import xlrd
+        h = xlrd.open_workbook(file_contents=datos).sheet_by_index(0)
+        filas = [h.row_values(i) for i in range(h.nrows)]
+    titulos = [_titulo(t) for t in filas[0][:len(COLUMNAS_ACUMULADO)]] if filas else []
+    if titulos != list(COLUMNAS_ACUMULADO):
+        distintos = [f"«{t}»" for t, e in zip(titulos, COLUMNAS_ACUMULADO) if t != e][:3]
+        raise NoEsElRol("Este archivo no tiene las columnas del rol acumulado de WinAfin"
+                        + (": " + ", ".join(distintos) if distintos else "") + ".")
+    buenas, malas = [], []
+    for n, f in enumerate(filas[1:], start=2):
+        f = list(f) + [None] * (len(COLUMNAS_ACUMULADO) - len(f))
+        if f[0] in (None, "") and f[1] in (None, ""):
+            continue  # la fila de totales del final
+        nombre_rol = " ".join(str(f[5] or "").split())
+        try:
+            anio, mes = int(_num(f[0])), int(_num(f[1]))
+            if not (2000 <= anio <= 2100 and 1 <= mes <= 12):
+                raise ValueError("Año o mes inválido.")
+            cedula = limpiar_cedula(f[4])
+            if len(cedula) != 10:
+                raise ValueError("La cédula no tiene 10 dígitos.")
+            if not nombre_rol:
+                raise ValueError("Fila sin nombre.")
+            ingresos = [{"concepto": INGRESOS[i][1], "detalle": "", "valor": _num(f[c])}
+                        for i, c in enumerate(_ING_ACUM) if _num(f[c])]
+            descuentos = [{"concepto": DESCUENTOS[i][1], "detalle": "", "valor": _num(f[c])}
+                          for i, c in enumerate(_DES_ACUM) if _num(f[c])]
+            if not ingresos:
+                raise ValueError("No tiene ingresos.")
+            ti = round(sum(x["valor"] for x in ingresos), 2)
+            td = round(sum(x["valor"] for x in descuentos), 2)
+            buenas.append({
+                "fila": n, "anio": anio, "mes": mes, "codigo": int(_num(f[3])), "cedula": cedula,
+                "nombre_rol": nombre_rol, "sueldo": None, "dias": 0, "horas_25": 0, "horas_50": 0,
+                "horas_100": 0, "atrasos": 0, "otros": 0, "ingresos": ingresos, "descuentos": descuentos,
+                "total_ingresos": ti, "total_descuentos": td, "liquido": round(ti - td, 2),
+            })
+        except (ValueError, TypeError) as exc:
+            malas.append({"fila": n, "nombre_rol": nombre_rol, "motivo": str(exc)})
+    return buenas, malas
+
+
+def cruzar_por_cedula(personas: list[dict], padron: list[dict]) -> None:
+    """Como `cruzar`, pero la llave es la CÉDULA. Entra solo quien tiene la
+    misma cédula en el padrón y un nombre compatible. Todo lo demás (misma
+    cédula con otro nombre, o un nombre que coincide con alguien de OTRA
+    cédula) queda para confirmar a mano: nunca el rol de uno a otro."""
+    por_cedula = {limpiar_cedula(t["cedula"]): t for t in padron}
+    usados: set[int] = set()
+    for p in personas:
+        p["trabajador_id"], p["como"], p["nombre_padron"], p["aviso"] = None, None, None, None
+        t = por_cedula.get(p["cedula"])
+        if t:
+            parecido = comparar_nombres(p["nombre_rol"], t["nombre"])
+            if parecido in ("nombre", "orden", "parecido") and t.get("activo", True):
+                p["trabajador_id"], p["como"], p["nombre_padron"] = t["id"], "cedula", t["nombre"]
+            else:
+                p["trabajador_id"], p["como"], p["nombre_padron"] = t["id"], "parecido", t["nombre"]
+                p["aviso"] = ("está dado de baja en el padrón" if parecido
+                              else "la cédula es la misma pero el nombre es distinto")
+            usados.add(t["id"])
+    # Sin cédula en el padrón: se busca por nombre, pero nunca entra solo.
+    resto = [p for p in personas if p["trabajador_id"] is None]
+    libres = [t for t in padron if t["id"] not in usados]
+    cruzar(resto, libres)
+    for p in resto:
+        if p["trabajador_id"]:
+            t = next(x for x in libres if x["id"] == p["trabajador_id"])
+            p["como"] = "parecido"
+            if not cedula_valida(limpiar_cedula(t["cedula"])) and cedula_valida(p["cedula"]):
+                # La del padrón está mal tipeada (no pasa el dígito verificador) y la
+                # de WinAfin sí: al confirmar se corrige en el padrón, así puede entrar.
+                p["corregir_cedula"] = True
+                p["aviso"] = (f"en el padrón tiene {t['cedula']}, que NO es una cédula válida. "
+                              f"Al confirmar se corrige a {p['cedula']}")
+            else:
+                p["aviso"] = f"en el padrón tiene otra cédula ({t['cedula']})"

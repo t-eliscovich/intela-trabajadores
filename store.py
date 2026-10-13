@@ -302,6 +302,9 @@ ESQUEMA = """
     ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firmado_en timestamptz;
     ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firmado_desde text;
     ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firma_huella text;
+    -- Los meses que se cargan como historial (rol acumulado) ya se pagaron: se
+    -- muestran sin pedir firma.
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS pide_firma boolean NOT NULL DEFAULT true;
     -- El código del trabajador en WinAfin (jno). Se guarda al cargar el primer
     -- rol y de ahí en adelante el cruce va por código, no por nombre.
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS codigo_rol integer;
@@ -343,7 +346,7 @@ ESQUEMA = """
 _ROL = """SELECT r.id, r.trabajador_id, r.anio, r.mes, r.codigo, r.nombre_rol, r.sueldo, r.dias,
                  r.horas_25, r.horas_50, r.horas_100, r.atrasos, r.otros, r.ingresos, r.descuentos,
                  r.total_ingresos, r.total_descuentos, r.liquido, r.cargado_por, r.cargado_en,
-                 r.firmado_en, r.firmado_desde, r.firma_huella, t.nombre, t.cedula, t.area, t.celular
+                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma, t.nombre, t.cedula, t.area, t.celular
             FROM trabajadores.rol_pago r JOIN trabajadores.trabajador t ON t.id = r.trabajador_id
            WHERE r.borrado_en IS NULL"""
 
@@ -375,12 +378,12 @@ def roles_de(trabajador_id: int) -> list[dict]:
 def meses_con_rol() -> list[dict]:
     return [dict(r, total=float(r["total"])) for r in _todos(
         """SELECT anio, mes, count(*) AS cuantos, sum(liquido) AS total, max(cargado_en) AS cargado_en,
-                  count(firmado_en) AS firmados
+                  count(firmado_en) AS firmados, count(*) FILTER (WHERE pide_firma) AS piden_firma
              FROM trabajadores.rol_pago WHERE borrado_en IS NULL
             GROUP BY anio, mes ORDER BY anio DESC, mes DESC""")]
 
 
-def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
+def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str, pide_firma: bool = True) -> dict:
     """Carga el rol del mes ENTERO, en una sola transacción: lo que hubiera de
     ese mes queda borrado (se reemplaza, nunca DELETE), entra cada fila y a cada
     trabajador se le guarda su código de WinAfin para el mes que viene."""
@@ -404,12 +407,12 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
                     """INSERT INTO trabajadores.rol_pago
                          (trabajador_id, anio, mes, codigo, nombre_rol, sueldo, dias, horas_25, horas_50,
                           horas_100, atrasos, otros, ingresos, descuentos, total_ingresos, total_descuentos,
-                          liquido, cargado_por)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s)""",
+                          liquido, cargado_por, pide_firma)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s)""",
                     (f["trabajador_id"], anio, mes, f["codigo"], f["nombre_rol"], f["sueldo"], f["dias"],
                      f["horas_25"], f["horas_50"], f["horas_100"], f["atrasos"], f["otros"],
                      json.dumps(f["ingresos"]), json.dumps(f["descuentos"]),
-                     f["total_ingresos"], f["total_descuentos"], f["liquido"], quien))
+                     f["total_ingresos"], f["total_descuentos"], f["liquido"], quien, pide_firma))
                 antes = firmados.get(f["trabajador_id"])
                 if antes and mismo_recibo({"ingresos": antes[1], "descuentos": antes[2], "liquido": antes[3],
                                            "sueldo": antes[8], "dias": antes[9], "atrasos": antes[10],
@@ -447,6 +450,7 @@ def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str
     fila = _ejecutar("""UPDATE trabajadores.rol_pago
                            SET firma = %s, firmado_en = now(), firmado_desde = %s, firma_huella = %s
                          WHERE id = %s AND trabajador_id = %s AND borrado_en IS NULL AND firmado_en IS NULL
+                           AND pide_firma
                      RETURNING id""", (psycopg2.Binary(png), desde[:200], huella, id_, trabajador_id))
     return fila is not None
 
@@ -454,7 +458,7 @@ def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str
 def sin_firmar_ultimo_mes() -> int:
     """Para el globito del menú de contabilidad: cuántos del último mes cargado
     todavía no firmaron."""
-    r = _uno("""SELECT count(*) FILTER (WHERE firmado_en IS NULL) AS n FROM trabajadores.rol_pago
+    r = _uno("""SELECT count(*) FILTER (WHERE firmado_en IS NULL AND pide_firma) AS n FROM trabajadores.rol_pago
                  WHERE borrado_en IS NULL AND (anio, mes) = (
                        SELECT anio, mes FROM trabajadores.rol_pago WHERE borrado_en IS NULL
                         ORDER BY anio DESC, mes DESC LIMIT 1)""")
@@ -533,6 +537,14 @@ def crear_trabajador(cedula: str, nombre: str, fecha_ingreso: date,
         (cedula, nombre, fecha_ingreso, saldo_inicial, fecha_saldo_inicial,
          *(perfil.get(k) for k in PERFIL)))
     return fila["id"]
+
+
+def corregir_cedula(id_: int, cedula: str) -> bool:
+    """Sólo si nadie más tiene esa cédula. Devuelve si la cambió."""
+    if _uno("SELECT 1 AS x FROM trabajadores.trabajador WHERE cedula = %s AND id <> %s", (cedula, id_)):
+        return False
+    _ejecutar("UPDATE trabajadores.trabajador SET cedula = %s WHERE id = %s", (cedula, id_))
+    return True
 
 
 def editar_trabajador(id_: int, cedula: str, nombre: str, fecha_ingreso: date,

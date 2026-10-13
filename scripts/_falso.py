@@ -89,13 +89,14 @@ class BaseFalsa:
                 continue
             m = meses.setdefault((r["anio"], r["mes"]), {"anio": r["anio"], "mes": r["mes"], "cuantos": 0,
                                                            "total": 0.0, "cargado_en": r["cargado_en"],
-                                                           "firmados": 0})
+                                                           "firmados": 0, "piden_firma": 0})
             m["cuantos"] += 1
             m["firmados"] += 1 if r["firmado_en"] else 0
+            m["piden_firma"] += 1 if r["pide_firma"] else 0
             m["total"] += r["liquido"]
         return sorted(meses.values(), key=lambda m: (m["anio"], m["mes"]), reverse=True)
 
-    def cargar_roles(self, anio, mes, filas, quien):
+    def cargar_roles(self, anio, mes, filas, quien, pide_firma=True):
         reemplazados = 0
         firmados = {r["trabajador_id"]: r for r in self.rol.values()
                     if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes and r["firmado_en"]}
@@ -111,7 +112,8 @@ class BaseFalsa:
                                         "total_ingresos", "total_descuentos", "liquido")}
             self.rol[id_] = {"id": id_, "anio": anio, "mes": mes, **campos, "cargado_por": quien,
                              "cargado_en": datetime.now(), "borrado_en": None, "borrado_por": None,
-                             "firma": None, "firmado_en": None, "firmado_desde": None, "firma_huella": None}
+                             "firma": None, "firmado_en": None, "firmado_desde": None, "firma_huella": None,
+                             "pide_firma": pide_firma}
             antes = firmados.get(f["trabajador_id"])
             if antes and store_mismo_recibo(antes, f):
                 self.rol[id_].update(firma=antes["firma"], firmado_en=antes["firmado_en"],
@@ -129,14 +131,16 @@ class BaseFalsa:
 
     def firmar_rol(self, id_, trabajador_id, png, desde, huella):
         r = self.rol.get(id_)
-        if not r or r["borrado_en"] or r["trabajador_id"] != trabajador_id or r["firmado_en"]:
+        if not r or r["borrado_en"] or r["trabajador_id"] != trabajador_id or r["firmado_en"] or not r["pide_firma"]:
             return False
         r.update(firma=png, firmado_en=datetime.now(), firmado_desde=desde[:200], firma_huella=huella)
         return True
 
     def sin_firmar_ultimo_mes(self):
         meses = self.meses_con_rol()
-        return meses[0]["cuantos"] - meses[0]["firmados"] if meses else 0
+        if not meses:
+            return 0
+        return sum(1 for r in self.roles_del_mes(meses[0]["anio"], meses[0]["mes"]) if r["pide_firma"] and not r["firmado_en"])
 
     def firma_del_rol(self, id_):
         r = self.rol.get(id_)
@@ -186,6 +190,12 @@ class BaseFalsa:
                           "codigo_rol": None, "nombre_rol": None,
                           **{k: perfil.get(k) for k in self.PERFIL}}
         return id_
+
+    def corregir_cedula(self, id_, cedula):
+        if any(t["cedula"] == cedula and t["id"] != id_ for t in self.trab.values()):
+            return False
+        self.trab[id_]["cedula"] = cedula
+        return True
 
     def poner_saldo_inicial(self, id_, saldo, fecha):
         self.trab[id_].update(saldo_inicial=saldo, fecha_saldo_inicial=fecha)

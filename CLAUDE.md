@@ -151,10 +151,26 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   bajos, recuadro de firma de 150 px. Medido en 390×844.
 - La imagen de la firma se mira el tamaño ANTES de descomprimir (≤3000×1500):
   un PNG de 20 KB puede ser una imagen de 13000×13000 que tumba el server.
-- El trabajador ve arriba los meses como botones (Septiembre, Octubre…; punto rojo
-  = sin firmar) y abre el último por defecto. Sólo ve los suyos.
+- El trabajador ve arriba los meses como botones con el líquido (Sep $ 794,81…; punto
+  rojo = falta firmar) y abre el último por defecto. Sólo ve los suyos.
 - Contabilidad ve en el menú un globo naranja con cuántos faltan firmar del último
   mes, «Últimas firmas», y avisa a los que faltan por WhatsApp (wa.me).
+- **Historial: el ROL ACUMULADO de WinAfin** (`Rol_Acumulado.xlsx`, una fila por
+  trabajador y mes, CON CÉDULA; Tamara 13/10). Se sube en la MISMA pantalla de carga:
+  `roles.es_acumulado` lo reconoce por los títulos y abre `admin_roles_historial.html`.
+  Columnas por POSICIÓN (14to y 13er aparecen dos veces: ingreso y provisión); sin
+  totales ni horas → líquido = ingresos − descuentos. Septiembre coincide al centavo
+  con rol9.xls. Se cruza **por cédula** (`cruzar_por_cedula`): misma cédula + nombre
+  compatible entra solo; todo lo demás se confirma a mano. Meses como tarjetas: se
+  marcan solos los nuevos y cerrados; el mes en curso y los ya cargados no (se
+  pueden marcar; los meses marcados quedan trabados igual que el mes del rol).
+  **Los meses del historial no piden firma** (`rol_pago.pide_firma = false`): no
+  aparece el recuadro, no suman al globito, no se pueden firmar.
+- **Cédulas mal tipeadas en el padrón**: `roles.cedula_valida` (dígito verificador
+  ecuatoriano). Al cargar el historial, si la del padrón no es válida y la de WinAfin
+  sí, al confirmar se corrige en el padrón (`store.corregir_cedula`, si nadie más la
+  tiene). La lista y la ficha marcan «cédula no válida». El 13/10 había 4 así
+  (Alava, Moreno Barrera, Moreno Ruano, Rivera Rojas): no podían entrar con su cédula.
 - El encabezado dice INTELA (razón social y RUC en espera; la razón social es
   «Industria Textil Latinoamericana Cía. Ltda.»).
 
