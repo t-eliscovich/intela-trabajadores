@@ -1040,10 +1040,10 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         if p and p["estado"] == "aprobada":
             # nació de un pedido: el pedido pasa a cancelado, así el trabajador no sigue viendo «Aprobado»
             store.cancelar_solicitud_aprobada(p["id"], "el período se borró de la ficha", quien)
-            flash("Período borrado y el pedido quedó cancelado. Queda en Historial por si hay que recuperarlo.", "ok")
+            flash("Período borrado y el pedido quedó cancelado. Queda en Historial (arriba a la derecha, en su usuario) por si hay que recuperarlo.", "ok")
         else:
             store.borrar_vacacion(vid, quien)
-            flash("Período borrado. Queda en Historial por si hay que recuperarlo.", "ok")
+            flash("Período borrado. Queda en Historial (arriba a la derecha, en su usuario) por si hay que recuperarlo.", "ok")
     elif accion == "ajuste":
         dias = leer_decimal(f.get("dias", ""), "Los días")
         motivo = (f.get("motivo") or "").strip()
@@ -1053,7 +1053,7 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         flash("Ajuste cargado.", "ok")
     elif accion == "ajuste_borrar":
         store.borrar_ajuste(int(f.get("id", 0)), quien)
-        flash("Ajuste borrado. Queda en Historial por si hay que recuperarlo.", "ok")
+        flash("Ajuste borrado. Queda en Historial (arriba a la derecha, en su usuario) por si hay que recuperarlo.", "ok")
     else:
         raise ValueError("No sé qué hacer con eso.")
 
