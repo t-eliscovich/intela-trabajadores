@@ -77,6 +77,19 @@
   </div>
 
   <div class="bloque">
+    <div class="titulo"><h2>Constancia de roles de pago</h2></div>
+    {% if constancia_roles %}
+    <div class="relleno" style="font-size:14px">
+      <span class="etiqueta ok">✓ Firmada</span> el {{ constancia_roles.firmado_en|fecha_hora }}<br>
+      Cuenta para el pago: <b>{{ constancia_roles.banco }}</b> · No. <b style="font-variant-numeric:tabular-nums">{{ constancia_roles.cuenta }}</b><br>
+      <a href="{{ url_for('admin_constancia', id_=constancia_roles.id) }}">Ver la constancia</a>
+    </div>
+    {% else %}
+    <div class="nota" style="border-top:0">Todavía no la firmó. Le aparece la primera vez que entra a «Rol de pagos».</div>
+    {% endif %}
+  </div>
+
+  <div class="bloque">
     <div class="titulo"><h2>Roles de pago</h2>{% if roles_pago %}<p>{{ roles_pago|selectattr('firmado_en')|list|length }} de {{ roles_pago|length }} firmados</p>{% endif %}</div>
     {% if roles_pago %}
     <table><tbody>

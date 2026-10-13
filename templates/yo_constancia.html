@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block titulo %}Constancia de roles de pago · {{ t.nombre }}{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block contenido %}
+{% include "_pestanas_yo.html" %}
+<style>
+  .doc{background:#fff;border:1px solid var(--borde);border-radius:var(--radio);padding:18px 18px 14px;margin-bottom:12px;
+       font-family:Georgia,"Times New Roman",serif;font-size:15px;line-height:1.55;color:#1e293b}
+  .doc h2{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:13px;letter-spacing:.06em;
+          text-align:center;margin:0 0 12px;line-height:1.35}
+  .doc p{margin:0 0 10px;text-align:justify;hyphens:auto}
+  .doc .dato{font-weight:700;background:#fff7d6;padding:0 3px;border-radius:3px}
+  .doc .hueco{display:inline-block;min-width:110px;border-bottom:2px solid var(--acento);color:var(--acento);font-weight:700;
+              font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;text-align:center}
+  .aviso-doc{background:#eef4ff;border:1px solid #c9dafc;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+  .aviso-doc b{display:block;font-size:15px;margin-bottom:2px}
+  .datos-banco{display:grid;gap:10px}
+  .datos-banco input{height:44px;font-size:17px}
+  .firmada-trazo{text-align:center;padding:4px 0 2px}
+  .firmada-trazo img{max-width:100%;max-height:110px;border-bottom:1px solid var(--tinta)}
+  .firmada-trazo p{margin:4px 0 0;font-size:13px;color:var(--gris)}
+</style>
+
+{% if not c %}
+<div class="aviso-doc">
+  <b>Antes de ver sus roles de pago</b>
+  Lea esta constancia, escriba su banco y su número de cuenta, y fírmela con el dedo. Es una sola vez.
+</div>
+
+<div class="doc">
+  <h2>CONSTANCIA DE CONOCIMIENTO Y ACCESO<br>A ROLES DE PAGO</h2>
+  {% for p in parrafos %}
+  <p>{{ p }}</p>
+  {% endfor %}
+</div>
+
+<form method="POST" action="{{ url_for('yo_constancia') }}" id="form-firma" autocomplete="off">
+  <div class="bloque">
+    <div class="titulo"><h2>Su cuenta para el pago</h2></div>
+    <div class="relleno datos-banco">
+      <div><label class="campo">Banco o cooperativa</label>
+        <input name="banco" list="bancos" value="{{ banco }}" required maxlength="80" placeholder="por ejemplo: Banco Pichincha"
+               oninput="document.getElementById('v-banco').textContent=this.value||'su banco'">
+        <datalist id="bancos">{% for b in BANCOS %}<option value="{{ b }}">{% endfor %}</datalist></div>
+      <div><label class="campo">Número de cuenta</label>
+        <input name="cuenta" value="{{ cuenta }}" required inputmode="numeric" maxlength="24" placeholder="sólo números"
+               oninput="document.getElementById('v-cuenta').textContent=this.value||'su cuenta'"></div>
+      <div><label class="campo">Escriba otra vez el número de cuenta</label>
+        <input name="cuenta2" required inputmode="numeric" maxlength="24" placeholder="para no equivocarse" onpaste="return false"></div>
+    </div>
+  </div>
+
+  <div class="bloque">
+    <div class="relleno" style="padding:10px 12px">
+      <input type="hidden" name="firma" id="firma">
+      <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Firme aquí con el dedo</div></div>
+      <p class="ayuda" style="margin:6px 0 8px">{{ t.nombre }} · C.I. {{ t.cedula }}. Al firmar declara conocer lo que dice esta constancia.</p>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+        <button class="btn suave" type="button" id="borrar">Borrar</button>
+        <button class="btn verde" type="submit" id="firmar" disabled>Firmar la constancia</button>
+      </div>
+    </div>
+  </div>
+</form>
+<script src="{{ url_for('static', filename='firma.js') }}"></script>
+
+{% else %}
+<div class="mensaje ok" style="margin-bottom:12px">✓ Firmó esta constancia el {{ c.firmado_en|fecha_hora }}.</div>
+<div class="doc">
+  {% for p in c.texto.split('\n\n') %}{% if loop.first %}<h2>{{ p }}</h2>{% else %}<p>{{ p }}</p>{% endif %}{% endfor %}
+  <div class="firmada-trazo">
+    <img src="{{ url_for('yo_constancia_firma') }}" alt="Su firma">
+    <p>{{ c.nombre }} · C.I. {{ c.cedula }}</p>
+  </div>
+</div>
+<div class="bloque"><div class="relleno" style="font-size:13px;color:var(--gris)">
+  Firmado en la aplicación el {{ c.firmado_en|fecha_hora }} (hora de Ecuador), desde {{ equipo }}.
+  {% if intacta %}<span style="color:var(--verde);font-weight:700">✓ El documento es el mismo que se firmó.</span>{% endif %}
+  <br>Si cambió de cuenta, avise a Contabilidad para firmar una nueva.
+</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+  <a class="btn suave" href="{{ url_for('yo_rol') }}">Ver mis roles</a>
+  <a class="btn suave" href="{{ url_for('yo_constancia_imprimir', auto=1) }}">Imprimir o guardar PDF</a>
+</div>
+{% endif %}
+{% endblock %}

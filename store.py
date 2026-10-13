@@ -318,6 +318,28 @@ ESQUEMA = """
              WHERE borrado_en IS NULL ORDER BY trabajador_id, anio DESC, mes DESC) r
      WHERE r.trabajador_id = t.id AND t.nombre_rol IS NULL;
 
+    -- La CONSTANCIA DE CONOCIMIENTO Y ACCESO A ROLES DE PAGO (Tamara 13/10/2026):
+    -- el trabajador la firma una vez en la app antes de ver sus roles. Se guarda
+    -- el texto EXACTO que firmó (con banco y cuenta) y su huella. Contabilidad la
+    -- puede anular (cambió de cuenta) y el trabajador la vuelve a firmar; nunca DELETE.
+    CREATE TABLE IF NOT EXISTS trabajadores.constancia_roles (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        version        integer NOT NULL,
+        banco          text NOT NULL,
+        cuenta         text NOT NULL,
+        texto          text NOT NULL,
+        huella         text NOT NULL,
+        firma          bytea NOT NULL,
+        firmado_en     timestamptz NOT NULL DEFAULT now(),
+        firmado_desde  text,
+        anulada_en     timestamptz,
+        anulada_por    text,
+        motivo_anulada text
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS constancia_roles_viva_idx
+        ON trabajadores.constancia_roles (trabajador_id) WHERE anulada_en IS NULL;
+
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
         clave  text PRIMARY KEY,
@@ -479,6 +501,49 @@ def sin_firmar_ultimo_mes() -> int:
                        SELECT anio, mes FROM trabajadores.rol_pago WHERE borrado_en IS NULL
                         ORDER BY anio DESC, mes DESC LIMIT 1)""")
     return int(r["n"]) if r else 0
+
+
+_CONSTANCIA = """SELECT c.id, c.trabajador_id, c.version, c.banco, c.cuenta, c.texto, c.huella, c.firmado_en,
+                        c.firmado_desde, c.anulada_en, c.anulada_por, c.motivo_anulada,
+                        t.nombre, t.cedula, t.area, t.celular
+                   FROM trabajadores.constancia_roles c JOIN trabajadores.trabajador t ON t.id = c.trabajador_id"""
+
+
+def constancia_de(trabajador_id: int) -> dict | None:
+    """La constancia vigente (no anulada) del trabajador, o None."""
+    return _uno(_CONSTANCIA + " WHERE c.trabajador_id = %s AND c.anulada_en IS NULL", (trabajador_id,))
+
+
+def constancia(id_: int) -> dict | None:
+    return _uno(_CONSTANCIA + " WHERE c.id = %s", (id_,))
+
+
+def constancias_vigentes() -> dict[int, dict]:
+    return {c["trabajador_id"]: c for c in _todos(_CONSTANCIA + " WHERE c.anulada_en IS NULL")}
+
+
+def firmar_constancia(trabajador_id: int, version: int, banco: str, cuenta: str, texto: str, huella: str,
+                      png: bytes, desde: str) -> int | None:
+    """Una sola vigente por trabajador (índice único): si ya firmó, no hace nada."""
+    try:
+        fila = _ejecutar("""INSERT INTO trabajadores.constancia_roles
+                              (trabajador_id, version, banco, cuenta, texto, huella, firma, firmado_desde)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                         (trabajador_id, version, banco, cuenta, texto, huella, psycopg2.Binary(png), desde[:200]))
+    except psycopg2.IntegrityError:
+        return None
+    return fila["id"] if fila else None
+
+
+def anular_constancia(id_: int, quien: str, motivo: str) -> bool:
+    fila = _ejecutar("""UPDATE trabajadores.constancia_roles SET anulada_en = now(), anulada_por = %s, motivo_anulada = %s
+                         WHERE id = %s AND anulada_en IS NULL RETURNING id""", (quien, motivo[:200], id_))
+    return fila is not None
+
+
+def firma_de_constancia(id_: int) -> bytes | None:
+    r = _uno("SELECT firma FROM trabajadores.constancia_roles WHERE id = %s", (id_,))
+    return bytes(r["firma"]) if r and r["firma"] is not None else None
 
 
 def firma_del_rol(id_: int) -> bytes | None:

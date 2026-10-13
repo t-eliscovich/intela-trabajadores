@@ -192,6 +192,20 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   del celular, la hoja impresa («Por Industria Textil…» en la firma de la empresa), la
   constancia («Empleador») y el texto de la firma («recibió de …»).
 
+**Constancia de conocimiento y acceso a roles de pago** (texto de Tamara, 13/10/2026,
+en `constancia.py`). **Firma obligatoria**: la primera vez que el trabajador entra a
+«Rol de pagos» (y cualquier ruta /yo/rol*) va a /yo/constancia; hasta firmarla no ve
+sus roles. Nombre, cédula, empresa (`config.RAZON_SOCIAL`), Quito y la fecha se ponen
+solos; **banco y número de cuenta los escribe él** (la cuenta dos veces, sólo números).
+Área que atiende (punto 4): Contabilidad. Se guarda el TEXTO EXACTO firmado + huella
+SHA-256 + firma + equipo en `constancia_roles` (una vigente por trabajador, índice
+único). Contabilidad: /admin/constancias (quién firmó con banco y cuenta, quién falta
+con WhatsApp, imprimir, **anular con motivo** → el trabajador firma de nuevo; nunca
+DELETE). El texto que mandó Tamara dice «INTELA CIA. LTDA.»; se usa la razón social.
+Cambiar el texto = subir `constancia.VERSION` (lo ya firmado guarda su propio texto).
+El HTML resaltado se arma en Python (`_parrafos_para_firmar`, con `escape`), no con
+`replace` de Jinja (escapaba los `<span>`). El recuadro de firma vive en `static/firma.js`.
+
 **Backlog (Tamara, 17/09, «para alguna vez»)**: aviso en Pedidos de cuántos de la
 misma área ya están de vacaciones en esas fechas. También: cerrar el mes de comidas
 con Historial, acumulación de vacaciones a 3 años (importa desde 2027), liquidación

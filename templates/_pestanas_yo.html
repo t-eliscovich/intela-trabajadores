@@ -1,5 +1,5 @@
 <div class="pestanas">
   <a href="{{ url_for('yo_vacaciones') }}" class="{{ 'activa' if request.endpoint == 'yo_vacaciones' }}">Vacaciones</a>
-  <a href="{{ url_for('yo_rol') }}" class="{{ 'activa' if request.endpoint == 'yo_rol' }}">Rol de pagos{% if rol_sin_firmar %}<span class="punto" title="Tiene un rol sin firmar"></span>{% endif %}</a>
+  <a href="{{ url_for('yo_rol') }}" class="{{ 'activa' if request.endpoint in ('yo_rol', 'yo_constancia') }}">Rol de pagos{% if rol_sin_firmar %}<span class="punto" title="Tiene un rol sin firmar"></span>{% endif %}</a>
   <a href="{{ url_for('yo_perfil') }}" class="{{ 'activa' if request.endpoint == 'yo_perfil' }}">Perfil</a>
 </div>

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}Constancias de roles de pago{% endblock %}
+{% block contenido %}
+<h1>Constancia de roles de pago <small>cada trabajador la firma una vez en la app, antes de ver sus roles</small>
+  <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_roles') }}">‹ Roles de pago</a></span>
+</h1>
+
+<div class="cifras">
+  <div class="cifra"><b class="grande">{{ firmadas|length }}</b><small>firmaron</small></div>
+  <div class="cifra"><b {% if faltan %}style="color:var(--ambar)"{% endif %}>{{ faltan|length }}</b><small>faltan</small></div>
+  <div class="cifra"><b>{{ activos }}</b><small>trabajadores activos</small></div>
+</div>
+
+{% if faltan %}
+<div class="bloque">
+  <details>
+    <summary style="border-top:0">Faltan firmar ({{ faltan|length }})</summary>
+    <table><tbody>
+    {% for t in faltan %}
+      <tr><td><b>{{ t.nombre }}</b><span class="chico">{{ t.cedula }}{% if t.area %} · {{ t.area }}{% endif %}</span></td>
+          <td class="der">{% if t.wa %}<a class="btn suave chico" href="{{ t.wa }}" target="_blank" rel="noopener">Avisarle por WhatsApp</a>{% else %}<span class="tenue chico">sin celular</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    <div class="nota">La firman la primera vez que entran a «Rol de pagos» con su cédula.</div>
+  </details>
+</div>
+{% endif %}
+
+<div class="bloque">
+  <div class="titulo"><h2>Firmadas</h2><p>Con el banco y la cuenta que escribió cada uno.</p></div>
+  {% if firmadas %}
+  <div class="buscador no-imprime" style="margin:10px 12px"><input type="search" id="q" placeholder="Buscar por nombre, cédula o banco" oninput="filtrar()" autocomplete="off"></div>
+  <div class="desliza"><table>
+    <thead><tr><th>Trabajador</th><th>Banco</th><th>Cuenta</th><th class="oculta-chico">Firmó</th><th></th></tr></thead>
+    <tbody>
+    {% for c in firmadas %}
+      <tr class="fila-c" data-q="{{ (c.nombre ~ ' ' ~ c.cedula ~ ' ' ~ c.banco)|lower }}">
+        <td><a href="{{ url_for('admin_constancia', id_=c.id) }}" style="color:inherit;text-decoration:none"><b>{{ c.nombre }}</b></a><span class="chico">{{ c.cedula }}</span></td>
+        <td>{{ c.banco }}</td>
+        <td style="font-variant-numeric:tabular-nums">{{ c.cuenta }}</td>
+        <td class="oculta-chico tenue">{{ c.firmado_en|fecha_hora }}</td>
+        <td class="der" style="white-space:nowrap">
+          <a class="btn suave chico" href="{{ url_for('admin_constancia', id_=c.id) }}">Ver</a>
+          <details style="display:inline-block;vertical-align:middle"><summary class="btn rojo chico" style="list-style:none;display:inline-flex;border-top:1px solid #f3c2c2">Anular</summary>
+            <form method="POST" style="display:flex;gap:6px;margin-top:6px;min-width:260px">
+              <input type="hidden" name="id" value="{{ c.id }}">
+              <input name="motivo" required placeholder="por qué (ej.: cambió de cuenta)" style="height:30px;font-size:13px">
+              <button class="btn rojo chico" type="submit">Anular</button>
+            </form></details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="nota">Anular no borra nada: la constancia queda guardada y el trabajador firma una nueva la próxima vez que entra.</div>
+  {% else %}
+  <div class="vacio"><h3>Todavía nadie la firmó.</h3><p>Le aparece a cada trabajador la primera vez que entra a «Rol de pagos».</p></div>
+  {% endif %}
+</div>
+<script>
+function filtrar(){ var q=document.getElementById('q').value.toLowerCase().trim();
+  document.querySelectorAll('.fila-c').forEach(function(tr){ tr.hidden = q && tr.dataset.q.indexOf(q) < 0; }); }
+</script>
+{% endblock %}

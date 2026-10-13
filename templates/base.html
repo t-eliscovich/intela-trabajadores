@@ -108,6 +108,7 @@
   details > summary::-webkit-details-marker{display:none}
   details > summary::before{content:"▸ ";color:var(--gris-claro)}
   details[open] > summary::before{content:"▾ "}
+  details > summary.btn::before{content:none}
 
   /* ---------- la tablet del comedor ---------- */
   .hoja.comedor{max-width:560px}
@@ -146,6 +147,14 @@
   .celda.si{background:var(--verde);border-color:var(--verde);color:#fff}
   .celda:hover{border-color:var(--acento)}
   .cuadro .pordia{display:block;line-height:1.2}
+
+  /* ---------- el recuadro para firmar con el dedo (static/firma.js) ---------- */
+  .pad{position:relative;border:2px dashed #cbd5e1;border-radius:12px;background:#fbfcfe;height:150px;touch-action:none}
+  .pad canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:10px;cursor:crosshair}
+  .pad .linea{position:absolute;left:18px;right:18px;bottom:34px;border-bottom:1px solid #cbd5e1;pointer-events:none}
+  .pad .x{position:absolute;left:20px;bottom:38px;color:#94a3b8;font-size:20px;pointer-events:none}
+  .pad .guia{position:absolute;left:0;right:0;bottom:10px;text-align:center;font-size:13px;color:var(--gris-claro);pointer-events:none}
+  .pad.firmando .guia{display:none}
 
   /* ---------- pestañas del trabajador ---------- */
   .pestanas{display:flex;gap:6px;margin-bottom:12px}

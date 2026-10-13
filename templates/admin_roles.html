@@ -9,6 +9,11 @@
   </span>
 </h1>
 
+<a href="{{ url_for('admin_constancias') }}" class="bloque no-imprime" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;text-decoration:none;color:inherit">
+  <span><b>Constancia de roles de pago</b> <span class="tenue">· la firman una vez antes de ver sus roles</span></span>
+  <span style="white-space:nowrap"><b {% if n_constancias < n_activos %}style="color:var(--ambar)"{% endif %}>{{ n_constancias }} de {{ n_activos }}</b> firmaron ›</span>
+</a>
+
 {% if filas %}
 <div class="cifras">
   <div class="cifra"><b>{{ filas|length }}</b><small>trabajadores</small></div>

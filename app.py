@@ -37,6 +37,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
+import constancia as const
 import roles
 import store
 import vacaciones
@@ -327,7 +328,11 @@ def _rol_sin_firmar():
         ultimo = store.roles_de(tid)[:1] if tid else []
     except Exception:  # noqa: BLE001
         return {}
-    return {"rol_sin_firmar": bool(ultimo and ultimo[0].get("pide_firma", True) and not ultimo[0]["firmado_en"])}
+    try:
+        sin_constancia = bool(tid) and store.constancia_de(tid) is None
+    except Exception:  # noqa: BLE001
+        sin_constancia = False
+    return {"rol_sin_firmar": sin_constancia or bool(ultimo and ultimo[0].get("pide_firma", True) and not ultimo[0]["firmado_en"])}
 
 
 def _totales(marcados: set) -> dict:
@@ -933,7 +938,7 @@ def admin_trabajador(id_):
             certs.setdefault(c["vacacion_id"], []).append(c)
     return render_template("admin_trabajador.html", t=t, v=_resumen(t),
                            vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs,
-                           roles_pago=store.roles_de(id_))
+                           roles_pago=store.roles_de(id_), constancia_roles=store.constancia_de(id_))
 
 
 @app.route("/admin/trabajador/<int:id_>/imprimir")
@@ -1646,8 +1651,9 @@ def admin_roles():
     totales = {k: sum(r[k] for r in filas) for k in ("total_ingresos", "total_descuentos", "liquido")}
     piden = [r for r in filas if r.get("pide_firma", True)]
     recientes = sorted((r for r in filas if r["firmado_en"]), key=lambda r: r["firmado_en"], reverse=True)[:8]
+    n_constancias, n_activos = len(store.constancias_vigentes()), len(store.trabajadores())
     return render_template("admin_roles.html", anio=anio, mes=mes, filas=filas, meses=meses, totales=totales,
-                           recientes=recientes,
+                           recientes=recientes, n_constancias=n_constancias, n_activos=n_activos,
                            firmados=sum(1 for r in piden if r["firmado_en"]), piden=len(piden),
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
 
@@ -1908,6 +1914,8 @@ def yo_rol_imprimir(id_):
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if (falta := _falta_constancia(t)):
+        return falta
     r = store.rol_pago(id_)
     if not r or r["trabajador_id"] != t["id"]:
         abort(404)
@@ -1965,11 +1973,141 @@ def leer_firma(texto: str) -> bytes:
     return salida.getvalue()
 
 
+# ---- la constancia de conocimiento y acceso a roles de pago ----------------
+def _texto_constancia(t: dict, banco: str, cuenta: str, fecha: date) -> str:
+    return const.texto(t["nombre"], t["cedula"], config.RAZON_SOCIAL, banco, cuenta, fecha)
+
+
+def _parrafos_para_firmar(t: dict, banco: str, cuenta: str) -> list:
+    """El texto de la constancia en HTML seguro: su nombre y cédula resaltados, y
+    el banco y la cuenta como huecos que se llenan mientras escribe."""
+    from markupsafe import Markup, escape
+    out = []
+    for p in const.parrafos(t["nombre"], t["cedula"], config.RAZON_SOCIAL, "\x00B", "\x00C", hoy()):
+        h = str(escape(p))
+        h = h.replace(str(escape(t["nombre"])), f'<span class="dato">{escape(t["nombre"])}</span>')
+        h = h.replace(str(escape(t["cedula"])), f'<span class="dato">{escape(t["cedula"])}</span>')
+        h = h.replace("\x00B", f'<span class="hueco" id="v-banco">{escape(banco) or "su banco"}</span>')
+        h = h.replace("\x00C", f'<span class="hueco" id="v-cuenta">{escape(cuenta) or "su cuenta"}</span>')
+        out.append(Markup(h))
+    return out
+
+
+def _falta_constancia(t: dict):
+    """Si el trabajador todavía no firmó la constancia, la respuesta que lo manda a
+    firmarla; si ya la firmó, None. Va antes de TODO lo de roles (Tamara 13/10)."""
+    if store.constancia_de(t["id"]):
+        return None
+    return redirect(url_for("yo_constancia"))
+
+
+@app.route("/yo/constancia", methods=["GET", "POST"])
+def yo_constancia():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    c = store.constancia_de(t["id"])
+    if request.method == "POST" and not c:
+        banco, cuenta = request.form.get("banco", ""), request.form.get("cuenta", "")
+        try:
+            banco, cuenta = const.leer_banco(banco), const.leer_cuenta(cuenta)
+            if const.leer_cuenta(request.form.get("cuenta2", "")) != cuenta:
+                raise ValueError("Los dos números de cuenta no coinciden. Escríbalo de nuevo.")
+            png = leer_firma(request.form.get("firma", ""))
+            texto = _texto_constancia(t, banco, cuenta, hoy())
+            if store.firmar_constancia(t["id"], const.VERSION, banco, cuenta, texto, const.huella(texto),
+                                       png, request.headers.get("User-Agent", "")) is None:
+                raise ValueError("Ya tiene una constancia firmada.")
+            flash("Listo: firmó la constancia. Ya puede ver sus roles de pago.", "ok")
+            return redirect(url_for("yo_rol"))
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return render_template("yo_constancia.html", t=t, c=None, banco=banco, cuenta=request.form.get("cuenta", ""),
+                               parrafos=_parrafos_para_firmar(t, banco, request.form.get("cuenta", "")), BANCOS=const.BANCOS)
+    if c:
+        return render_template("yo_constancia.html", t=t, c=c, intacta=c["huella"] == const.huella(c["texto"]),
+                               equipo=roles.dispositivo(c["firmado_desde"]))
+    return render_template("yo_constancia.html", t=t, c=None, banco="", cuenta="",
+                           parrafos=_parrafos_para_firmar(t, "", ""), BANCOS=const.BANCOS)
+
+
+@app.route("/yo/constancia/firma.png")
+def yo_constancia_firma():
+    t = _mi_trabajador()
+    c = store.constancia_de(t["id"]) if t else None
+    if not c:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(store.firma_de_constancia(c["id"])), mimetype="image/png")
+
+
+@app.route("/yo/constancia/imprimir")
+def yo_constancia_imprimir():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    c = store.constancia_de(t["id"])
+    if not c:
+        return redirect(url_for("yo_constancia"))
+    return render_template("constancia_imprimir.html", c=c, url_firma=url_for("yo_constancia_firma"),
+                           volver=url_for("yo_constancia"), equipo=roles.dispositivo(c["firmado_desde"]),
+                           intacta=c["huella"] == const.huella(c["texto"]))
+
+
+@app.route("/admin/constancias", methods=["GET", "POST"])
+@requiere_admin
+def admin_constancias():
+    if request.method == "POST":
+        try:
+            id_ = int(request.form.get("id", "0"))
+            motivo = " ".join((request.form.get("motivo") or "").split())
+            if len(motivo) < 3:
+                raise ValueError("Escriba por qué se anula (por ejemplo: «cambió de cuenta»).")
+            if not store.anular_constancia(id_, g.usuario["usuario"], motivo):
+                raise ValueError("Esa constancia ya estaba anulada.")
+            flash("Constancia anulada. La próxima vez que entre, el trabajador la vuelve a firmar.", "ok")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("admin_constancias"))
+    vigentes = store.constancias_vigentes()
+    activos = store.trabajadores()
+    faltan = [t for t in activos if t["id"] not in vigentes]
+    for t in faltan:
+        t["wa"] = link_whatsapp(t.get("celular"), f"Hola {nombre_de_pila(t['nombre'])}, en la aplicación de Intela "
+                                f"(https://trabajadores.intela.com.ec) tiene que firmar la constancia de roles de pago "
+                                f"para ver sus roles. Entra con su cédula.")
+    firmadas = sorted((c for tid, c in vigentes.items()), key=lambda c: c["nombre"])
+    return render_template("admin_constancias.html", firmadas=firmadas, faltan=faltan, activos=len(activos))
+
+
+@app.route("/admin/constancias/<int:id_>")
+@requiere_admin
+def admin_constancia(id_):
+    c = store.constancia(id_)
+    if not c:
+        abort(404)
+    return render_template("constancia_imprimir.html", c=c, url_firma=url_for("admin_constancia_firma", id_=id_),
+                           volver=url_for("admin_constancias"), equipo=roles.dispositivo(c["firmado_desde"]),
+                           intacta=c["huella"] == const.huella(c["texto"]), admin=True)
+
+
+@app.route("/admin/constancias/<int:id_>/firma.png")
+@requiere_admin
+def admin_constancia_firma(id_):
+    png = store.firma_de_constancia(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png")
+
+
 @app.route("/yo/rol")
 def yo_rol():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if (falta := _falta_constancia(t)):
+        return falta
     todos = store.roles_de(t["id"])
     r = None
     if request.args.get("mes"):
@@ -1986,6 +2124,8 @@ def yo_rol_firmar():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if (falta := _falta_constancia(t)):
+        return falta
     id_txt = request.form.get("id", "")
     if not id_txt.isdigit():
         return redirect(url_for("yo_rol"))

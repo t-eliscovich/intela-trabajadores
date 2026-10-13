@@ -750,6 +750,61 @@ check("el recibo dice ingresos, descuentos y líquido; sin provisiones; con «Im
       and "Todavía no lo firmó" in html and "Provisi" not in html and "Aporte Patr" not in html and "Imprimir o guardar PDF" in html)
 check("la ficha muestra los roles", "Roles de pago" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
 # el trabajador
+# --- la constancia de conocimiento y acceso a roles de pago (Tamara 13/10) ---
+import constancia as K  # noqa: E402
+
+
+def _png_firma():
+    from PIL import ImageDraw
+    img = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(img).line([(40, 150), (200, 60), (380, 140), (540, 50)], fill=(15, 23, 42, 255), width=4)
+    b = BytesIO(); img.save(b, "PNG")
+    return "data:image/png;base64," + _b64.b64encode(b.getvalue()).decode()
+
+
+r = rw.get("/yo/rol")
+check("sin la constancia firmada, «Rol de pagos» manda a firmarla", r.status_code == 302 and "/yo/constancia" in r.headers["Location"])
+check("y tampoco deja imprimir ni firmar roles", "/yo/constancia" in rw.get(f"/yo/rol/{rid_rosa}/imprimir").headers.get("Location", "")
+      and "/yo/constancia" in rw.post("/yo/rol/firmar", data={"id": rid_rosa}).headers.get("Location", ""))
+html = rw.get("/yo/constancia").get_data(as_text=True)
+_t = base.trabajador(rosa)
+check("la constancia trae su nombre, su cédula, la empresa, Quito y la fecha de hoy", "CONSTANCIA DE CONOCIMIENTO" in html
+      and _t["nombre"] in html and _t["cedula"] in html and A.config.RAZON_SOCIAL in html and "Quito" in html
+      and f"a los {HOY.day} días del mes de {A.MESES[HOY.month]}" in html and "área de Contabilidad" in html and 'id="lienzo"' in html)
+check("la pestaña avisa que falta firmar algo", 'title="Tiene un rol sin firmar"' in html)
+check("cuenta: sólo números, entre 5 y 20", K.leer_cuenta("2200-1234-56") == "2200123456" and "sólo números" in _mensaje_de(lambda: K.leer_cuenta("22AB"))
+      and "entre 5 y 20" in _mensaje_de(lambda: K.leer_cuenta("123")))
+r = rw.post("/yo/constancia", data={"banco": "Banco Pichincha", "cuenta": "2200123456", "cuenta2": "2200123457", "firma": _png_firma()}, follow_redirects=True)
+check("si los dos números de cuenta no coinciden, no firma", "no coinciden" in r.get_data(as_text=True) and base.constancia_de(rosa) is None
+      and "Banco Pichincha" in r.get_data(as_text=True))
+r = rw.post("/yo/constancia", data={"banco": "Banco Pichincha", "cuenta": "2200123456", "cuenta2": "2200123456", "firma": ""}, follow_redirects=True)
+check("sin firma, no firma", "Firme en el recuadro" in r.get_data(as_text=True) and base.constancia_de(rosa) is None)
+r = rw.post("/yo/constancia", data={"banco": " Banco  Pichincha ", "cuenta": "2200-123456", "cuenta2": "2200123456", "firma": _png_firma()}, follow_redirects=True)
+_c = base.constancia_de(rosa)
+check("firma la constancia y entra a sus roles", "firmó la constancia" in r.get_data(as_text=True) and _c and _c["banco"] == "Banco Pichincha"
+      and _c["cuenta"] == "2200123456" and "la cuenta No. 2200123456 del Banco Pichincha" in _c["texto"] and _c["huella"] == K.huella(_c["texto"]))
+check("no se firma dos veces", rw.post("/yo/constancia", data={"banco": "Otro", "cuenta": "999999", "cuenta2": "999999", "firma": _png_firma()}).status_code in (200, 302)
+      and base.constancia_de(rosa)["banco"] == "Banco Pichincha")
+html = rw.get("/yo/constancia").get_data(as_text=True)
+check("después ve lo que firmó, con su firma, y la puede imprimir", "Firmó esta constancia" in html and "/yo/constancia/firma.png" in html
+      and rw.get("/yo/constancia/firma.png").mimetype == "image/png" and rw.get("/yo/constancia/imprimir").status_code == 200)
+check("la firma de la constancia de otro no se ve (sin constancia → 404)", A.app.test_client().get("/yo/constancia/firma.png").status_code == 404)
+html = c.get("/admin/constancias").get_data(as_text=True)
+check("contabilidad ve quién firmó (con banco y cuenta) y quién falta", "Banco Pichincha" in html and "2200123456" in html and "Faltan firmar" in html)
+check("la ve impresa con la huella", _c["huella"] in c.get(f"/admin/constancias/{_c['id']}").get_data(as_text=True)
+      and c.get(f"/admin/constancias/{_c['id']}/firma.png").status_code == 200)
+check("el comedor y el trabajador no entran a las constancias", m.get("/admin/constancias").status_code == 302 and rw.get("/admin/constancias").status_code == 302)
+check("Roles de pago muestra cuántos firmaron la constancia", "Constancia de roles de pago" in c.get("/admin/roles").get_data(as_text=True))
+check("y la ficha, el banco y la cuenta", "2200123456" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+_c2 = base.crear_trabajador("1700000999", "Prueba Anular", date(2020, 1, 1)); _w2 = A.app.test_client(); _w2.post("/", data={"cedula": "1700000999"})
+_w2.post("/yo/constancia", data={"banco": "Produbanco", "cuenta": "123456", "cuenta2": "123456", "firma": _png_firma()})
+_id2 = base.constancia_de(_c2)["id"]
+r = c.post("/admin/constancias", data={"id": _id2, "motivo": ""}, follow_redirects=True)
+check("anular pide el motivo", "por qué se anula" in r.get_data(as_text=True) and base.constancia_de(_c2))
+c.post("/admin/constancias", data={"id": _id2, "motivo": "cambió de cuenta"})
+check("anulada: queda guardada y el trabajador vuelve a firmar", base.constancia_de(_c2) is None and base.constancia(_id2)["anulada_por"] == "conta"
+      and "/yo/constancia" in _w2.get("/yo/rol").headers["Location"])
+
 html = rw.get("/yo/rol").get_data(as_text=True)
 check("el trabajador ve su rol: líquido, detalle y para firmar", "533,30" in html and "Falta su firma" in html and "firme aquí con el dedo" in html
       and "Impuesto a la renta" in html)
@@ -920,7 +975,9 @@ if _firm:
     check("si firmó en la app, la hoja lleva la firma y la constancia", "Firmado en la aplicación" in c.get(f"/admin/roles/{_firm['id']}/imprimir").get_data(as_text=True))
 check("un mes firmado en papel lo dice en la hoja", "Firmado en papel" in c.get(f"/admin/roles/{base.roles_del_mes(2026, 7)[0]['id']}/imprimir").get_data(as_text=True))
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
-check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}), cl.get("/yo/rol").get_data(as_text=True))[2])(A.app.test_client()))
+check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}),
+                     cl.post("/yo/constancia", data={"banco": "BanEcuador", "cuenta": "55555", "cuenta2": "55555", "firma": _png_firma()}),
+                     cl.get("/yo/rol").get_data(as_text=True))[3])(A.app.test_client()))
 
 import re as _re0  # noqa: E402
 _pegadas = [x[:60] for x in _store_real._sentencias(_store_real.ESQUEMA)
@@ -929,7 +986,7 @@ check("el esquema no tiene sentencias pegadas (falta un ;)" + (f": {_pegadas}" i
 
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
-for ruta in ("/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
+for ruta in ("/admin/constancias", "/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
              "/admin/comidas", "/admin/comidas/imprimir", "/admin/feriados", "/admin/usuarios", "/admin/solicitudes",
              "/admin/historial", "/comedor", "/comedor/dia", "/healthz"):
     check(f"{ruta} abre", c.get(ruta).status_code == 200)

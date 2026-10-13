@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Constancia de roles de pago · {{ c.nombre }}{% endblock %}
+{% block contenido %}
+<style>
+  .papel{max-width:760px;margin:0 auto}
+  .acciones{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .hoja-const{background:#fff;border:1px solid #cfd6df;border-radius:6px;padding:40px 52px 32px;color:#111;
+              font-family:Georgia,"Times New Roman",serif;font-size:14px;line-height:1.6}
+  .hoja-const .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:22px;
+                   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .hoja-const .cab b{font-size:17px;letter-spacing:.08em}
+  .hoja-const .cab span{font-size:11px;color:#475569}
+  .hoja-const h1{display:block;font-size:15px;text-align:center;letter-spacing:.04em;margin:0 0 20px;font-family:inherit}
+  .hoja-const p{margin:0 0 12px;text-align:justify}
+  .hoja-const .firma{margin-top:36px;width:300px}
+  .hoja-const .firma .trazo{height:80px;display:flex;align-items:flex-end}
+  .hoja-const .firma img{max-height:80px;max-width:100%}
+  .hoja-const .firma .linea{border-top:1px solid #111;padding-top:4px;font-size:13px}
+  .hoja-const .pie{margin-top:26px;padding-top:8px;border-top:1px dashed #cbd5e1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+                   font-size:10px;color:#475569;line-height:1.5}
+  .hoja-const .pie .h{font-family:ui-monospace,Menlo,monospace;word-break:break-all}
+  .anulada{background:#fdeaea;color:#b91c1c;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-weight:600;font-size:14px}
+  @media print{ @page{size:A4;margin:16mm 18mm} .hoja-const{border:0;padding:0} .papel{max-width:none} }
+  @media(max-width:600px){ .hoja-const{padding:20px 16px} .hoja-const .firma{width:100%} }
+</style>
+<div class="papel">
+  <div class="acciones no-imprime">
+    <a class="btn suave chico" href="{{ volver }}">‹ Volver</a>
+    <button class="btn chico" type="button" onclick="window.print()">Imprimir o guardar PDF</button>
+  </div>
+  {% if c.anulada_en %}<div class="anulada no-imprime">Anulada el {{ c.anulada_en|fecha_hora }} por {{ c.anulada_por }}: {{ c.motivo_anulada }}</div>{% endif %}
+  <div class="hoja-const">
+    <div class="cab"><b>{{ EMPRESA }}</b><span>{{ RAZON_SOCIAL }}{% if RUC %} · RUC {{ RUC }}{% endif %}</span></div>
+    {% for p in c.texto.split('\n\n') %}{% if loop.first %}<h1>{{ p }}</h1>{% else %}<p>{{ p }}</p>{% endif %}{% endfor %}
+    <div class="firma">
+      <div class="trazo"><img src="{{ url_firma }}" alt="Firma"></div>
+      <div class="linea">{{ c.nombre }}<br>C.C. {{ c.cedula }}</div>
+    </div>
+    <div class="pie">
+      Firmado en la aplicación Trabajadores · Intela el {{ c.firmado_en|fecha_hora }} (hora de Ecuador), desde {{ equipo }}.
+      {% if intacta %}✓ El texto es el mismo que se firmó.{% else %}<b style="color:#b91c1c">El texto no coincide con la huella.</b>{% endif %}<br>
+      Huella del documento: <span class="h">{{ c.huella }}</span>
+    </div>
+  </div>
+</div>
+{% if request.args.get('auto') == '1' %}<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 300); });</script>{% endif %}
+{% endblock %}

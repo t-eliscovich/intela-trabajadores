@@ -53,6 +53,7 @@ class BaseFalsa:
         self.conf: dict[str, str] = {}
         self.cert: dict[int, dict] = {}
         self.rol: dict[int, dict] = {}
+        self.cons: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
         self.alm_quien: dict[tuple, str] = {}
@@ -61,6 +62,44 @@ class BaseFalsa:
     def _id(self):
         self._n += 1
         return self._n
+
+    # --- constancia de roles ---
+    def _cons_con_trab(self, c):
+        t = self.trab[c["trabajador_id"]]
+        c = dict(c, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"))
+        c.pop("firma", None)
+        return c
+
+    def constancia_de(self, trabajador_id):
+        c = next((c for c in self.cons.values() if c["trabajador_id"] == trabajador_id and not c["anulada_en"]), None)
+        return self._cons_con_trab(c) if c else None
+
+    def constancia(self, id_):
+        c = self.cons.get(id_)
+        return self._cons_con_trab(c) if c else None
+
+    def constancias_vigentes(self):
+        return {c["trabajador_id"]: self._cons_con_trab(c) for c in self.cons.values() if not c["anulada_en"]}
+
+    def firmar_constancia(self, trabajador_id, version, banco, cuenta, texto, huella, png, desde):
+        if self.constancia_de(trabajador_id):
+            return None
+        id_ = self._id()
+        self.cons[id_] = {"id": id_, "trabajador_id": trabajador_id, "version": version, "banco": banco, "cuenta": cuenta,
+                          "texto": texto, "huella": huella, "firma": png, "firmado_en": datetime.now(),
+                          "firmado_desde": desde[:200], "anulada_en": None, "anulada_por": None, "motivo_anulada": None}
+        return id_
+
+    def anular_constancia(self, id_, quien, motivo):
+        c = self.cons.get(id_)
+        if not c or c["anulada_en"]:
+            return False
+        c.update(anulada_en=datetime.now(), anulada_por=quien, motivo_anulada=motivo[:200])
+        return True
+
+    def firma_de_constancia(self, id_):
+        c = self.cons.get(id_)
+        return c["firma"] if c else None
 
     # --- rol de pagos ---
     def _rol_con_trab(self, r):
