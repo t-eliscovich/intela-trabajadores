@@ -308,6 +308,12 @@ ESQUEMA = """
     -- Y el nombre tal como está escrito en WinAfin (puede ser distinto del padrón).
     -- El mes siguiente entra solo si el código Y este nombre coinciden.
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS nombre_rol text;
+    -- Los roles cargados antes de que existiera `nombre_rol` (septiembre 2026):
+    -- se completa con el nombre de WinAfin del último rol de cada uno.
+    UPDATE trabajadores.trabajador t SET nombre_rol = r.nombre_rol
+      FROM (SELECT DISTINCT ON (trabajador_id) trabajador_id, nombre_rol FROM trabajadores.rol_pago
+             WHERE borrado_en IS NULL ORDER BY trabajador_id, anio DESC, mes DESC) r
+     WHERE r.trabajador_id = t.id AND t.nombre_rol IS NULL
 
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
