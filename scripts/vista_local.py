@@ -79,6 +79,10 @@ base.cargar_roles(_mes.year, _mes.month, [
          [("Aporte personal IESS", 75.29), ("Préstamo IESS", 86.81)]),
     _rol("Luis Tipán", 3, [("Sueldo", "30 días", 490)], [("Aporte personal IESS", 46.31)]),
 ], "conta")
+_mes2 = (_mes.replace(day=1) - timedelta(days=1))
+base.cargar_roles(_mes2.year, _mes2.month, [
+    _rol("Juan Pérez", 1, [("Sueldo", "30 días", 490), ("Horas extra 50%", "40 h", 122.5)], [("Aporte personal IESS", 57.25)]),
+], "conta")
 from io import BytesIO as _B  # noqa: E402
 from PIL import Image as _I, ImageDraw as _D  # noqa: E402
 _img = _I.new("RGBA", (600, 200), (0, 0, 0, 0))

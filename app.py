@@ -1794,7 +1794,7 @@ def yo_rol():
         r = next((x for x in todos if (x["anio"], x["mes"]) == (anio, mes)), None)
     if r is None and todos:
         r = todos[0]
-    return render_template("yo_rol.html", t=t, r=r, otros=[x for x in todos if r and x["id"] != r["id"]],
+    return render_template("yo_rol.html", t=t, r=r, todos=todos,
                            **(_constancia(r) if r else {}))
 
 

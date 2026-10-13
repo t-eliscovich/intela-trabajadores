@@ -138,6 +138,8 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   `firma_huella` (SHA-256 del recibo firmado, `roles.huella`). La «Constancia de
   firma» muestra si el recibo sigue igual a lo firmado. Se firma una vez. La firma
   la ven el dueño (`/yo/rol/N/firma.png`) y contabilidad, nadie más.
+- El trabajador ve arriba los meses como botones (Septiembre, Octubre…; punto rojo
+  = sin firmar) y abre el último por defecto. Sólo ve los suyos.
 - Contabilidad ve en el menú un globo naranja con cuántos faltan firmar del último
   mes, «Últimas firmas», y avisa a los que faltan por WhatsApp (wa.me).
 - El encabezado dice INTELA (razón social y RUC en espera; la razón social es

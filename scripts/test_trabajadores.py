@@ -796,6 +796,13 @@ check("la huella cambia si cambia un centavo", R.huella(_r) != R.huella(base.rol
 check("un mes futuro no se carga", "todavía no empezó" in c.post("/admin/roles/cargar", data={"archivo_b64": m_b64, "archivo_nombre": "r.xlsx", "mes": "12", "anio": str(HOY.year + 1)}).get_data(as_text=True))
 check("en enero, rol12 es diciembre del año anterior", (lambda: (setattr(A, "hoy", lambda: date(2027, 1, 10)), A._mes_por_defecto("rol12.xls"))[1])() == (2026, 12))
 A.hoy = _hoy_real
+ROL8 = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7})])
+c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(ROL8).decode(), "archivo_nombre": "rol8.xlsx", "mes": "8", "anio": "2026", "confirmar": "1"})
+html = rw.get("/yo/rol").get_data(as_text=True)
+check("el trabajador ve los meses (agosto, septiembre) y abre el último", 'class="meses"' in html and ">Agosto<" in html.replace('<span class="punto" title="Sin firmar"></span>', "") and "Septiembre 2026" in html)
+html = rw.get("/yo/rol?mes=2026-08").get_data(as_text=True)
+check("y toca agosto y ve agosto", "Agosto 2026" in html and "543,30" in html)
+check("un mes que no es suyo o no existe cae en el último", "Septiembre 2026" in rw.get("/yo/rol?mes=2020-01").get_data(as_text=True))
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
 check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (cl.post("/", data={"cedula": "0912345678"}), cl.get("/yo/rol").get_data(as_text=True))[1])(A.app.test_client()))
 

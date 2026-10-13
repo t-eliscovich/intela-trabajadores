@@ -12,6 +12,12 @@
   .pad .x{position:absolute;left:20px;bottom:48px;color:#94a3b8;font-size:20px;pointer-events:none}
   .pad .guia{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-size:13px;color:var(--gris-claro);pointer-events:none}
   .pad.firmando .guia{display:none}
+  .meses{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 12px;padding-bottom:2px}
+  .meses::-webkit-scrollbar{display:none}
+  .meses a{flex:0 0 auto;padding:7px 14px;border-radius:999px;background:var(--papel);border:1px solid var(--borde);
+           text-decoration:none;color:var(--azul);font-weight:700;font-size:14px;white-space:nowrap}
+  .meses a.activo{background:#e8eef6;border-color:#9fb3cc}
+  .meses .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rojo);margin-left:6px;vertical-align:2px}
 </style>
 
 {% if not r %}
@@ -21,6 +27,13 @@
 </div></div>
 {% else %}
 
+{% if todos|length > 1 %}
+<div class="meses" role="tablist" aria-label="Meses">
+  {% for x in todos %}
+  <a href="{{ url_for('yo_rol', mes='%d-%02d'|format(x.anio, x.mes)) }}" class="{{ 'activo' if x.id == r.id }}">{{ MESES[x.mes]|capitalize }}{% if x.anio != hoy.year %} {{ x.anio }}{% endif %}{% if not x.firmado_en %}<span class="punto" title="Sin firmar"></span>{% endif %}</a>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="bloque">{% with de_trabajador = true %}{% include "_recibo.html" %}{% endwith %}</div>
 
 {% if r.firmado_en %}
@@ -71,19 +84,6 @@
 </script>
 {% endif %}
 
-{% if otros %}
-<div class="bloque">
-  <details>
-    <summary style="border-top:0">Meses anteriores</summary>
-    <table><tbody>
-    {% for x in otros %}
-      <tr><td><a href="{{ url_for('yo_rol', mes='%d-%02d'|format(x.anio, x.mes)) }}">{{ nombre_mes(x.anio, x.mes) }}</a></td>
-          <td class="der">$ {{ x.liquido|dinero }}</td>
-          <td class="der">{% if x.firmado_en %}<span class="etiqueta ok">Firmado</span>{% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td></tr>
-    {% endfor %}
-    </tbody></table>
-  </details>
-</div>
-{% endif %}
+
 {% endif %}
 {% endblock %}
