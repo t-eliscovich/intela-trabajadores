@@ -11,7 +11,7 @@
   <a class="btn suave chico vuelta" href="{{ url_for('admin_roles', mes='%d-%02d'|format(r.anio, r.mes)) }}">‹ {{ nombre_mes(r.anio, r.mes) }}</a>
   <span class="hueco"></span>
   <a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
-  <a class="btn chico" href="{{ url_for('admin_rol_imprimir', id_=r.id, auto=1) }}">Imprimir o guardar PDF</a>
+  <a class="btn chico" href="{{ url_rol(r, imprimir=True, auto=1) }}">Imprimir o guardar PDF</a>
 </div>
 <div class="bloque">{% include "_recibo.html" %}</div>
 {% if r.firmado_en %}

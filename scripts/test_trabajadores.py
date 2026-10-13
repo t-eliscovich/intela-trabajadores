@@ -745,7 +745,16 @@ check("la lista del mes muestra totales y firmas, e «Imprimir el mes»", "0 de 
 check("el menú de contabilidad avisa cuántos faltan firmar", "4 sin firmar en el último mes" in html)
 check("con celular, ofrece avisarle por WhatsApp", "wa.me/593990001111" in html)
 rid_rosa = next(x["id"] for x in roles_sep if x["trabajador_id"] == rosa)
-html = c.get(f"/admin/roles/{rid_rosa}").get_data(as_text=True)
+_r_rosa = base.rol_pago(rid_rosa)
+_url_rosa = f"/admin/roles/{_r_rosa['anio']}-{_r_rosa['mes']:02d}/" + A.slug_nombre(_r_rosa["nombre"])
+r = c.get(f"/admin/roles/{rid_rosa}")
+check("el link viejo con el número lleva al nuevo, con mes y nombre", r.status_code == 301 and r.headers["Location"].endswith(_url_rosa))
+check("el link nuevo dice de quién y de qué mes es, sin la cédula", "-" in _url_rosa.split("/")[3] and _r_rosa["cedula"] not in _url_rosa)
+check("con un nombre que no es de ese mes, 404", c.get(_url_rosa + "-x").status_code == 404 and c.get("/admin/roles/2026-13x/a").status_code == 404)
+check("la lista del mes y la ficha usan el link nuevo", _url_rosa in c.get(f"/admin/roles?mes={_r_rosa['anio']}-{_r_rosa['mes']:02d}").get_data(as_text=True)
+      and _url_rosa in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+check("el link nuevo pide sesión de contabilidad", A.app.test_client().get(_url_rosa).status_code == 302)
+html = c.get(_url_rosa).get_data(as_text=True)
 check("el recibo dice ingresos, descuentos y líquido; sin provisiones; con «Imprimir»", "Impuesto a la renta" in html and "533,30" in html
       and "Todavía no lo firmó" in html and "Provisi" not in html and "Aporte Patr" not in html and "Imprimir o guardar PDF" in html)
 check("la ficha muestra los roles", "Roles de pago" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
@@ -837,7 +846,7 @@ check("firma y queda firmado, con la huella del recibo", "firmó su rol" in html
 check("ve su firma", rw.get(f"/yo/rol/{rid_rosa}/firma.png").mimetype == "image/png")
 r = rw.post("/yo/rol/firmar", data={"id": rid_rosa, "firma": _firma_png()}, follow_redirects=True)
 check("no se firma dos veces", "ya está firmado" in r.get_data(as_text=True))
-html = c.get(f"/admin/roles/{rid_rosa}").get_data(as_text=True)
+html = c.get(_url_rosa).get_data(as_text=True)
 check("contabilidad ve la constancia: firma, fecha, equipo, huella y que no cambió", f"/admin/roles/{rid_rosa}/firma.png" in html
       and "Constancia de firma" in html and "es el mismo que se firmó" in html and base.rol_pago(rid_rosa)["firma_huella"] in html
       and c.get(f"/admin/roles/{rid_rosa}/firma.png").status_code == 200)
@@ -968,12 +977,13 @@ check("sin sesión, a la cédula", A.app.test_client().get(f"/yo/rol/{_rid}/impr
 check("el botón está en su pantalla", f"/yo/rol/{_rid}/imprimir" in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True))
 html = c.get("/admin/roles/imprimir?mes=2026-09").get_data(as_text=True)
 check("contabilidad imprime el mes entero, un recibo por trabajador", html.count('class="recibo-p"') == len(base.roles_del_mes(2026, 9)))
-check("y uno solo", c.get(f"/admin/roles/{_otro}/imprimir").status_code == 200)
+check("y uno solo", c.get(f"/admin/roles/{_otro}/imprimir", follow_redirects=True).status_code == 200)
+check("el imprimir viejo lleva al nuevo y conserva auto=1", c.get(f"/admin/roles/{_otro}/imprimir?auto=1").headers.get("Location", "").endswith("/imprimir?auto=1"))
 check("el comedor no imprime roles", m.get("/admin/roles/imprimir?mes=2026-09").status_code == 302 and m.get(f"/admin/roles/{_otro}/imprimir").status_code == 302)
 _firm = next((x for x in base.roles_del_mes(2026, 9) if x["firmado_en"]), None)
 if _firm:
-    check("si firmó en la app, la hoja lleva la firma y la constancia", "Firmado en la aplicación" in c.get(f"/admin/roles/{_firm['id']}/imprimir").get_data(as_text=True))
-check("un mes firmado en papel lo dice en la hoja", "Firmado en papel" in c.get(f"/admin/roles/{base.roles_del_mes(2026, 7)[0]['id']}/imprimir").get_data(as_text=True))
+    check("si firmó en la app, la hoja lleva la firma y la constancia", "Firmado en la aplicación" in c.get(f"/admin/roles/{_firm['id']}/imprimir", follow_redirects=True).get_data(as_text=True))
+check("un mes firmado en papel lo dice en la hoja", "Firmado en papel" in c.get(f"/admin/roles/{base.roles_del_mes(2026, 7)[0]['id']}/imprimir", follow_redirects=True).get_data(as_text=True))
 # --- crear a quien no está en el padrón (Tamara 13/10) y la firma por mes ---
 ROLN = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7}),
               _fila_rol(77, "NUEVO INGRESO PEDRO PABLO", {"campr1": 470}, {"campr12": 44.42})])

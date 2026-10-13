@@ -176,6 +176,14 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   en la app, «✓ Firmado en papel» o líneas para firmar a mano. El trabajador:
   `/yo/rol/N/imprimir` (sólo el suyo, botón «Imprimir o guardar en PDF» cuando ya está
   firmado); contabilidad: `/admin/roles/N/imprimir` y «Imprimir el mes».
+- **El link de un recibo dice de quién y de qué mes es** (Tamara 13/10: «46 no me dice
+  nada»): `/admin/roles/2026-09/ichau-sango-nataly-mishell` (`url_rol(r)`, `slug_nombre`).
+  SIN la cédula: los links quedan en el historial y se reenvían. Los viejos con número
+  (`/admin/roles/46`, `/46/imprimir`) redirigen al nuevo. `firma.png` sigue por número.
+- **13.º, 14.º y fondo de reserva: mensualiza o acumula** (revisado contra el acumulado
+  ene–oct 2026, 13/10): quien mensualiza los tiene como ingreso en el recibo; quien
+  acumula NO (en WinAfin van como provisión, que no se muestra). En 2026 mensualizan
+  13.º y 14.º sólo 3 de ~115. No es un error.
 - **Diseño en el celular** (revisión del 13/10, todas las pantallas a 390 y 1280 px,
   todos los links con cada usuario): los botoncitos ✎ y × miden 40 px en pantallas
   chicas; el menú de arriba va en su propio renglón; las columnas de Comensales usan

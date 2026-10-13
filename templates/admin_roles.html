@@ -44,7 +44,7 @@
   <table><tbody>
   {% for r in recientes %}
     <tr><td><span class="etiqueta ok">✓</span> <b>{{ r.nombre }}</b><span class="chico" style="margin-left:30px">{{ r.firmado_en|fecha_hora }}</span></td>
-        <td class="der"><a href="{{ url_for('admin_rol', id_=r.id) }}">Ver constancia</a></td></tr>
+        <td class="der"><a href="{{ url_rol(r) }}">Ver constancia</a></td></tr>
   {% endfor %}
   </tbody></table>
 </div>
@@ -64,14 +64,14 @@
     <tbody>
     {% for r in filas %}
       <tr class="fila-rol" data-q="{{ (r.nombre ~ ' ' ~ r.cedula)|lower }}" data-firmado="{{ 'si' if r.firmado_en else ('no' if r.pide_firma else 'h') }}">
-        <td><a href="{{ url_for('admin_rol', id_=r.id) }}" style="color:inherit;text-decoration:none"><b>{{ r.nombre }}</b></a><span class="chico">{{ r.cedula }}{% if r.area %} · {{ r.area }}{% endif %}</span></td>
+        <td><a href="{{ url_rol(r) }}" style="color:inherit;text-decoration:none"><b>{{ r.nombre }}</b></a><span class="chico">{{ r.cedula }}{% if r.area %} · {{ r.area }}{% endif %}</span></td>
         <td class="der oculta-chico">{{ r.total_ingresos|dinero }}</td>
         <td class="der oculta-chico">{{ r.total_descuentos|dinero }}</td>
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
         <td>{% if not r.pide_firma %}<span class="etiqueta ok">✓ En papel</span><span class="chico">firmado fuera de la app</span>
             {% elif r.firmado_en %}<span class="etiqueta ok">✓ Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>
             {% else %}<span class="etiqueta pendiente">Sin firmar</span>{% if r.wa %} <a class="chico" style="display:inline" href="{{ r.wa }}" target="_blank" rel="noopener">avisarle por WhatsApp</a>{% endif %}{% endif %}</td>
-        <td class="der oculta-chico"><a class="btn suave chico" href="{{ url_for('admin_rol', id_=r.id) }}">{{ 'Ver constancia' if r.firmado_en else 'Ver recibo' }}</a></td>
+        <td class="der oculta-chico"><a class="btn suave chico" href="{{ url_rol(r) }}">{{ 'Ver constancia' if r.firmado_en else 'Ver recibo' }}</a></td>
       </tr>
     {% endfor %}
     </tbody>

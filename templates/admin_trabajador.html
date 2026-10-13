@@ -94,7 +94,7 @@
     {% if roles_pago %}
     <table><tbody>
     {% for r in roles_pago %}
-      <tr><td><a href="{{ url_for('admin_rol', id_=r.id) }}">{{ nombre_mes(r.anio, r.mes) }}</a></td>
+      <tr><td><a href="{{ url_rol(r) }}">{{ nombre_mes(r.anio, r.mes) }}</a></td>
           <td class="der">$ {{ r.liquido|dinero }}</td>
           <td class="der">{% if r.firmado_en %}<span class="etiqueta ok">Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>{% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td></tr>
     {% endfor %}

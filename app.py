@@ -1955,12 +1955,47 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
         total=sum(m["liquido"] for m in elegidos), recibos=sum(m["entran"] for m in elegidos))
 
 
+def slug_nombre(nombre: str) -> str:
+    """«Ichau Sango Nataly Mishell» → «ichau-sango-nataly-mishell»."""
+    return roles.normalizar(nombre).lower().replace(" ", "-")
+
+
+def url_rol(r: dict, imprimir: bool = False, **extra) -> str:
+    """El link de un recibo dice de quién y de qué mes es (Tamara 13/10: «46 no
+    me dice nada»): /admin/roles/2026-09/ichau-sango-nataly-mishell. Sin la
+    cédula a propósito: los links quedan en el historial y se reenvían."""
+    return url_for("admin_rol_imprimir" if imprimir else "admin_rol",
+                   cual=f"{r['anio']}-{r['mes']:02d}", slug=slug_nombre(r["nombre"]), **extra)
+
+
+app.jinja_env.globals["url_rol"] = url_rol
+
+
+def _rol_por_url(cual: str, slug: str) -> dict:
+    m = re.fullmatch(r"(\d{4})-(\d{1,2})", cual)
+    if not m:
+        abort(404)
+    anio, mes = int(m.group(1)), int(m.group(2))
+    hay = [r for r in store.roles_del_mes(anio, mes) if slug_nombre(r["nombre"]) == slug]
+    if len(hay) != 1:
+        abort(404)
+    return hay[0]
+
+
 @app.route("/admin/roles/<int:id_>")
 @requiere_admin
-def admin_rol(id_):
+def admin_rol_viejo(id_):
+    """Los links viejos con el número siguen andando: llevan al nuevo."""
     r = store.rol_pago(id_)
     if not r:
         abort(404)
+    return redirect(url_rol(r), code=301)
+
+
+@app.route("/admin/roles/<cual>/<slug>")
+@requiere_admin
+def admin_rol(cual, slug):
+    r = _rol_por_url(cual, slug)
     return render_template("admin_rol.html", r=r, **_constancia(r))
 
 
@@ -1982,13 +2017,20 @@ def _para_imprimir(recibos: list[dict]) -> list[dict]:
 
 @app.route("/admin/roles/<int:id_>/imprimir")
 @requiere_admin
-def admin_rol_imprimir(id_):
+def admin_rol_imprimir_viejo(id_):
     r = store.rol_pago(id_)
     if not r:
         abort(404)
+    return redirect(url_rol(r, imprimir=True, **request.args), code=301)
+
+
+@app.route("/admin/roles/<cual>/<slug>/imprimir")
+@requiere_admin
+def admin_rol_imprimir(cual, slug):
+    r = _rol_por_url(cual, slug)
     return render_template("rol_imprimir.html", recibos=_para_imprimir([r]), anio=r["anio"], mes=r["mes"],
                            url_firma=lambda i: url_for("admin_rol_firma", id_=i), auto=request.args.get("auto") == "1",
-                           volver=url_for("admin_rol", id_=id_))
+                           volver=url_rol(r))
 
 
 @app.route("/admin/roles/imprimir")
