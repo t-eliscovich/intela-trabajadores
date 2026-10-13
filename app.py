@@ -1597,6 +1597,7 @@ def nombre_mes(anio: int, mes: int) -> str:
 
 
 app.jinja_env.globals["nombre_mes"] = nombre_mes
+app.jinja_env.globals.update(EMPRESA=config.EMPRESA, RAZON_SOCIAL=config.RAZON_SOCIAL, RUC=config.RUC)
 app.jinja_env.globals["cedula_valida"] = roles.cedula_valida
 
 # El archivo que se subió viaja escondido en el formulario entre «Revisar» y

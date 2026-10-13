@@ -52,7 +52,7 @@
       <input type="hidden" name="mes" value="{{ '%d-%02d'|format(r.anio, r.mes) }}">
       <input type="hidden" name="firma" id="firma">
       <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Revise los valores y firme aquí con el dedo</div></div>
-      <p class="ayuda" style="margin:6px 0 8px">Al firmar confirma que recibió su rol de {{ nombre_mes(r.anio, r.mes).lower() }} por $ {{ r.liquido|dinero }}. No se puede cambiar después.</p>
+      <p class="ayuda" style="margin:6px 0 8px">Al firmar confirma que recibió de {{ RAZON_SOCIAL }} su rol de {{ nombre_mes(r.anio, r.mes).lower() }} por $ {{ r.liquido|dinero }}. No se puede cambiar después.</p>
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
         <button class="btn suave" type="button" id="borrar">Borrar</button>
         <button class="btn verde" type="submit" id="firmar" disabled>Firmar · Recibí conforme</button>

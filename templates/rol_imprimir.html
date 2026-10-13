@@ -11,6 +11,7 @@
             display:flex;flex-direction:column;font-size:13px}
   .rp-top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #0f172a;padding-bottom:6px}
   .rp-emp{font-weight:800;font-size:17px;letter-spacing:.08em}
+  .rp-razon{font-size:11px;color:#334155;margin-top:1px}
   .rp-tit{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#64748b;font-weight:700}
   .rp-per{font-weight:800;font-size:15px}
   .rp-datos{display:grid;grid-template-columns:2.4fr 1fr 1fr;gap:12px;margin:10px 0 4px}
@@ -64,8 +65,8 @@
   {% for r in recibos %}
   <section class="recibo-p">
     <div class="rp-top">
-      <div><div class="rp-emp">INTELA</div><div class="rp-tit">Rol de pagos</div></div>
-      <div class="rp-per">{{ nombre_mes(r.anio, r.mes) }}</div>
+      <div><div class="rp-emp">{{ EMPRESA }}</div><div class="rp-razon">{{ RAZON_SOCIAL }}{% if RUC %} · RUC {{ RUC }}{% endif %}</div></div>
+      <div style="text-align:right"><div class="rp-tit">Rol de pagos</div><div class="rp-per">{{ nombre_mes(r.anio, r.mes) }}</div></div>
     </div>
     <div class="rp-datos">
       <div><span>Trabajador</span><b>{{ r.nombre }}</b></div>
@@ -87,7 +88,7 @@
         {% if r.firmado_en %}<div class="trazo"><img src="{{ url_firma(r.id) }}" alt="Firma"></div>
         {% elif r.pide_firma is sameas false %}<div class="rp-papel">✓ Firmado en papel</div>
         {% else %}<div class="trazo"></div>{% endif %}
-        <div class="linea">Recibí conforme · {{ r.nombre }}</div>
+        <div class="linea">Recibí conforme · {{ r.nombre }} · C.I. {{ r.cedula }}</div>
       </div>
       {% if r.firmado_en %}
       <div class="rp-const">
@@ -96,7 +97,7 @@
         {% if r.firma_huella %}<br>Huella: <span class="huella">{{ r.firma_huella }}</span>{% endif %}
       </div>
       {% else %}
-      <div class="rp-firma"><div class="trazo"></div><div class="linea">Contabilidad</div></div>
+      <div class="rp-firma"><div class="trazo"></div><div class="linea">Por {{ RAZON_SOCIAL }}</div></div>
       {% endif %}
     </div>
   </section>

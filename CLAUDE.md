@@ -185,8 +185,12 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   sí, al confirmar se corrige en el padrón (`store.corregir_cedula`, si nadie más la
   tiene). La lista y la ficha marcan «cédula no válida». El 13/10 había 4 así
   (Alava, Moreno Barrera, Moreno Ruano, Rivera Rojas): no podían entrar con su cédula.
-- El encabezado dice INTELA (razón social y RUC en espera; la razón social es
-  «Industria Textil Latinoamericana Cía. Ltda.»).
+- **La empresa en los recibos** (Tamara 13/10: «hagamos INTELA un poco más formal»):
+  `config.EMPRESA` (INTELA), `config.RAZON_SOCIAL` («Industria Textil Latinoamericana
+  Cía. Ltda.», de los papeles de Intela; coincide con WinAfin «…AMERICANA CIA LTDA») y
+  `config.RUC` (vacío → no se muestra; se pone con TRABAJADORES_RUC). Van en el recibo
+  del celular, la hoja impresa («Por Industria Textil…» en la firma de la empresa), la
+  constancia («Empleador») y el texto de la firma («recibió de …»).
 
 **Backlog (Tamara, 17/09, «para alguna vez»)**: aviso en Pedidos de cuántos de la
 misma área ya están de vacaciones en esas fechas. También: cerrar el mes de comidas

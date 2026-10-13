@@ -24,3 +24,10 @@ DIAS_SESION_TRABAJADOR = int(os.environ.get("TRABAJADORES_DIAS_SESION", "30"))
 # Ecuador «hoy» ya es mañana en UTC, y el check del almuerzo caería en el día
 # equivocado.
 ZONA = os.environ.get("TRABAJADORES_ZONA", "America/Guayaquil")
+
+# La empresa, como va en los recibos (Tamara 13/10/2026: «hagamos INTELA un poco
+# más formal»). La razón social sale de los papeles de Intela y coincide con la
+# pantalla de WinAfin («…AMERICANA CIA LTDA»). El RUC, si no está, no se muestra.
+EMPRESA = os.environ.get("TRABAJADORES_EMPRESA", "INTELA")
+RAZON_SOCIAL = os.environ.get("TRABAJADORES_RAZON_SOCIAL", "Industria Textil Latinoamericana Cía. Ltda.")
+RUC = os.environ.get("TRABAJADORES_RUC", "")

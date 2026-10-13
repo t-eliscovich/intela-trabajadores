@@ -1,6 +1,7 @@
 {# El recibo, igual para el trabajador y para contabilidad. Recibe `r`. Pensado
    para que en un celular entre en una pantalla (Tamara, 13/10/2026). #}
 <div class="rp-cab">
+  <div class="rp-emp">{{ RAZON_SOCIAL }} · Rol de pagos</div>
   <div>
     <div class="rp-mes">{{ nombre_mes(r.anio, r.mes) }}</div>
     <div class="rp-liq"><small>$</small>{{ r.liquido|dinero }}</div>
