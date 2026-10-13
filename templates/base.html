@@ -40,6 +40,20 @@
          text-align:center;vertical-align:1px}
   .quien{font-size:13px;color:#a9bdd2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;margin-left:auto}
   .quien a{color:#dbe6f0}
+  /* Menú del usuario (arriba a la derecha): lo que se usa poco, como Cargar planilla. */
+  .menu-usuario{position:relative;overflow:visible}
+  .menu-usuario > summary{list-style:none;cursor:pointer;padding:8px 10px;border-radius:8px;color:#dbe6f0;display:inline-block;
+        background:none;border:0;font-weight:600;font-size:13px}
+  .menu-usuario > summary::-webkit-details-marker{display:none}
+  .menu-usuario > summary::before,.menu-usuario[open] > summary::before{content:none}
+  .menu-usuario > summary:hover,.menu-usuario[open] > summary{background:rgba(255,255,255,.1);color:#fff}
+  .menu-usuario > summary.activo{color:#fff}
+  .menu-usuario .flecha{font-size:10px;opacity:.7}
+  .menu-usuario-caja{position:absolute;right:0;top:calc(100% + 4px);z-index:50;min-width:190px;background:#fff;
+        border:1px solid var(--borde);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.18);padding:6px;text-align:left}
+  .menu-usuario-caja a{display:block;padding:10px 12px;border-radius:7px;color:var(--tinta);text-decoration:none;font-size:14px;font-weight:600}
+  .menu-usuario-caja a:hover{background:#f1f5f9}
+  .menu-usuario-caja a + a{border-top:1px solid #f1f5f9}
 
   .hoja{max-width:1180px;margin:0 auto;padding:16px 18px 28px}
   .hoja.angosta{max-width:520px}
@@ -341,12 +355,18 @@
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_roles') }}" class="{{ 'activo' if request.endpoint in ('admin_roles','admin_roles_cargar','admin_rol') }}" {% if n_roles_sin_firmar %}title="{{ n_roles_sin_firmar }} sin firmar en el último mes"{% endif %}>Roles de pago{% if n_roles_sin_firmar %} <span class="globo" style="background:var(--ambar)">{{ n_roles_sin_firmar }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir','admin_feriados') }}">Comidas del mes</a>
-      <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comensales</a>
       <a href="{{ url_for('admin_historial') }}" class="{{ 'activo' if request.endpoint=='admin_historial' }}">Historial</a>
       <a href="{{ url_for('admin_usuarios') }}" class="{{ 'activo' if request.endpoint=='admin_usuarios' }}">Usuarios</a>
     </nav>
-    <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
+    <details class="quien menu-usuario">
+      <summary class="{{ 'activo' if request.endpoint=='admin_carga' }}">{{ g.usuario.nombre }} <span class="flecha">▾</span></summary>
+      <div class="menu-usuario-caja">
+        <a href="{{ url_for('admin_carga') }}">Cargar planilla</a>
+        <a href="{{ url_for('admin_salir') }}">Salir</a>
+      </div>
+    </details>
+    <script>document.addEventListener('click',function(e){var m=document.querySelector('.menu-usuario');if(m&&m.open&&!m.contains(e.target))m.open=false;});</script>
     {% else %}
     <nav></nav>
     {% block barra_derecha %}{% endblock %}

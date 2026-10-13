@@ -180,6 +180,8 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   todos los links con cada usuario): los botoncitos ✎ y × miden 40 px en pantallas
   chicas; el menú de arriba va en su propio renglón; las columnas de Comensales usan
   `minmax(0,1fr)` (antes la derecha se cortaba con invitados de nombre largo).
+  **«Cargar planilla» va en el menú del usuario** (arriba a la derecha, «Contabilidad ▾»,
+  junto a «Salir»), no en el menú de arriba (Tamara 13/10: «está mucho ahí»).
 - **Cédulas mal tipeadas en el padrón**: `roles.cedula_valida` (dígito verificador
   ecuatoriano). Al cargar el historial, si la del padrón no es válida y la de WinAfin
   sí, al confirmar se corrige en el padrón (`store.corregir_cedula`, si nadie más la
