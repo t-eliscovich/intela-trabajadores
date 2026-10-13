@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block titulo %}Cargar el rol de pagos{% endblock %}
+{% block contenido %}
+<h1>Cargar el rol de pagos <small>el Excel que sale de WinAfin, una vez por mes</small>
+  <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_roles') }}">Volver a Roles de pago</a></span>
+</h1>
+
+{% if not revision %}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;align-items:start">
+<div class="bloque">
+  <div class="titulo"><h2>1. Elija el archivo</h2></div>
+  <div class="relleno">
+    <form method="POST" enctype="multipart/form-data" class="formulario">
+      <div class="ancho"><label class="campo">Archivo del rol (.xls)</label>
+        <input type="file" name="archivo" id="archivo" accept=".xls,.xlsx" required style="height:auto;padding:8px"></div>
+      <div><label class="campo">Mes</label>
+        <select name="mes">{% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if i == mes }}>{{ MESES[i]|capitalize }}</option>{% endfor %}</select></div>
+      <div><label class="campo">Año</label><input type="number" name="anio" value="{{ anio }}" min="2020" max="{{ hoy.year + 1 }}"></div>
+      <p class="ayuda ancho" id="mes-aviso" style="margin:-4px 0 0">Al elegir el archivo, el mes se pone solo. Revíselo.</p>
+      <div class="ancho"><button class="btn" type="submit" style="width:100%">Revisar antes de cargar</button></div>
+    </form>
+  </div>
+  <div class="nota">Todavía no se guarda nada: primero le muestro qué entendí.</div>
+</div>
+<script>
+// «rol9.xls» → septiembre. Si ese mes todavía no llegó este año, es del año pasado.
+document.getElementById('archivo').addEventListener('change', function(){
+  var f = this.files[0], m = f && f.name.match(/rol\D{0,3}(\d{1,2})(?!\d)/i);
+  if (!m || +m[1] < 1 || +m[1] > 12) return;
+  var mes = +m[1], hoy = new Date(), anio = hoy.getFullYear() - (mes > hoy.getMonth() + 1 ? 1 : 0);
+  document.querySelector('select[name=mes]').value = mes;
+  document.querySelector('input[name=anio]').value = anio;
+  document.getElementById('mes-aviso').textContent = 'El archivo dice ' + document.querySelector('select[name=mes] option:checked').text.toLowerCase() + ' ' + anio + '. Si es otro mes, cámbielo.';
+});
+</script>
+
+<div class="bloque">
+  <div class="titulo"><h2>Cómo se carga</h2></div>
+  <div class="relleno" style="font-size:14px">
+    <ol style="margin:0;padding-left:20px;display:grid;gap:8px">
+      <li><b>Saque el rol de WinAfin a Excel.</b> El archivo sale con el nombre «rol» y el número del mes: <code>rol9.xls</code> es septiembre. No lo abra ni lo cambie antes de subirlo.</li>
+      <li><b>Elija el archivo y revise el mes y el año.</b> Se ponen solos según el nombre del archivo; si no son, cámbielos.</li>
+      <li><b>Toque «Revisar antes de cargar».</b> El programa busca a cada trabajador del rol en el padrón y le muestra:
+        <ul style="margin:4px 0 0;padding-left:18px">
+          <li>los que <b>no encontró</b>: elija a quién corresponde cada uno, o déjelo afuera;</li>
+          <li>los que encontró con un <b>nombre parecido</b>: revise que sea la persona correcta;</li>
+          <li>los que están en el padrón pero <b>no tienen rol</b> este mes.</li>
+        </ul></li>
+      <li><b>Toque «Cargar».</b> Desde ese momento cada trabajador ve su recibo en el celular, en la pestaña «Rol de pagos», y lo firma con el dedo.</li>
+    </ol>
+    <p class="tenue" style="margin:12px 0 0">El primer mes puede haber que elegir a algunos a mano. Desde el segundo mes se encuentran solos por el código de WinAfin.</p>
+    <p class="tenue" style="margin:8px 0 0">¿Se equivocó de archivo? Vuelva a cargar el mismo mes: reemplaza al anterior. Si un recibo que ya estaba firmado no cambió, la firma se mantiene; si cambió, el trabajador tiene que volver a firmar.</p>
+    <p class="tenue" style="margin:8px 0 0">Las provisiones no se muestran al trabajador.</p>
+  </div>
+</div>
+</div>
+
+{% else %}
+<form method="POST">
+  <input type="hidden" name="archivo_b64" value="{{ archivo_b64 }}">
+  <input type="hidden" name="archivo_nombre" value="{{ archivo_nombre }}">
+
+  <div class="bloque">
+    <div class="titulo"><h2>{{ archivo_nombre }}</h2><p>{{ buenas|length + malas|length }} filas en el archivo</p></div>
+    <div class="relleno">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,220px));gap:10px 12px">
+        <div><label class="campo">Mes</label>
+          <select name="mes">{% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if i == mes }}>{{ MESES[i]|capitalize }}</option>{% endfor %}</select></div>
+        <div><label class="campo">Año</label><input type="number" name="anio" value="{{ anio }}" min="2020" max="{{ hoy.year + 1 }}"></div>
+      </div>
+    </div>
+  </div>
+
+  {% if ya %}
+  <div class="aviso"><b>{{ nombre_mes(anio, mes) }} ya está cargado</b> ({{ ya.cuantos }} trabajadores{% if ya.firmados %}, {{ ya.firmados }} ya firmaron{% endif %}). Si carga este archivo, reemplaza al anterior.{% if ya.firmados %} Las firmas se mantienen sólo en los recibos que no cambiaron.{% endif %}</div>
+  {% endif %}
+
+  <div class="cifras">
+    <div class="cifra"><b class="grande">{{ entran|length }}</b><small>entran</small></div>
+    <div class="cifra"><b {% if sin_encontrar %}style="color:var(--rojo)"{% endif %}>{{ sin_encontrar|length }}</b><small>sin encontrar</small></div>
+    <div class="cifra"><b {% if a_revisar %}style="color:var(--ambar)"{% endif %}>{{ a_revisar|length }}</b><small>para revisar</small></div>
+    <div class="cifra"><b>{{ total|dinero }}</b><small>líquido de los que entran</small></div>
+  </div>
+
+  {% if repetidos %}
+  <div class="mensaje error">Hay {{ repetidos|length }} {{ 'trabajador elegido' if repetidos|length == 1 else 'trabajadores elegidos' }} para dos filas del rol: {% for tid, fs in repetidos.items() %}{{ fs[0].nombre_padron }}{{ ', ' if not loop.last }}{% endfor %}. Corríjalo abajo.</div>
+  {% endif %}
+
+  {% macro elegir(b) %}
+    <select name="t_{{ b.fila }}" style="min-width:220px">
+      <option value="" {{ 'selected' if not b.trabajador_id }}>— No cargar —</option>
+      {% for t in padron %}<option value="{{ t.id }}" {{ 'selected' if t.id == b.trabajador_id }}>{{ t.nombre }}{% if not t.activo %} (de baja){% endif %}</option>{% endfor %}
+    </select>
+  {% endmacro %}
+
+  {% if sin_encontrar %}
+  <div class="bloque">
+    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Elija a quién corresponde cada uno. Si no está, déjelo en «No cargar» y dé de alta al trabajador en Cargar planilla.</p></div>
+    <div class="desliza"><table>
+      <thead><tr><th>En el rol</th><th class="der">Código</th><th class="der">Líquido</th><th>Es</th></tr></thead>
+      <tbody>{% for b in sin_encontrar %}
+        <tr><td><b>{{ b.nombre_rol }}</b></td><td class="der tenue">{{ b.codigo }}</td><td class="der">{{ b.liquido|dinero }}</td><td>{{ elegir(b) }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  {% if a_revisar %}
+  <div class="bloque">
+    <div class="titulo"><h2 style="color:var(--ambar)">Revise que sea la misma persona ({{ a_revisar|length }})</h2><p>El nombre no es exactamente igual. Si no es, cámbielo.</p></div>
+    <div class="desliza"><table>
+      <thead><tr><th>En el rol</th><th class="der">Código</th><th>En el padrón</th><th></th></tr></thead>
+      <tbody>{% for b in a_revisar %}
+        <tr><td><b>{{ b.nombre_rol }}</b></td><td class="der tenue">{{ b.codigo }}</td><td>{{ elegir(b) }}</td><td class="tenue" style="font-size:12px">{{ 'elegido a mano' if b.como == 'elegido' else COMO[b.como] }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  {% if malas %}
+  <div class="bloque">
+    <div class="titulo"><h2 style="color:var(--rojo)">Quedan afuera porque no suman ({{ malas|length }})</h2><p>Revíselas en WinAfin y vuelva a sacar el archivo.</p></div>
+    <table><tbody>{% for m in malas %}
+      <tr><td class="tenue" style="width:60px">Fila {{ m.fila }}</td><td><b>{{ m.nombre_rol }}</b></td><td class="negativo">{{ m.motivo }}</td></tr>
+    {% endfor %}</tbody></table>
+  </div>
+  {% endif %}
+
+  {% if sin_rol %}
+  <div class="bloque">
+    <details>
+      <summary style="border-top:0">En el padrón pero sin rol este mes ({{ sin_rol|length }})</summary>
+      <table><tbody>{% for t in sin_rol %}<tr><td>{{ t.nombre }}</td><td class="tenue">{{ t.cedula }}</td><td class="tenue">{{ t.area or '' }}</td></tr>{% endfor %}</tbody></table>
+      <div class="nota">No se hace nada con ellos. Si alguno ya no trabaja en Intela, dele de baja desde su ficha.</div>
+    </details>
+  </div>
+  {% endif %}
+
+  {% if seguros %}
+  <div class="bloque">
+    <details>
+      <summary style="border-top:0">Encontrados ({{ seguros|length }})</summary>
+      <div class="desliza"><table>
+        <thead><tr><th>En el rol</th><th>En el padrón</th><th></th><th class="der">Líquido</th></tr></thead>
+        <tbody>{% for b in seguros %}
+          <tr><td>{{ b.nombre_rol }}</td><td><b>{{ b.nombre_padron }}</b><input type="hidden" name="t_{{ b.fila }}" value="{{ b.trabajador_id }}"></td><td class="tenue" style="font-size:12px">{{ COMO[b.como] }}</td><td class="der">{{ b.liquido|dinero }}</td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+    </details>
+  </div>
+  {% endif %}
+
+  <div class="bloque">
+    <div class="relleno" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn suave" type="submit" name="confirmar" value="0">Revisar de nuevo con lo que elegí</button>
+      <button class="btn verde" type="submit" name="confirmar" value="1" {{ 'disabled' if repetidos }}>Cargar el rol de {{ nombre_mes(anio, mes).lower() }} ({{ entran|length }} trabajadores)</button>
+      <a class="btn suave" href="{{ url_for('admin_roles_cargar') }}">Elegir otro archivo</a>
+    </div>
+    <div class="nota">Si cambió a alguien en las listas de arriba, toque «Revisar de nuevo» para ver los números antes de cargar.</div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

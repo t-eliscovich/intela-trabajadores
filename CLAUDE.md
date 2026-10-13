@@ -117,6 +117,32 @@ los MISMOS números que la pantalla: hojas Por día, Por trabajador (A/C por dí
 Invitados. **La hoja de saldo de vacaciones** (/admin/trabajador/N/imprimir) es la
 ficha de 5 filas + períodos + ajustes + firmas, para imprimir.
 
+**Rol de pagos (Tamara, 13/10/2026).** Contabilidad sube cada mes el Excel que
+exporta WinAfin («rolN.xls», N = mes) en /admin/roles/cargar; el trabajador lo ve en
+la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimir**
+(«quisiera que lo puedan firmar ahí en la app, como un DocuSign»).
+- `roles.py` (sin base ni Flask, con tests): qué es cada `camprN` salió de la
+  pantalla Rol de Pagos de WinAfin y cuadra en los 114 de septiembre. Una fila cuyos
+  totales no cierran NO entra. Columnas `campr22…45` con valor = concepto nuevo
+  → la fila queda afuera con el motivo. **Las provisiones (`campp`) no se guardan
+  ni se muestran.**
+- **El cruce con el padrón**: código de WinAfin guardado (`trabajador.codigo_rol`)
+  → mismo nombre → mismas palabras en otro orden → «parecido» (para revisar).
+  Nunca dos filas al mismo trabajador. La primera vez algunos se eligen a mano
+  en la revisión; al cargar se guarda el código y **desde el mes siguiente se
+  unen solos**. Siempre se revisa antes de guardar (el archivo viaja escondido
+  en el formulario: lo que se guarda es lo mismo que se revisó).
+- Volver a cargar un mes lo reemplaza entero (lo viejo queda con `borrado_en`).
+  Un recibo firmado que vuelve IGUAL conserva la firma; si cambió, hay que volver a firmar.
+- **La firma**: PNG del trazo + `firmado_en` + `firmado_desde` (user agent) +
+  `firma_huella` (SHA-256 del recibo firmado, `roles.huella`). La «Constancia de
+  firma» muestra si el recibo sigue igual a lo firmado. Se firma una vez. La firma
+  la ven el dueño (`/yo/rol/N/firma.png`) y contabilidad, nadie más.
+- Contabilidad ve en el menú un globo naranja con cuántos faltan firmar del último
+  mes, «Últimas firmas», y avisa a los que faltan por WhatsApp (wa.me).
+- El encabezado dice INTELA (razón social y RUC en espera; la razón social es
+  «Industria Textil Latinoamericana Cía. Ltda.»).
+
 **Backlog (Tamara, 17/09, «para alguna vez»)**: aviso en Pedidos de cuántos de la
 misma área ya están de vacaciones en esas fechas. También: cerrar el mes de comidas
 con Historial, acumulación de vacaciones a 3 años (importa desde 2027), liquidación
@@ -124,6 +150,10 @@ al dar de baja, permisos por horas.
 
 **El trabajador sólo ve lo suyo.** Entra por cédula, queda en la sesión, y
 ninguna ruta pública recibe un id por la URL.
+
+**El pool prueba la conexión antes de usarla** (`SELECT 1` en `store._conn`): el
+13/10/2026 la primera entrada a contabilidad después de horas sin uso dio
+«Internal Server Error» porque el RDS había cerrado la conexión quieta.
 
 **El pool se abre al importar el módulo, no en `__main__`.** Waitress hace
 `import app`. Los tests importan la app así, a propósito.

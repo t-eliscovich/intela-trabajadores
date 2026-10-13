@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block titulo %}Rol de pagos · {{ t.nombre }}{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block contenido %}
+{% include "_pestanas_yo.html" %}
+{% include "_recibo_estilos.html" %}
+<style>
+  .pad{position:relative;border:2px dashed #cbd5e1;border-radius:12px;background:#fbfcfe;height:190px;touch-action:none}
+  .pad canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:10px;cursor:crosshair}
+  .pad .linea{position:absolute;left:18px;right:18px;bottom:44px;border-bottom:1px solid #cbd5e1;pointer-events:none}
+  .pad .x{position:absolute;left:20px;bottom:48px;color:#94a3b8;font-size:20px;pointer-events:none}
+  .pad .guia{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-size:13px;color:var(--gris-claro);pointer-events:none}
+  .pad.firmando .guia{display:none}
+</style>
+
+{% if not r %}
+<div class="bloque"><div class="vacio">
+  <h3>Todavía no hay roles de pago.</h3>
+  <p>Cuando contabilidad cargue el rol del mes, lo va a ver aquí y lo va a poder firmar.</p>
+</div></div>
+{% else %}
+
+<div class="bloque">{% with de_trabajador = true %}{% include "_recibo.html" %}{% endwith %}</div>
+
+{% if r.firmado_en %}
+  {% with url_firma = url_for('yo_rol_firma', id_=r.id) %}{% include "_constancia.html" %}{% endwith %}
+{% else %}
+<div class="bloque">
+  <div class="titulo"><h2>Firmar</h2><p>Revise los valores y firme con el dedo.</p></div>
+  <div class="relleno">
+    <form method="POST" action="{{ url_for('yo_rol_firmar') }}" id="form-firma">
+      <input type="hidden" name="id" value="{{ r.id }}">
+      <input type="hidden" name="mes" value="{{ '%d-%02d'|format(r.anio, r.mes) }}">
+      <input type="hidden" name="firma" id="firma">
+      <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Firme aquí con el dedo</div></div>
+      <p class="ayuda" style="margin:8px 0 12px">Al firmar confirma que recibió su rol de pagos de {{ nombre_mes(r.anio, r.mes).lower() }} por $ {{ r.liquido|dinero }}. Después de firmar no se puede cambiar.</p>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+        <button class="btn suave" type="button" id="borrar">Borrar</button>
+        <button class="btn verde" type="submit" id="firmar" disabled>Firmar · Recibí conforme</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  var pad=document.getElementById('pad'), c=document.getElementById('lienzo'), x=c.getContext('2d'),
+      btn=document.getElementById('firmar'), largo=0, ultimo=null;
+  function medir(){
+    var r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+    c.width=Math.round(r.width*d); c.height=Math.round(r.height*d);
+    x.setTransform(d,0,0,d,0,0); x.lineWidth=2.6; x.lineCap='round'; x.lineJoin='round'; x.strokeStyle='#0f172a';
+    largo=0; btn.disabled=true; pad.classList.remove('firmando');
+  }
+  function punto(e){var r=c.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+  c.addEventListener('pointerdown',function(e){e.preventDefault();c.setPointerCapture(e.pointerId);ultimo=punto(e);pad.classList.add('firmando');
+    x.beginPath();x.arc(ultimo.x,ultimo.y,1.2,0,7);x.fillStyle='#0f172a';x.fill();});
+  c.addEventListener('pointermove',function(e){if(!ultimo)return;e.preventDefault();var p=punto(e);
+    x.beginPath();x.moveTo(ultimo.x,ultimo.y);x.lineTo(p.x,p.y);x.stroke();
+    largo+=Math.hypot(p.x-ultimo.x,p.y-ultimo.y);ultimo=p;if(largo>60)btn.disabled=false;});
+  ['pointerup','pointercancel','pointerleave'].forEach(function(n){c.addEventListener(n,function(){ultimo=null;});});
+  document.getElementById('borrar').addEventListener('click',function(){x.clearRect(0,0,c.width,c.height);medir();});
+  document.getElementById('form-firma').addEventListener('submit',function(e){
+    if(largo<=60){e.preventDefault();return;}
+    document.getElementById('firma').value=c.toDataURL('image/png'); btn.disabled=true; btn.textContent='Guardando…';
+  });
+  medir();
+  var ancho=c.getBoundingClientRect().width;
+  window.addEventListener('resize',function(){var a=c.getBoundingClientRect().width;if(Math.abs(a-ancho)>4){ancho=a;medir();}});
+})();
+</script>
+{% endif %}
+
+{% if otros %}
+<div class="bloque">
+  <details>
+    <summary style="border-top:0">Meses anteriores</summary>
+    <table><tbody>
+    {% for x in otros %}
+      <tr><td><a href="{{ url_for('yo_rol', mes='%d-%02d'|format(x.anio, x.mes)) }}">{{ nombre_mes(x.anio, x.mes) }}</a></td>
+          <td class="der">$ {{ x.liquido|dinero }}</td>
+          <td class="der">{% if x.firmado_en %}<span class="etiqueta ok">Firmado</span>{% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  </details>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

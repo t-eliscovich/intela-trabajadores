@@ -152,6 +152,9 @@
   .pestanas a{flex:1;text-align:center;padding:9px 12px;border-radius:999px;background:var(--papel);
         border:1px solid var(--borde);text-decoration:none;color:var(--azul);font-weight:700;font-size:14px}
   .pestanas a.activa{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .pestanas a{white-space:nowrap;position:relative}
+  .pestanas .punto{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rojo);margin-left:5px;vertical-align:2px}
+  @media(max-width:380px){.pestanas{gap:4px}.pestanas a{padding:9px 6px;font-size:13px}}
 
   .mensaje{padding:10px 14px;border-radius:9px;margin-bottom:11px;font-weight:600;font-size:14px}
   .mensaje.ok{background:#e8f8ee;color:#15803d}
@@ -300,6 +303,7 @@
     <nav>
       <a href="{{ url_for('admin') }}" class="{{ 'activo' if request.endpoint in ('admin','admin_trabajador') }}">Trabajadores</a>
       <a href="{{ url_for('admin_solicitudes') }}" class="{{ 'activo' if request.endpoint=='admin_solicitudes' }}">Pedidos{% if n_pendientes %} <span class="globo">{{ n_pendientes }}</span>{% endif %}</a>
+      <a href="{{ url_for('admin_roles') }}" class="{{ 'activo' if request.endpoint in ('admin_roles','admin_roles_cargar','admin_rol') }}" {% if n_roles_sin_firmar %}title="{{ n_roles_sin_firmar }} sin firmar en el último mes"{% endif %}>Roles de pago{% if n_roles_sin_firmar %} <span class="globo" style="background:var(--ambar)">{{ n_roles_sin_firmar }}</span>{% endif %}</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir','admin_feriados') }}">Comidas del mes</a>
       <a href="{{ url_for('admin_carga') }}" class="{{ 'activo' if request.endpoint=='admin_carga' }}">Cargar planilla</a>
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comensales</a>

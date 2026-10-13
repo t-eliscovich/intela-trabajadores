@@ -75,6 +75,21 @@
       </div>
     </details>
   </div>
+
+  <div class="bloque">
+    <div class="titulo"><h2>Roles de pago</h2>{% if roles_pago %}<p>{{ roles_pago|selectattr('firmado_en')|list|length }} de {{ roles_pago|length }} firmados</p>{% endif %}</div>
+    {% if roles_pago %}
+    <table><tbody>
+    {% for r in roles_pago %}
+      <tr><td><a href="{{ url_for('admin_rol', id_=r.id) }}">{{ nombre_mes(r.anio, r.mes) }}</a></td>
+          <td class="der">$ {{ r.liquido|dinero }}</td>
+          <td class="der">{% if r.firmado_en %}<span class="etiqueta ok">Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>{% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}
+    <div class="nota" style="border-top:0">Todavía no tiene roles de pago cargados.</div>
+    {% endif %}
+  </div>
 </div>
 
 <div>

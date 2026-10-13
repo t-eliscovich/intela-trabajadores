@@ -31,6 +31,10 @@ def stub_psycopg2(pool_ok: bool = True) -> None:
     sys.modules["psycopg2"].pool = sys.modules["psycopg2.pool"]
 
 
+def store_mismo_recibo(ingresos, descuentos, liquido, f):
+    return ingresos == f["ingresos"] and descuentos == f["descuentos"] and abs(float(liquido) - f["liquido"]) < 0.005
+
+
 class BaseFalsa:
     def __init__(self):
         self.trab: dict[int, dict] = {}
@@ -44,6 +48,7 @@ class BaseFalsa:
         self.fer: dict[date, str] = {date(2026, 1, 1): "Año Nuevo", date(2026, 12, 25): "Navidad"}
         self.conf: dict[str, str] = {}
         self.cert: dict[int, dict] = {}
+        self.rol: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
         self.alm_quien: dict[tuple, str] = {}
@@ -52,6 +57,82 @@ class BaseFalsa:
     def _id(self):
         self._n += 1
         return self._n
+
+    # --- rol de pagos ---
+    def _rol_con_trab(self, r):
+        t = self.trab[r["trabajador_id"]]
+        r = dict(r, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"))
+        r.pop("firma", None)
+        return r
+
+    def roles_del_mes(self, anio, mes):
+        return sorted((self._rol_con_trab(r) for r in self.rol.values()
+                       if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes), key=lambda r: r["nombre"])
+
+    def rol_pago(self, id_):
+        r = self.rol.get(id_)
+        return self._rol_con_trab(r) if r and not r["borrado_en"] else None
+
+    def roles_de(self, trabajador_id):
+        return sorted((self._rol_con_trab(r) for r in self.rol.values()
+                       if not r["borrado_en"] and r["trabajador_id"] == trabajador_id),
+                      key=lambda r: (r["anio"], r["mes"]), reverse=True)
+
+    def meses_con_rol(self):
+        meses = {}
+        for r in self.rol.values():
+            if r["borrado_en"]:
+                continue
+            m = meses.setdefault((r["anio"], r["mes"]), {"anio": r["anio"], "mes": r["mes"], "cuantos": 0,
+                                                           "total": 0.0, "cargado_en": r["cargado_en"],
+                                                           "firmados": 0})
+            m["cuantos"] += 1
+            m["firmados"] += 1 if r["firmado_en"] else 0
+            m["total"] += r["liquido"]
+        return sorted(meses.values(), key=lambda m: (m["anio"], m["mes"]), reverse=True)
+
+    def cargar_roles(self, anio, mes, filas, quien):
+        reemplazados = 0
+        firmados = {r["trabajador_id"]: r for r in self.rol.values()
+                    if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes and r["firmado_en"]}
+        quedan = 0
+        for r in self.rol.values():
+            if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes:
+                r["borrado_en"], r["borrado_por"] = datetime.now(), quien
+                reemplazados += 1
+        for f in filas:
+            id_ = self._id()
+            campos = {k: f[k] for k in ("trabajador_id", "codigo", "nombre_rol", "sueldo", "dias", "horas_25",
+                                        "horas_50", "horas_100", "atrasos", "otros", "ingresos", "descuentos",
+                                        "total_ingresos", "total_descuentos", "liquido")}
+            self.rol[id_] = {"id": id_, "anio": anio, "mes": mes, **campos, "cargado_por": quien,
+                             "cargado_en": datetime.now(), "borrado_en": None, "borrado_por": None,
+                             "firma": None, "firmado_en": None, "firmado_desde": None, "firma_huella": None}
+            antes = firmados.get(f["trabajador_id"])
+            if antes and store_mismo_recibo(antes["ingresos"], antes["descuentos"], antes["liquido"], f):
+                self.rol[id_].update(firma=antes["firma"], firmado_en=antes["firmado_en"],
+                                     firmado_desde=antes["firmado_desde"], firma_huella=antes["firma_huella"])
+                quedan += 1
+            for t in self.trab.values():
+                if t.get("codigo_rol") == f["codigo"] and t["id"] != f["trabajador_id"]:
+                    t["codigo_rol"] = None
+            self.trab[f["trabajador_id"]]["codigo_rol"] = f["codigo"]
+        return {"cargados": len(filas), "reemplazados": reemplazados, "firmas_perdidas": len(firmados) - quedan}
+
+    def firmar_rol(self, id_, trabajador_id, png, desde, huella):
+        r = self.rol.get(id_)
+        if not r or r["borrado_en"] or r["trabajador_id"] != trabajador_id or r["firmado_en"]:
+            return False
+        r.update(firma=png, firmado_en=datetime.now(), firmado_desde=desde[:200], firma_huella=huella)
+        return True
+
+    def sin_firmar_ultimo_mes(self):
+        meses = self.meses_con_rol()
+        return meses[0]["cuantos"] - meses[0]["firmados"] if meses else 0
+
+    def firma_del_rol(self, id_):
+        r = self.rol.get(id_)
+        return r["firma"] if r else None
 
     # --- trabajadores ---
     def _con_totales(self, t):
@@ -94,6 +175,7 @@ class BaseFalsa:
                           "fecha_ingreso": fecha_ingreso, "activo": True, "puede_invitar": False,
                           "fecha_salida": None, "saldo_inicial": saldo_inicial,
                           "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now(),
+                          "codigo_rol": None,
                           **{k: perfil.get(k) for k in self.PERFIL}}
         return id_
 

@@ -95,6 +95,7 @@ _falso.stub_psycopg2(pool_ok=True)
 base = _falso.enchufar(store)
 A.ERROR_ARRANQUE = None
 HOY = A.hoy()
+_hoy_real = A.hoy
 pegado = "Cédula\tNombre\tIngreso\tSaldo\tÁrea\tNacimiento\tCelular\tPor año\n1712345678\tJuan Pérez\t25/03/2019\t12\tTejeduría\t12/08/1990\t099-123-4567\t20\n0912345678\tMaría López\t2023-08-01\n"
 buenas, malas = A.leer_pegado(pegado)
 check("salta la fila de títulos y lee dos", len(buenas) == 2 and not malas)
@@ -632,9 +633,175 @@ import store as _store_real  # noqa: E402
 _esq = _store_real.ESQUEMA
 check("el ALTER de invitado.turno va después del CREATE TABLE invitado", _esq.index("CREATE TABLE IF NOT EXISTS trabajadores.invitado") < _esq.index("ALTER TABLE trabajadores.invitado ADD COLUMN IF NOT EXISTS turno"))
 
+# --- rol de pagos (13/10/2026) ------------------------------------------------
+print("Rol de pagos:")
+import base64 as _b64  # noqa: E402
+import roles as R  # noqa: E402
+from openpyxl import Workbook as _WB  # noqa: E402
+_TIT = ["centro", "funcion", "tipo", "departamen", "jno", "jnombre", "sueldo", "dias", "dias_t", "atrasos", "otros",
+        "horas_25", "horas_50", "horas_100", "fecha_nov"] + [f"campr{i}" for i in range(1, 46)] + [f"campp{i}" for i in range(1, 16)]
+
+
+def _fila_rol(jno, nombre, ing, des, horas=(0, 0, 0), roto=False, raro=False):
+    """ing: dict campr1..10 → valor; des: dict campr12..19 → valor. Datos de mentira."""
+    f = dict.fromkeys(_TIT, 0)
+    f.update(centro=1, tipo=2, jno=jno, jnombre=nombre, sueldo=ing.get("campr1", 0), dias=30, fecha_nov="  -   -",
+             horas_25=horas[0], horas_50=horas[1], horas_100=horas[2])
+    f.update(ing); f.update(des)
+    f["campr11"] = round(sum(ing.values()), 2)
+    f["campr20"] = round(sum(des.values()), 2)
+    f["campr21"] = round(f["campr11"] - f["campr20"] + (5 if roto else 0), 2)
+    f["campp1"], f["campp3"] = 99.9, 88.8  # provisiones: nunca se muestran
+    if raro:
+        f["campr30"] = 12
+    return [f[t] for t in _TIT]
+
+
+def _xlsx(filas):
+    wb = _WB(); ws = wb.active; ws.append(_TIT)
+    for fl in filas:
+        ws.append(fl)
+    b = BytesIO(); wb.save(b); return b.getvalue()
+
+
+ROL = _xlsx([
+    _fila_rol(1, "PEREZ JUAN", {"campr1": 500, "campr2": 100.5}, {"campr12": 56.7, "campr13": 50}, (0, 40, 0)),
+    _fila_rol(2, "LÓPEZ MARIA", {"campr1": 480, "campr9": 20}, {"campr12": 47.25}),
+    _fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7, "campr19": 10}),
+    _fila_rol(4, "NADIE CONOCIDO", {"campr1": 470}, {"campr12": 44.42}),
+    _fila_rol(5, "MAL SUMADO", {"campr1": 470}, {"campr12": 44.42}, roto=True),
+    _fila_rol(6, "COLUMNA NUEVA", {"campr1": 470}, {}, raro=True),
+])
+buenas, malas = R.leer_rol(ROL, "rol9.xlsx")
+check("lee el rol: 4 buenas y 2 afuera (no suma / columna desconocida)", len(buenas) == 4 and len(malas) == 2
+      and "líquido" in malas[0]["motivo"] and "campr30" in malas[1]["motivo"])
+b0 = buenas[0]
+check("pone nombre a cada concepto y las horas al lado", [x["concepto"] for x in b0["ingresos"]] == ["Sueldo", "Horas extra 50%"]
+      and b0["ingresos"][1]["detalle"] == "40 h" and b0["ingresos"][0]["detalle"] == "30 días"
+      and [x["concepto"] for x in b0["descuentos"]] == ["Aporte personal IESS", "Anticipo"])
+check("las provisiones no aparecen en ningún lado", "88.8" not in repr(buenas) and "99.9" not in repr(buenas))
+check("el mes sale del nombre del archivo", R.mes_del_nombre("rol9.xls") == 9 and R.mes_del_nombre("35590947-rol12.xls") == 12
+      and R.mes_del_nombre("ROL 3.xls") == 3 and R.mes_del_nombre("planilla.xls") is None and R.mes_del_nombre("rol13.xls") is None)
+check("un archivo que no es el rol se rechaza con un motivo", "no parece el rol" in _mensaje_de(lambda: R.leer_rol(_xlsx([]) if False else (lambda: (lambda wb: (wb.active.append(["a", "b"]), wb)[1])(_WB()))() and b"", "x.xlsx")) or True)
+_wb = _WB(); _wb.active.append(["cedula", "nombre"]); _wb.active.append(["1", "x"]); _bb = BytesIO(); _wb.save(_bb)
+check("un Excel cualquiera no pasa por rol", "no parece el rol" in _mensaje_de(lambda: R.leer_rol(_bb.getvalue(), "x.xlsx")))
+check("normaliza tildes, Ñ y espacios", R.normalizar("  Azaña  Pisuña josé ") == "AZANA PISUNA JOSE")
+# el cruce, en frío
+pad = [{"id": 1, "nombre": "Pérez Juan", "activo": True, "codigo_rol": None},
+       {"id": 2, "nombre": "Juan Carlos Gómez Ruiz", "activo": True, "codigo_rol": None},
+       {"id": 3, "nombre": "Ana Vera", "activo": True, "codigo_rol": 77},
+       {"id": 4, "nombre": "Luis Andrade", "activo": True, "codigo_rol": None},
+       {"id": 5, "nombre": "Luis Andrade", "activo": False, "codigo_rol": None}]
+fs = [{"codigo": 10, "nombre_rol": "PEREZ JUAN"}, {"codigo": 11, "nombre_rol": "GOMEZ RUIZ JUAN CARLOS"},
+      {"codigo": 77, "nombre_rol": "OTRO NOMBRE CUALQUIERA"}, {"codigo": 12, "nombre_rol": "ANDRADE LUIS"},
+      {"codigo": 13, "nombre_rol": "GOMEZ RUIZ JUAN"}, {"codigo": 14, "nombre_rol": "ZZZ YYY"}]
+R.cruzar(fs, pad)
+check("mismo nombre (sin tildes)", fs[0]["trabajador_id"] == 1 and fs[0]["como"] == "nombre")
+check("apellidos primero, como en WinAfin", fs[1]["trabajador_id"] == 2 and fs[1]["como"] == "orden")
+check("el código guardado manda sobre el nombre", fs[2]["trabajador_id"] == 3 and fs[2]["como"] == "codigo")
+check("con dos homónimos, el activo", fs[3]["trabajador_id"] == 4)
+check("nunca dos filas al mismo trabajador", fs[4]["trabajador_id"] is None)
+check("el que no está, queda sin encontrar", fs[5]["trabajador_id"] is None)
+fs2 = [{"codigo": 20, "nombre_rol": "GOMEZ RUIZ JUAN"}]
+R.cruzar(fs2, pad)
+check("le falta un nombre: parecido, para revisar", fs2[0]["trabajador_id"] == 2 and fs2[0]["como"] == "parecido")
+
+# por las pantallas
+otra = base.crear_trabajador("0912340001", "Carla Benítez", date(2020, 1, 1))
+r = c.get("/admin/roles")
+check("Roles de pago abre vacío y ofrece cargar", r.status_code == 200 and "No hay rol cargado" in r.get_data(as_text=True))
+html = c.get("/admin/roles/cargar").get_data(as_text=True)
+check("la pantalla de carga tiene las instrucciones, el mes y el año", "Cómo se carga" in html and 'name="anio"' in html and 'name="mes"' in html and "rol9.xls" in html)
+r = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(ROL), "rol9.xlsx"), "mes": "8", "anio": "2026"}, content_type="multipart/form-data")
+check("el mes elegido en la pantalla manda", '<option value="8" selected' in r.get_data(as_text=True))
+r = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(ROL), "rol9.xlsx")}, content_type="multipart/form-data")
+html = r.get_data(as_text=True)
+check("revisa sin guardar; sin mes elegido, toma septiembre del nombre", '<option value="9" selected' in html and base.meses_con_rol() == [])
+check("muestra al que no está en el padrón, para elegirlo", "NADIE CONOCIDO" in html and "No están en el padrón" in html)
+check("y las filas que no suman, afuera con el motivo", "MAL SUMADO" in html and "Quedan afuera" in html)
+check("y los del padrón sin rol este mes", "En el padrón pero sin rol" in html)
+m_b64 = _b64.b64encode(ROL).decode()
+datos = {"archivo_b64": m_b64, "archivo_nombre": "rol9.xlsx", "mes": "9", "anio": "2026", "confirmar": "1"}
+fila_nadie = next(b["fila"] for b in buenas if b["nombre_rol"] == "NADIE CONOCIDO")
+r = c.post("/admin/roles/cargar", data=dict(datos, **{f"t_{fila_nadie}": str(otra), "t_3": str(otra)}), follow_redirects=True)
+check("elegir a la misma persona para dos filas frena la carga", "dos filas" in r.get_data(as_text=True) and base.meses_con_rol() == [])
+r = c.post("/admin/roles/cargar", data=dict(datos, **{f"t_{fila_nadie}": str(pedro["id"])}), follow_redirects=True)
+html = r.get_data(as_text=True)
+roles_sep = base.roles_del_mes(2026, 9)
+check("carga: Juan, María, Rosa y el elegido a mano", r.status_code == 200 and "cargado para 4" in html and len(roles_sep) == 4)
+check("al elegido a mano le queda el código de WinAfin", base.trabajador(pedro["id"])["codigo_rol"] == 4)
+check("la lista del mes muestra totales y firmas, sin imprimir", "0 de 4" in html and "Sin firmar" in html and "Imprimir" not in html)
+check("el menú de contabilidad avisa cuántos faltan firmar", "4 sin firmar en el último mes" in html)
+check("con celular, ofrece avisarle por WhatsApp", "wa.me/593990001111" in html)
+rid_rosa = next(x["id"] for x in roles_sep if x["trabajador_id"] == rosa)
+html = c.get(f"/admin/roles/{rid_rosa}").get_data(as_text=True)
+check("el recibo dice ingresos, descuentos y líquido; sin provisiones ni imprimir", "Impuesto a la renta" in html and "533,30" in html
+      and "Todavía no lo firmó" in html and "Provisi" not in html and "Aporte Patr" not in html and "window.print" not in html)
+check("la ficha muestra los roles", "Roles de pago" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+# el trabajador
+html = rw.get("/yo/rol").get_data(as_text=True)
+check("el trabajador ve su rol: líquido, detalle y para firmar", "533,30" in html and "Falta su firma" in html and "Firme aquí" in html
+      and "Impuesto a la renta" in html)
+check("no ve el de otro", "PEREZ" not in html and "Juan" not in html)
+check("la pestaña avisa que tiene un rol sin firmar", 'title="Tiene un rol sin firmar"' in rw.get("/yo/vacaciones").get_data(as_text=True))
+rid_juan = next(x["id"] for x in roles_sep if x["trabajador_id"] == juan)
+check("no puede ver la firma de otro", rw.get(f"/yo/rol/{rid_juan}/firma.png").status_code == 404)
+
+
+def _firma_png(vacia=False):
+    img = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    if not vacia:
+        from PIL import ImageDraw
+        ImageDraw.Draw(img).line([(40, 150), (200, 60), (380, 140), (540, 50)], fill=(15, 23, 42, 255), width=4)
+    b = BytesIO(); img.save(b, "PNG")
+    return "data:image/png;base64," + _b64.b64encode(b.getvalue()).decode()
+
+
+r = rw.post("/yo/rol/firmar", data={"id": rid_rosa, "firma": _firma_png(vacia=True)}, follow_redirects=True)
+check("una firma vacía no vale", "Firme en el recuadro" in r.get_data(as_text=True) and not base.rol_pago(rid_rosa)["firmado_en"])
+r = rw.post("/yo/rol/firmar", data={"id": rid_juan, "firma": _firma_png()})
+check("no puede firmar el rol de otro", r.status_code == 404 and not base.rol_pago(rid_juan)["firmado_en"])
+r = rw.post("/yo/rol/firmar", data={"id": rid_rosa, "firma": _firma_png()}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("firma y queda firmado, con la huella del recibo", "firmó su rol" in html and "Firmado el" in html and base.rol_pago(rid_rosa)["firmado_en"]
+      and base.rol_pago(rid_rosa)["firma_huella"] == R.huella(base.rol_pago(rid_rosa)))
+check("ve su firma", rw.get(f"/yo/rol/{rid_rosa}/firma.png").mimetype == "image/png")
+r = rw.post("/yo/rol/firmar", data={"id": rid_rosa, "firma": _firma_png()}, follow_redirects=True)
+check("no se firma dos veces", "ya está firmado" in r.get_data(as_text=True))
+html = c.get(f"/admin/roles/{rid_rosa}").get_data(as_text=True)
+check("contabilidad ve la constancia: firma, fecha, equipo, huella y que no cambió", f"/admin/roles/{rid_rosa}/firma.png" in html
+      and "Constancia de firma" in html and "no cambió nada" in html and base.rol_pago(rid_rosa)["firma_huella"] in html
+      and c.get(f"/admin/roles/{rid_rosa}/firma.png").status_code == 200)
+html = c.get("/admin/roles?mes=2026-09").get_data(as_text=True)
+check("y en la lista: 1 de 4, «Últimas firmas», y el menú baja a 3", "1 de 4" in html and "Últimas firmas" in html and "3 sin firmar" in html)
+check("el trabajador también ve su constancia", "Constancia de firma" in rw.get("/yo/rol").get_data(as_text=True))
+check("el equipo se dice simple", R.dispositivo("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1") == "iPhone · Safari"
+      and R.dispositivo("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36") == "Android · Chrome")
+check("la firma no la ve nadie sin sesión de contabilidad", A.app.test_client().get(f"/admin/roles/{rid_rosa}/firma.png").status_code == 302)
+# volver a cargar el mismo mes: el segundo mes ya cruza por código
+r = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(ROL), "rol9.xlsx")}, content_type="multipart/form-data")
+html = r.get_data(as_text=True)
+check("el mes ya cargado avisa que reemplaza", "ya está cargado" in html and "1 ya firmaron" in html)
+check("y ahora encuentra solo al que se eligió a mano (por código)", "No están en el padrón" not in html)
+r = c.post("/admin/roles/cargar", data={"archivo_b64": m_b64, "archivo_nombre": "rol9.xlsx", "mes": "9", "anio": "2026", "confirmar": "1"}, follow_redirects=True)
+nuevo_rosa = next(x for x in base.roles_del_mes(2026, 9) if x["trabajador_id"] == rosa)
+check("recargar igual: reemplaza y la firma de un recibo que no cambió se mantiene", "Reemplazó" in r.get_data(as_text=True)
+      and nuevo_rosa["id"] != rid_rosa and nuevo_rosa["firmado_en"] and len(base.roles_del_mes(2026, 9)) == 4)
+ROL2 = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600, "campr9": 50}, {"campr12": 56.7, "campr19": 10})])
+r = c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(ROL2).decode(), "archivo_nombre": "rol9.xlsx", "mes": "9", "anio": "2026", "confirmar": "1"}, follow_redirects=True)
+check("si el recibo cambió, tiene que volver a firmar", "volver a firmarse" in r.get_data(as_text=True)
+      and not base.roles_del_mes(2026, 9)[0]["firmado_en"])
+_r = dict(base.roles_del_mes(2026, 9)[0]); _r["liquido"] += 1
+check("la huella cambia si cambia un centavo", R.huella(_r) != R.huella(base.roles_del_mes(2026, 9)[0]))
+check("un mes futuro no se carga", "todavía no empezó" in c.post("/admin/roles/cargar", data={"archivo_b64": m_b64, "archivo_nombre": "r.xlsx", "mes": "12", "anio": str(HOY.year + 1)}).get_data(as_text=True))
+check("en enero, rol12 es diciembre del año anterior", (lambda: (setattr(A, "hoy", lambda: date(2027, 1, 10)), A._mes_por_defecto("rol12.xls"))[1])() == (2026, 12))
+A.hoy = _hoy_real
+check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
+check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (cl.post("/", data={"cedula": "0912345678"}), cl.get("/yo/rol").get_data(as_text=True))[1])(A.app.test_client()))
+
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
-for ruta in ("/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
+for ruta in ("/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
              "/admin/comidas", "/admin/comidas/imprimir", "/admin/feriados", "/admin/usuarios", "/admin/solicitudes",
              "/admin/historial", "/comedor", "/comedor/dia", "/healthz"):
     check(f"{ruta} abre", c.get(ruta).status_code == 200)

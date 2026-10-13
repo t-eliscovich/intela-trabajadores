@@ -1,0 +1,29 @@
+{# El recibo, igual para el trabajador y para contabilidad. Recibe `r`. #}
+<div class="rp-cab">
+  <div class="rp-mes">Rol de pagos · {{ nombre_mes(r.anio, r.mes) }}</div>
+  <div class="rp-liq"><small>$</small>{{ r.liquido|dinero }}</div>
+  <div class="rp-frase">líquido a recibir</div>
+  {% if r.firmado_en %}<span class="rp-estado ok">✓ Firmado el {{ r.firmado_en|fecha }}</span>
+  {% else %}<span class="rp-estado falta">{{ 'Falta su firma' if de_trabajador else 'Sin firmar' }}</span>{% endif %}
+</div>
+<div class="rp-quien">
+  <div><span>Trabajador</span><b>{{ r.nombre }}</b></div>
+  <div><span>Cédula</span>{{ r.cedula }}</div>
+  <div><span>Sueldo nominal</span>{{ r.sueldo|dinero }}</div>
+  <div><span>Empresa</span>INTELA</div>
+</div>
+<div class="rp-grupo">
+  <h3>Ingresos</h3>
+  {% for x in r.ingresos %}<div class="rp-linea"><span>{{ x.concepto }}{% if x.detalle %}<small>{{ x.detalle }}</small>{% endif %}</span><b>{{ x.valor|dinero }}</b></div>{% endfor %}
+  <div class="rp-linea total"><span>Total ingresos</span><b>{{ r.total_ingresos|dinero }}</b></div>
+</div>
+{% if r.descuentos %}
+<div class="rp-sep"></div>
+<div class="rp-grupo">
+  <h3>Descuentos</h3>
+  {% for x in r.descuentos %}<div class="rp-linea menos"><span>{{ x.concepto }}</span><b>− {{ x.valor|dinero }}</b></div>{% endfor %}
+  <div class="rp-linea total menos"><span>Total descuentos</span><b>− {{ r.total_descuentos|dinero }}</b></div>
+</div>
+{% endif %}
+{% if r.atrasos or r.otros %}<div class="rp-extra">{% if r.atrasos %}Atrasos: {{ r.atrasos|num(2) }}{% endif %}{% if r.atrasos and r.otros %} · {% endif %}{% if r.otros %}Otros: {{ r.otros|num(2) }}{% endif %}</div>{% endif %}
+<div class="vac-saldo"><span>Líquido a recibir</span><b style="font-size:28px">$ {{ r.liquido|dinero }}</b></div>

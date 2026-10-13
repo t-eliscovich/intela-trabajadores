@@ -32,6 +32,18 @@ def init_pool() -> None:
 def _conn():
     assert _pool is not None, "init_pool() no fue llamado"
     con = _pool.getconn()
+    # Una conexión que quedó mucho rato quieta la puede cerrar el RDS. El primer
+    # pedido después de eso daba «Internal Server Error» (13/10/2026, al entrar a
+    # contabilidad). Se prueba con un SELECT 1 y, si está muerta, se cambia por otra.
+    try:
+        if con.closed:
+            raise psycopg2.InterfaceError("conexión cerrada")
+        with con.cursor() as cur:
+            cur.execute("SELECT 1")
+        con.rollback()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _pool.putconn(con, close=True)
+        con = _pool.getconn()
     try:
         yield con
     finally:
@@ -252,6 +264,47 @@ ESQUEMA = """
     );
     CREATE INDEX IF NOT EXISTS certificado_trabajador_idx ON trabajadores.certificado (trabajador_id);
 
+    -- El rol de pagos de cada mes, como lo exporta WinAfin (Rol → «rolN.xls»).
+    -- Se guarda lo que ve el trabajador: ingresos y descuentos con su nombre
+    -- (jsonb: [{concepto, detalle, valor}]), totales y líquido. Las provisiones
+    -- NO. Volver a cargar un mes marca el anterior como borrado (nunca DELETE).
+    CREATE TABLE IF NOT EXISTS trabajadores.rol_pago (
+        id                serial PRIMARY KEY,
+        trabajador_id     integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        anio              integer NOT NULL,
+        mes               integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
+        codigo            integer,
+        nombre_rol        text NOT NULL,
+        sueldo            numeric(12,2),
+        dias              numeric(5,1),
+        horas_25          numeric(7,2),
+        horas_50          numeric(7,2),
+        horas_100         numeric(7,2),
+        atrasos           numeric(7,2),
+        otros             numeric(7,2),
+        ingresos          jsonb NOT NULL,
+        descuentos        jsonb NOT NULL,
+        total_ingresos    numeric(12,2) NOT NULL,
+        total_descuentos  numeric(12,2) NOT NULL,
+        liquido           numeric(12,2) NOT NULL,
+        cargado_por       text NOT NULL,
+        cargado_en        timestamptz NOT NULL DEFAULT now(),
+        borrado_en        timestamptz,
+        borrado_por       text
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS rol_pago_vivo_idx
+        ON trabajadores.rol_pago (trabajador_id, anio, mes) WHERE borrado_en IS NULL;
+    CREATE INDEX IF NOT EXISTS rol_pago_mes_idx ON trabajadores.rol_pago (anio, mes);
+    -- La firma del trabajador en la app («Recibí conforme»): la imagen del trazo
+    -- (PNG), cuándo y desde qué celular. Una vez firmado no se cambia.
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firma bytea;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firmado_en timestamptz;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firmado_desde text;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firma_huella text;
+    -- El código del trabajador en WinAfin (jno). Se guarda al cargar el primer
+    -- rol y de ahí en adelante el cruce va por código, no por nombre.
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS codigo_rol integer;
+
     -- Cosas sueltas del programa (la clave del link del comedor, por ejemplo).
     CREATE TABLE IF NOT EXISTS trabajadores.configuracion (
         clave  text PRIMARY KEY,
@@ -272,6 +325,127 @@ ESQUEMA = """
     ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS rol text NOT NULL DEFAULT 'contabilidad';
     UPDATE trabajadores.usuario SET rol = 'comedor' WHERE rol = 'cafeteria';
 """
+
+
+# --------------------------------------------------------------------------
+# Rol de pagos
+# --------------------------------------------------------------------------
+_ROL = """SELECT r.id, r.trabajador_id, r.anio, r.mes, r.codigo, r.nombre_rol, r.sueldo, r.dias,
+                 r.horas_25, r.horas_50, r.horas_100, r.atrasos, r.otros, r.ingresos, r.descuentos,
+                 r.total_ingresos, r.total_descuentos, r.liquido, r.cargado_por, r.cargado_en,
+                 r.firmado_en, r.firmado_desde, r.firma_huella, t.nombre, t.cedula, t.area, t.celular
+            FROM trabajadores.rol_pago r JOIN trabajadores.trabajador t ON t.id = r.trabajador_id
+           WHERE r.borrado_en IS NULL"""
+
+
+def _rol_python(r: dict | None) -> dict | None:
+    if r is None:
+        return None
+    for k in ("sueldo", "dias", "horas_25", "horas_50", "horas_100", "atrasos", "otros",
+              "total_ingresos", "total_descuentos", "liquido"):
+        if r.get(k) is not None:
+            r[k] = float(r[k])
+    return r
+
+
+def roles_del_mes(anio: int, mes: int) -> list[dict]:
+    return [_rol_python(r) for r in _todos(_ROL + " AND r.anio = %s AND r.mes = %s ORDER BY t.nombre", (anio, mes))]
+
+
+def rol_pago(id_: int) -> dict | None:
+    return _rol_python(_uno(_ROL + " AND r.id = %s", (id_,)))
+
+
+def roles_de(trabajador_id: int) -> list[dict]:
+    """Los roles de un trabajador, el más nuevo primero."""
+    return [_rol_python(r) for r in _todos(_ROL + " AND r.trabajador_id = %s ORDER BY r.anio DESC, r.mes DESC",
+                                           (trabajador_id,))]
+
+
+def meses_con_rol() -> list[dict]:
+    return [dict(r, total=float(r["total"])) for r in _todos(
+        """SELECT anio, mes, count(*) AS cuantos, sum(liquido) AS total, max(cargado_en) AS cargado_en,
+                  count(firmado_en) AS firmados
+             FROM trabajadores.rol_pago WHERE borrado_en IS NULL
+            GROUP BY anio, mes ORDER BY anio DESC, mes DESC""")]
+
+
+def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str) -> dict:
+    """Carga el rol del mes ENTERO, en una sola transacción: lo que hubiera de
+    ese mes queda borrado (se reemplaza, nunca DELETE), entra cada fila y a cada
+    trabajador se le guarda su código de WinAfin para el mes que viene."""
+    import json
+    with _conn() as con, con.cursor() as cur:
+        try:
+            # Si el recibo de alguien que ya firmó vuelve IGUAL, la firma se queda;
+            # si cambió algo, tiene que volver a firmar.
+            cur.execute("""SELECT trabajador_id, ingresos, descuentos, liquido, firma, firmado_en, firmado_desde,
+                                  firma_huella
+                             FROM trabajadores.rol_pago
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL AND firmado_en IS NOT NULL""",
+                        (anio, mes))
+            firmados = {r[0]: r for r in cur.fetchall()}
+            cur.execute("""UPDATE trabajadores.rol_pago SET borrado_en = now(), borrado_por = %s
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL""", (quien, anio, mes))
+            reemplazados = cur.rowcount
+            firmas_que_quedan = 0
+            for f in filas:
+                cur.execute(
+                    """INSERT INTO trabajadores.rol_pago
+                         (trabajador_id, anio, mes, codigo, nombre_rol, sueldo, dias, horas_25, horas_50,
+                          horas_100, atrasos, otros, ingresos, descuentos, total_ingresos, total_descuentos,
+                          liquido, cargado_por)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s)""",
+                    (f["trabajador_id"], anio, mes, f["codigo"], f["nombre_rol"], f["sueldo"], f["dias"],
+                     f["horas_25"], f["horas_50"], f["horas_100"], f["atrasos"], f["otros"],
+                     json.dumps(f["ingresos"]), json.dumps(f["descuentos"]),
+                     f["total_ingresos"], f["total_descuentos"], f["liquido"], quien))
+                antes = firmados.get(f["trabajador_id"])
+                if antes and mismo_recibo(antes[1], antes[2], antes[3], f):
+                    cur.execute("""UPDATE trabajadores.rol_pago
+                                      SET firma = %s, firmado_en = %s, firmado_desde = %s, firma_huella = %s
+                                    WHERE trabajador_id = %s AND anio = %s AND mes = %s AND borrado_en IS NULL""",
+                                (antes[4], antes[5], antes[6], antes[7], f["trabajador_id"], anio, mes))
+                    firmas_que_quedan += 1
+                cur.execute("""UPDATE trabajadores.trabajador SET codigo_rol = NULL
+                                WHERE codigo_rol = %s AND id <> %s""", (f["codigo"], f["trabajador_id"]))
+                cur.execute("UPDATE trabajadores.trabajador SET codigo_rol = %s WHERE id = %s",
+                            (f["codigo"], f["trabajador_id"]))
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return {"cargados": len(filas), "reemplazados": reemplazados,
+            "firmas_perdidas": len(firmados) - firmas_que_quedan}
+
+
+def mismo_recibo(ingresos, descuentos, liquido, f: dict) -> bool:
+    return (ingresos == f["ingresos"] and descuentos == f["descuentos"]
+            and abs(float(liquido) - f["liquido"]) < 0.005)
+
+
+def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str) -> bool:
+    """Sólo el dueño del recibo, y una sola vez."""
+    fila = _ejecutar("""UPDATE trabajadores.rol_pago
+                           SET firma = %s, firmado_en = now(), firmado_desde = %s, firma_huella = %s
+                         WHERE id = %s AND trabajador_id = %s AND borrado_en IS NULL AND firmado_en IS NULL
+                     RETURNING id""", (psycopg2.Binary(png), desde[:200], huella, id_, trabajador_id))
+    return fila is not None
+
+
+def sin_firmar_ultimo_mes() -> int:
+    """Para el globito del menú de contabilidad: cuántos del último mes cargado
+    todavía no firmaron."""
+    r = _uno("""SELECT count(*) FILTER (WHERE firmado_en IS NULL) AS n FROM trabajadores.rol_pago
+                 WHERE borrado_en IS NULL AND (anio, mes) = (
+                       SELECT anio, mes FROM trabajadores.rol_pago WHERE borrado_en IS NULL
+                        ORDER BY anio DESC, mes DESC LIMIT 1)""")
+    return int(r["n"]) if r else 0
+
+
+def firma_del_rol(id_: int) -> bytes | None:
+    r = _uno("SELECT firma FROM trabajadores.rol_pago WHERE id = %s", (id_,))
+    return bytes(r["firma"]) if r and r["firma"] is not None else None
 
 
 # --------------------------------------------------------------------------

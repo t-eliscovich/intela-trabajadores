@@ -1,0 +1,15 @@
+{# La constancia de firma, como un certificado de DocuSign. Recibe r, intacto, equipo, url_firma. #}
+<div class="bloque">
+  <div class="titulo"><h2>Constancia de firma</h2><p>Recibí conforme</p></div>
+  <div class="constancia">
+    <div class="trazo"><img src="{{ url_firma }}" alt="Firma de {{ r.nombre }}"><p>{{ r.nombre }} · C.I. {{ r.cedula }}</p></div>
+    <dl>
+      <dt>Firmado</dt><dd>{{ r.firmado_en|fecha_hora }} (hora de Ecuador)</dd>
+      <dt>Desde</dt><dd>{{ equipo }}</dd>
+      <dt>Documento</dt><dd>Rol de pagos de {{ nombre_mes(r.anio, r.mes).lower() }} · líquido $ {{ r.liquido|dinero }}</dd>
+      {% if r.firma_huella %}<dt>Huella</dt><dd class="huella">{{ r.firma_huella }}</dd>{% endif %}
+    </dl>
+    {% if intacto %}<div class="sello ok">✓ El recibo es el mismo que se firmó: no cambió nada desde la firma.</div>
+    {% elif intacto is not none %}<div class="sello mal">El recibo cambió después de firmarse. Revise con contabilidad.</div>{% endif %}
+  </div>
+</div>

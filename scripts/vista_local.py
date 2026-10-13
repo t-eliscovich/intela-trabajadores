@@ -62,6 +62,33 @@ base.poner_configuracion("clave_comedor", "abc123")
 base.poner_puede_invitar(ids["Juan Pérez"], True)
 base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet", "12:30")
 
+# un rol de pagos de mentira, firmado por Carlos y sin firmar para Juan
+def _rol(nombre, codigo, ing, des):
+    ingresos = [{"concepto": c, "detalle": d, "valor": v} for c, d, v in ing]
+    descuentos = [{"concepto": c, "detalle": "", "valor": v} for c, v in des]
+    ti, td = round(sum(x["valor"] for x in ingresos), 2), round(sum(x["valor"] for x in descuentos), 2)
+    return {"trabajador_id": ids[nombre], "codigo": codigo, "nombre_rol": nombre.upper(), "sueldo": ingresos[0]["valor"],
+            "dias": 30, "horas_25": 0, "horas_50": 0, "horas_100": 0, "atrasos": 0, "otros": 0,
+            "ingresos": ingresos, "descuentos": descuentos, "total_ingresos": ti, "total_descuentos": td,
+            "liquido": round(ti - td, 2)}
+_mes = (hoy.replace(day=1) - timedelta(days=1))
+base.cargar_roles(_mes.year, _mes.month, [
+    _rol("Juan Pérez", 1, [("Sueldo", "30 días", 490), ("Horas extra 50%", "52,5 h", 160.78), ("Bonificación", "", 550)],
+         [("Aporte personal IESS", 113.47), ("Anticipo", 150), ("Caja de ahorros", 142.5)]),
+    _rol("Carlos Andrade", 2, [("Sueldo", "30 días", 635), ("Horas extra 100%", "30,5 h", 161.4)],
+         [("Aporte personal IESS", 75.29), ("Préstamo IESS", 86.81)]),
+    _rol("Luis Tipán", 3, [("Sueldo", "30 días", 490)], [("Aporte personal IESS", 46.31)]),
+], "conta")
+from io import BytesIO as _B  # noqa: E402
+from PIL import Image as _I, ImageDraw as _D  # noqa: E402
+_img = _I.new("RGBA", (600, 200), (0, 0, 0, 0))
+_D.Draw(_img).line([(40, 150), (120, 70), (170, 140), (260, 60), (330, 150), (420, 80), (560, 120)], fill=(15, 23, 42, 255), width=5)
+_b = _B(); _img.save(_b, "PNG")
+_rc = next(r for r in base.roles_del_mes(_mes.year, _mes.month) if r["nombre"] == "Carlos Andrade")
+import roles as _roles  # noqa: E402
+base.firmar_rol(_rc["id"], ids["Carlos Andrade"], _b.getvalue(),
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36", _roles.huella(_rc))
+
 SALIDA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vista")
 os.makedirs(SALIDA, exist_ok=True)
 
@@ -109,3 +136,10 @@ guardar("admin_buscar", c.get("/admin?q=juan").get_data(as_text=True))
 guardar("admin_historial", c.get("/admin/historial").get_data(as_text=True))
 c2 = A.app.test_client(); c2.post("/", data={"cedula": "0603456789"})
 guardar("yo_vacaciones_nuevo", c2.get("/yo/vacaciones").get_data(as_text=True))
+guardar("admin_roles", c.get("/admin/roles").get_data(as_text=True))
+guardar("admin_roles_cargar", c.get("/admin/roles/cargar").get_data(as_text=True))
+guardar("admin_rol_firmado", c.get(f"/admin/roles/{_rc['id']}").get_data(as_text=True))
+cj = A.app.test_client(); cj.post("/", data={"cedula": "1712345678"})
+guardar("yo_rol", cj.get("/yo/rol").get_data(as_text=True))
+cc = A.app.test_client(); cc.post("/", data={"cedula": "1103456789"})
+guardar("yo_rol_firmado", cc.get("/yo/rol").get_data(as_text=True))

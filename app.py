@@ -37,6 +37,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
+import roles
 import store
 import vacaciones
 
@@ -301,9 +302,29 @@ def _globales():
             pendientes = store.cuantas_pendientes()
         except Exception:  # noqa: BLE001
             pendientes = 0
-    return {"MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
+    sin_firmar = 0
+    if g.get("usuario") and g.usuario.get("rol") == "contabilidad" and not ERROR_ARRANQUE:
+        try:
+            sin_firmar = store.sin_firmar_ultimo_mes()
+        except Exception:  # noqa: BLE001
+            sin_firmar = 0
+    return {"n_roles_sin_firmar": sin_firmar, "MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
             "TURNOS": TURNOS, "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
+
+
+@app.context_processor
+def _rol_sin_firmar():
+    """El globito de la pestaña «Rol de pagos»: el último rol del trabajador
+    todavía no está firmado."""
+    if not request.endpoint or not request.endpoint.startswith("yo") or ERROR_ARRANQUE:
+        return {}
+    tid = session.get("trabajador_id")
+    try:
+        ultimo = store.roles_de(tid)[:1] if tid else []
+    except Exception:  # noqa: BLE001
+        return {}
+    return {"rol_sin_firmar": bool(ultimo and not ultimo[0]["firmado_en"])}
 
 
 def _totales(marcados: set) -> dict:
@@ -906,7 +927,8 @@ def admin_trabajador(id_):
         if c["vacacion_id"]:
             certs.setdefault(c["vacacion_id"], []).append(c)
     return render_template("admin_trabajador.html", t=t, v=_resumen(t),
-                           vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs)
+                           vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs,
+                           roles_pago=store.roles_de(id_))
 
 
 @app.route("/admin/trabajador/<int:id_>/imprimir")
@@ -1542,6 +1564,276 @@ def admin_usuarios():
 
 
 # --------------------------------------------------------------------------
+# ==========================================================================
+# Rol de pagos (13/10/2026): contabilidad sube el Excel de WinAfin cada mes,
+# el trabajador ve su recibo en el celular y lo firma con el dedo.
+# La lectura del Excel y el cruce con el padrón viven en `roles.py`.
+# ==========================================================================
+@app.template_filter("dinero")
+def dinero(valor):
+    """1234.5 → «1.234,50». Siempre dos decimales: es plata."""
+    if valor is None:
+        return "—"
+    return f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@app.template_filter("fecha_hora")
+def fecha_hora(valor):
+    if not valor:
+        return "—"
+    if isinstance(valor, datetime) and valor.tzinfo:
+        valor = valor.astimezone(ZoneInfo(config.ZONA))
+    return valor.strftime("%d/%m/%Y %H:%M")
+
+
+def nombre_mes(anio: int, mes: int) -> str:
+    return f"{MESES[mes].capitalize()} {anio}"
+
+
+app.jinja_env.globals["nombre_mes"] = nombre_mes
+
+# El archivo que se subió viaja escondido en el formulario entre «Revisar» y
+# «Cargar», así lo que se guarda sale del MISMO archivo que se revisó.
+PESO_MAXIMO_ROL = 4 * 1024 * 1024
+
+
+def _mes_por_defecto(nombre_archivo: str) -> tuple[int, int]:
+    """El mes del nombre («rol9.xls» = septiembre); si no dice, el mes pasado.
+    El año: el actual, salvo que ese mes todavía no haya llegado (en enero se
+    carga el rol de diciembre del año anterior)."""
+    h = hoy()
+    mes = roles.mes_del_nombre(nombre_archivo)
+    if mes is None:
+        return (h.year - 1, 12) if h.month == 1 else (h.year, h.month - 1)
+    return (h.year - 1, mes) if mes > h.month else (h.year, mes)
+
+
+def _leer_anio_mes(f) -> tuple[int, int]:
+    try:
+        anio, mes = int(f.get("anio", "")), int(f.get("mes", ""))
+    except ValueError:
+        raise ValueError("Elija el mes y el año del rol.") from None
+    if not 1 <= mes <= 12 or not 2020 <= anio <= hoy().year + 1:
+        raise ValueError("El mes o el año no son válidos.")
+    if date(anio, mes, 1) > hoy():
+        raise ValueError(f"{nombre_mes(anio, mes)} todavía no empezó. Revise el mes y el año.")
+    return anio, mes
+
+
+@app.route("/admin/roles")
+@requiere_admin
+def admin_roles():
+    meses = store.meses_con_rol()
+    if request.args.get("mes"):
+        anio, mes = leer_mes(request.args.get("mes"))
+    elif meses:
+        anio, mes = meses[0]["anio"], meses[0]["mes"]
+    else:
+        anio, mes = _mes_por_defecto("")
+    filas = store.roles_del_mes(anio, mes)
+    for r in filas:
+        r["wa"] = None if r["firmado_en"] else link_whatsapp(
+            r.get("celular"), f"Hola {nombre_de_pila(r['nombre'])}, su rol de pagos de {nombre_mes(anio, mes).lower()} "
+            f"ya está en la aplicación de Intela. Por favor revíselo y fírmelo: https://trabajadores.intela.com.ec")
+    totales = {k: sum(r[k] for r in filas) for k in ("total_ingresos", "total_descuentos", "liquido")}
+    recientes = sorted((r for r in filas if r["firmado_en"]), key=lambda r: r["firmado_en"], reverse=True)[:8]
+    return render_template("admin_roles.html", anio=anio, mes=mes, filas=filas, meses=meses, totales=totales,
+                           recientes=recientes,
+                           firmados=sum(1 for r in filas if r["firmado_en"]),
+                           anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
+
+
+@app.route("/admin/roles/cargar", methods=["GET", "POST"])
+@requiere_admin
+def admin_roles_cargar():
+    if request.method == "GET":
+        anio, mes = _mes_por_defecto("")
+        return render_template("admin_roles_cargar.html", anio=anio, mes=mes, revision=None)
+    f = request.form
+    import base64
+    archivo = request.files.get("archivo")
+    try:
+        if archivo and archivo.filename:
+            datos, nombre = archivo.read(), archivo.filename
+            if len(datos) > PESO_MAXIMO_ROL:
+                raise ValueError("El archivo es demasiado grande para ser un rol de pagos.")
+            # Lo elegido en la pantalla manda; sin elegir, el mes del nombre del archivo.
+            anio, mes = _leer_anio_mes(f) if f.get("mes") and f.get("anio") else _mes_por_defecto(nombre)
+        elif f.get("archivo_b64"):
+            datos, nombre = base64.b64decode(f["archivo_b64"]), f.get("archivo_nombre", "rol.xls")
+            anio, mes = _leer_anio_mes(f)
+        else:
+            raise ValueError("Elija el archivo del rol.")
+        buenas, malas = roles.leer_rol(datos, nombre)
+        if not buenas:
+            raise ValueError("El archivo no trae ningún trabajador que se pueda cargar.")
+    except ValueError as exc:  # NoEsElRol también es ValueError
+        flash(str(exc), "error")
+        a, m = _mes_por_defecto("")
+        return render_template("admin_roles_cargar.html", anio=a, mes=m, revision=None)
+
+    padron = store.trabajadores(incluir_inactivos=True)
+    roles.cruzar(buenas, padron)
+    por_id = {t["id"]: t for t in padron}
+    # Lo que eligió contabilidad a mano pisa al cruce automático.
+    if f.get("archivo_b64"):
+        for b in buenas:
+            elegido = f.get(f"t_{b['fila']}")
+            if elegido is None:
+                continue
+            if elegido == "":
+                b["trabajador_id"], b["como"], b["nombre_padron"] = None, None, None
+            elif elegido.isdigit() and int(elegido) in por_id:
+                if int(elegido) != b["trabajador_id"]:
+                    b["trabajador_id"], b["como"] = int(elegido), "elegido"
+                    b["nombre_padron"] = por_id[int(elegido)]["nombre"]
+    repetidos = {}
+    for b in buenas:
+        if b["trabajador_id"]:
+            repetidos.setdefault(b["trabajador_id"], []).append(b)
+    repetidos = {k: v for k, v in repetidos.items() if len(v) > 1}
+
+    ya = next((m for m in store.meses_con_rol() if (m["anio"], m["mes"]) == (anio, mes)), None)
+    if f.get("confirmar") == "1":
+        if repetidos:
+            flash("Hay un trabajador elegido para dos filas del rol. Corríjalo antes de cargar.", "error")
+        else:
+            entran = [b for b in buenas if b["trabajador_id"]]
+            r = store.cargar_roles(anio, mes, entran, g.usuario["usuario"])
+            msg = f"Listo: rol de {nombre_mes(anio, mes).lower()} cargado para {r['cargados']} trabajadores."
+            if r["reemplazados"]:
+                msg += " Reemplazó al que estaba cargado."
+            if r["firmas_perdidas"]:
+                msg += f" {r['firmas_perdidas']} recibos cambiaron y tienen que volver a firmarse."
+            flash(msg, "ok")
+            return redirect(url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
+
+    entran = [b for b in buenas if b["trabajador_id"]]
+    return render_template(
+        "admin_roles_cargar.html", anio=anio, mes=mes, revision=True,
+        archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
+        buenas=buenas, malas=malas, entran=entran, ya=ya, repetidos=repetidos,
+        sin_encontrar=[b for b in buenas if not b["trabajador_id"]],
+        a_revisar=[b for b in buenas if b["como"] in ("parecido", "elegido")],
+        seguros=[b for b in buenas if b["como"] in ("codigo", "nombre", "orden")],
+        sin_rol=roles.sin_rol(padron, buenas), padron=sorted(padron, key=lambda t: t["nombre"]),
+        total=sum(b["liquido"] for b in entran), COMO=roles.COMO)
+
+
+@app.route("/admin/roles/<int:id_>")
+@requiere_admin
+def admin_rol(id_):
+    r = store.rol_pago(id_)
+    if not r:
+        abort(404)
+    return render_template("admin_rol.html", r=r, **_constancia(r))
+
+
+def _constancia(r: dict) -> dict:
+    """Lo que dice la constancia de la firma: desde qué equipo y si el recibo
+    sigue siendo el mismo que se firmó."""
+    if not r.get("firmado_en"):
+        return {"intacto": None, "equipo": None}
+    return {"intacto": r.get("firma_huella") == roles.huella(r), "equipo": roles.dispositivo(r.get("firmado_desde"))}
+
+
+@app.route("/admin/roles/<int:id_>/firma.png")
+@requiere_admin
+def admin_rol_firma(id_):
+    png = store.firma_del_rol(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png")
+
+
+# ---- el trabajador -------------------------------------------------------
+PESO_MAXIMO_FIRMA = 400 * 1024
+
+
+def leer_firma(texto: str) -> bytes:
+    """La firma llega como «data:image/png;base64,…» desde el canvas. Se
+    verifica que sea una imagen de verdad y se guarda chica, en PNG."""
+    import base64
+    from io import BytesIO
+    m = re.fullmatch(r"data:image/png;base64,([A-Za-z0-9+/=]+)", (texto or "").strip())
+    if not m:
+        raise ValueError("Firme en el recuadro antes de tocar «Firmar».")
+    crudo = base64.b64decode(m.group(1))
+    if len(crudo) > PESO_MAXIMO_FIRMA:
+        raise ValueError("La firma no se pudo guardar. Bórrela y vuelva a firmar.")
+    from PIL import Image
+    try:
+        img = Image.open(BytesIO(crudo))
+        img.load()
+    except Exception:  # noqa: BLE001
+        raise ValueError("La firma no se pudo leer. Bórrela y vuelva a firmar.") from None
+    # Una firma vacía (todo transparente o todo blanco) no vale.
+    alfa = img.convert("RGBA").getchannel("A")
+    if alfa.getbbox() is None:
+        raise ValueError("Firme en el recuadro antes de tocar «Firmar».")
+    caja = alfa.getbbox()
+    if (caja[2] - caja[0]) < 25 and (caja[3] - caja[1]) < 25:
+        raise ValueError("La firma es demasiado chica. Firme de nuevo, más grande.")
+    img = img.convert("RGBA")
+    img.thumbnail((900, 360))
+    salida = BytesIO()
+    img.save(salida, "PNG", optimize=True)
+    return salida.getvalue()
+
+
+@app.route("/yo/rol")
+def yo_rol():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    todos = store.roles_de(t["id"])
+    r = None
+    if request.args.get("mes"):
+        anio, mes = leer_mes(request.args.get("mes"))
+        r = next((x for x in todos if (x["anio"], x["mes"]) == (anio, mes)), None)
+    if r is None and todos:
+        r = todos[0]
+    return render_template("yo_rol.html", t=t, r=r, otros=[x for x in todos if r and x["id"] != r["id"]],
+                           **(_constancia(r) if r else {}))
+
+
+@app.route("/yo/rol/firmar", methods=["POST"])
+def yo_rol_firmar():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    try:
+        id_ = int(request.form.get("id", "0"))
+        r = store.rol_pago(id_)
+        if not r or r["trabajador_id"] != t["id"]:
+            abort(404)
+        if r["firmado_en"]:
+            raise ValueError("Este rol ya está firmado.")
+        png = leer_firma(request.form.get("firma", ""))
+        if not store.firmar_rol(id_, t["id"], png, request.headers.get("User-Agent", ""), roles.huella(r)):
+            raise ValueError("No se pudo firmar. Vuelva a abrir la pantalla e intente de nuevo.")
+        flash(f"Listo: firmó su rol de pagos de {nombre_mes(r['anio'], r['mes']).lower()}.", "ok")
+        return redirect(url_for("yo_rol", mes=f"{r['anio']}-{r['mes']:02d}"))
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("yo_rol", mes=request.form.get("mes") or None))
+
+
+@app.route("/yo/rol/<int:id_>/firma.png")
+def yo_rol_firma(id_):
+    """La firma propia, para verla después de firmar. Nunca la de otro."""
+    t = _mi_trabajador()
+    r = store.rol_pago(id_) if t else None
+    if not r or r["trabajador_id"] != t["id"]:
+        abort(404)
+    png = store.firma_del_rol(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png")
+
+
 @app.route("/healthz")
 def healthz():
     """Nunca levanta. Si algo está mal, lo DICE."""

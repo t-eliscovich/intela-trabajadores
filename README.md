@@ -11,6 +11,8 @@ con su cédula.
 - en la pestaña Vacaciones, cuántos días le quedan, cuándo se le suman los próximos, los períodos
   que tomó, y **pide días** (vacaciones, permiso, enfermedad, permiso sin goce): contabilidad
   responde y él ve la respuesta ahí mismo;
+- en la pestaña Rol de pagos, su recibo del mes (ingresos, descuentos, líquido) y lo **firma
+  con el dedo**; queda la constancia con fecha y hora;
 - en la pestaña Perfil, quién es para la empresa: área, desde cuándo trabaja, cuántos días gana por
   año; y corrige su celular y dirección;
 
@@ -37,6 +39,9 @@ cenó y los invitados; contabilidad además ve quién no registró (con un botó
   feriados en gris); el «Cuadro para pagar» trabajador × día se imprime aparte. Los feriados
   se editan ahí mismo;
 - **Comensales**: lo mismo que ve el usuario del comedor, más registrar o quitar desde la oficina;
+- **Roles de pago**: sube cada mes el Excel del rol que sale de WinAfin, revisa a quién
+  corresponde cada fila (desde el segundo mes se unen solos por el código) y ve quién
+  firmó y quién falta, con la constancia de cada firma;
 - **Historial**: lo que se borró (períodos, ajustes), con quién y cuándo; se recupera con un botón;
 - **Usuarios**: quién más entra a esta parte.
 
