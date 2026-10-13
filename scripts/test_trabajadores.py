@@ -915,7 +915,7 @@ check("el mismo botón de cargar abre la revisión del acumulado", "Cargar roles
 check("marca solos los meses nuevos; septiembre (ya cargado) y el mes en curso no",
       'name="m_2026-06" value="1" checked' in html and 'name="m_2026-07" value="1" checked' in html
       and 'name="m_2026-09" value="1" checked' not in html and f'name="m_{HOY.year}-{HOY.month:02d}" value="1" checked' not in html
-      and "Mes en curso" in html and "Ya cargado" in html)
+      and "En curso" in html and "Ya cargado" in html)
 check("une por cédula; el de otra cédula con nombre de Juan queda para confirmar; el desconocido, afuera",
       "otra cédula" in html and "QUIEN SABE" in html and "No están en el padrón (1)" in html)
 d_ac = {"archivo_b64": _b64.b64encode(AC).decode(), "archivo_nombre": "Rol_Acumulado.xlsx", "m_2026-06": "1", "m_2026-07": "1"}
@@ -996,7 +996,7 @@ check("con cédula y fecha de ingreso: lo crea y le carga el rol", "Se creó 1 t
 AC3 = _xlsx_ac([_fila_ac(2026, 10, 90, 1722880638, "OTRO NUEVO JUAN", 480, 45), _fila_ac(2026, 3, 90, 1722880638, "OTRO NUEVO JUAN", 480, 45)])
 html = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(AC3), "Rol_Acumulado.xlsx")}, content_type="multipart/form-data").get_data(as_text=True)
 check("acumulado: ofrece crearlo con la cédula que trae el archivo", "Crearlo en el sistema" in html and "viene en el archivo" in html and "1722880638" in html)
-check("acumulado: octubre «Pide firma», marzo «Firmado en papel»", "Pide firma" in html and "Firmado en papel" in html)
+check("acumulado: octubre «Pide firma», marzo «Firmado en papel»", "Pide firma" in html and "En papel" in html)
 da = {"archivo_b64": _b64.b64encode(AC3).decode(), "archivo_nombre": "Rol_Acumulado.xlsx", "m_2026-10": "1", "m_2026-03": "1",
       "meses_revisados": "2026-10,2026-03", "t_1722880638": "nuevo", "confirmar": "1"}
 r = c.post("/admin/roles/cargar", data=da, follow_redirects=True)

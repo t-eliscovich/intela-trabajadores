@@ -46,7 +46,7 @@
     <tbody>
     {% for f in filas %}
       <tr>
-        <td><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
+        <td style="min-width:170px"><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
             {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}</td>
         <td class="oculta-chico tenue">{{ f.cedula }}{% if not cedula_valida(f.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador: revise que esté bien escrita">cédula no válida</span>{% endif %}</td>
         <td class="oculta-chico tenue">{{ f.area or '' }}</td>

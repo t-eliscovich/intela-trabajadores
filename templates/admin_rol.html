@@ -3,10 +3,15 @@
 {% block clase_hoja %}angosta{% endblock %}
 {% block contenido %}
 {% include "_recibo_estilos.html" %}
-<div style="display:flex;gap:8px;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap">
-  <a class="btn suave chico" href="{{ url_for('admin_roles', mes='%d-%02d'|format(r.anio, r.mes)) }}">‹ {{ nombre_mes(r.anio, r.mes) }}</a>
-  <span style="display:flex;gap:8px"><a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
-  <a class="btn chico" href="{{ url_for('admin_rol_imprimir', id_=r.id, auto=1) }}">Imprimir o guardar PDF</a></span>
+<style>
+  .rol-acciones{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-bottom:12px}
+  @media(max-width:560px){.rol-acciones{grid-template-columns:1fr 1fr}.rol-acciones .vuelta{grid-column:1/-1;justify-self:start}.rol-acciones .hueco{display:none}}
+</style>
+<div class="rol-acciones">
+  <a class="btn suave chico vuelta" href="{{ url_for('admin_roles', mes='%d-%02d'|format(r.anio, r.mes)) }}">‹ {{ nombre_mes(r.anio, r.mes) }}</a>
+  <span class="hueco"></span>
+  <a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
+  <a class="btn chico" href="{{ url_for('admin_rol_imprimir', id_=r.id, auto=1) }}">Imprimir o guardar PDF</a>
 </div>
 <div class="bloque">{% include "_recibo.html" %}</div>
 {% if r.firmado_en %}

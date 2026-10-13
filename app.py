@@ -1893,8 +1893,10 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
         del_mes = [b for b in buenas if (b["anio"], b["mes"]) == (anio, mes)]
         en_curso = (anio, mes) >= (h.year, h.month)
         clave = f"{anio}-{mes:02d}"
+        hay = any((personas[b["cedula"]]["trabajador_id"] or personas[b["cedula"]]["como"] == "nuevo")
+                  and personas[b["cedula"]]["confirmado"] for b in del_mes)
         marcado = (bool(f.get(f"m_{clave}")) if revisando
-                   else not en_curso and (anio, mes) not in ya)
+                   else hay and not en_curso and (anio, mes) not in ya)
         entran = [b for b in del_mes if (personas[b["cedula"]]["trabajador_id"] or personas[b["cedula"]]["como"] == "nuevo")
                   and personas[b["cedula"]]["confirmado"]]
         meses.append({"anio": anio, "mes": mes, "clave": clave, "filas": len(del_mes), "entran": len(entran),
