@@ -872,13 +872,13 @@ jul = base.roles_del_mes(2026, 7)
 check("carga junio y julio: Rosa y María (por cédula); el de otra cédula sin confirmar no entra", "historial cargado, 3 recibos de 2 meses" in html
       and sorted(x["trabajador_id"] for x in jul) == sorted([rosa, maria]) and len(base.roles_del_mes(2026, 6)) == 1)
 check("septiembre no se tocó (sigue la firma)", any(x["firmado_en"] for x in base.roles_del_mes(2026, 9)) or True)
-check("el historial no pide firma ni suma al globito", all(not x["pide_firma"] for x in jul) and "Historial" in c.get("/admin/roles?mes=2026-07").get_data(as_text=True))
+check("el historial no pide firma ni suma al globito", all(not x["pide_firma"] for x in jul) and "En papel" in c.get("/admin/roles?mes=2026-07").get_data(as_text=True))
 html = rw.get("/yo/rol?mes=2026-06").get_data(as_text=True)
-check("el trabajador ve junio sin recuadro de firma ni «Falta su firma»", "Junio 2026" in html and "No hace falta firmarlo" in html
+check("el trabajador ve junio sin recuadro de firma ni «Falta su firma»", "Junio 2026" in html and "firmado en papel" in html
       and 'id="lienzo"' not in html and "Falta su firma" not in html)
 jun_id = base.roles_del_mes(2026, 6)[0]["id"]
 r = rw.post("/yo/rol/firmar", data={"id": jun_id, "firma": _firma_png()}, follow_redirects=True)
-check("y no se puede firmar un mes del historial", "no hace falta firmarlo" in r.get_data(as_text=True) and not base.rol_pago(jun_id)["firmado_en"])
+check("y no se puede firmar un mes del historial", "firmado en papel" in r.get_data(as_text=True) and not base.rol_pago(jun_id)["firmado_en"])
 check("dígito verificador de la cédula", R.cedula_valida("1002049912") and R.cedula_valida("1312288291")
       and not R.cedula_valida("1312288891") and not R.cedula_valida("6100530432") and not R.cedula_valida("123"))
 _mal = base.crear_trabajador("1312288891", "Alava Lucas Reinaldo Fabian", date(2020, 1, 1))
@@ -890,6 +890,18 @@ r = c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(AC2).decod
 check("al confirmar, corrige la cédula y carga", "Se corrigió la cédula" in r.get_data(as_text=True)
       and base.trabajador(_mal)["cedula"] == "1312288291" and base.roles_del_mes(2026, 5)[0]["trabajador_id"] == _mal)
 check("la lista marca las cédulas no válidas", "cédula no válida" in c.get("/admin?todos=1").get_data(as_text=True) or True)
+# --- «ya lo firmaron en papel» (Tamara 13/10: hasta septiembre todo firmado; en la app desde octubre) ---
+html = c.get("/admin/roles?mes=2026-09").get_data(as_text=True)
+check("el mes que pide firma ofrece «Marcar como firmado en papel»", "Marcar como firmado en papel" in html)
+r = c.post("/admin/roles/papel", data={"mes": "2026-09"}, follow_redirects=True)
+check("sin confirmar no hace nada", "Confirmo que todos firmaron" in r.get_data(as_text=True) and any(x["pide_firma"] for x in base.roles_del_mes(2026, 9)))
+r = c.post("/admin/roles/papel", data={"mes": "2026-09", "confirmo": "1"}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("confirmado: septiembre queda firmado en papel, ya no pide firma a nadie", "queda firmado en papel" in html
+      and not any(x["pide_firma"] and not x["firmado_en"] for x in base.roles_del_mes(2026, 9)) and "Marcar como firmado en papel" not in html)
+check("el trabajador lo ve firmado en papel, sin recuadro", "firmado en papel" in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True)
+      and 'id="lienzo"' not in rw.get("/yo/rol?mes=2026-09").get_data(as_text=True))
+check("el comedor no puede marcarlo", m.post("/admin/roles/papel", data={"mes": "2026-09", "confirmo": "1"}).status_code == 302)
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
 check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}), cl.get("/yo/rol").get_data(as_text=True))[2])(A.app.test_client()))
 

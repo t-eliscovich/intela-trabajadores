@@ -455,6 +455,22 @@ def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str
     return fila is not None
 
 
+def firmado_en_papel(anio: int, mes: int) -> int:
+    """Contabilidad avisa que el mes ya se firmó en papel: deja de pedir firma en
+    la app a los que no firmaron (las firmas hechas en la app se quedan)."""
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.rol_pago SET pide_firma = false
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL
+                              AND pide_firma AND firmado_en IS NULL""", (anio, mes))
+            n = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return n
+
+
 def sin_firmar_ultimo_mes() -> int:
     """Para el globito del menú de contabilidad: cuántos del último mes cargado
     todavía no firmaron."""

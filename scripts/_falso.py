@@ -136,6 +136,14 @@ class BaseFalsa:
         r.update(firma=png, firmado_en=datetime.now(), firmado_desde=desde[:200], firma_huella=huella)
         return True
 
+    def firmado_en_papel(self, anio, mes):
+        n = 0
+        for r in self.rol.values():
+            if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes and r["pide_firma"] and not r["firmado_en"]:
+                r["pide_firma"] = False
+                n += 1
+        return n
+
     def sin_firmar_ultimo_mes(self):
         meses = self.meses_con_rol()
         if not meses:

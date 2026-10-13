@@ -166,6 +166,11 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   pueden marcar; los meses marcados quedan trabados igual que el mes del rol).
   **Los meses del historial no piden firma** (`rol_pago.pide_firma = false`): no
   aparece el recuadro, no suman al globito, no se pueden firmar.
+- **«Ya lo firmaron en papel»** (Tamara 13/10: «todos firmados hasta septiembre»,
+  la firma en la app arranca en OCTUBRE): en Roles de pago, un mes que pide firma
+  ofrece «Marcar como firmado en papel» (con «Confirmo…»); pone `pide_firma = false`
+  a los que no firmaron. En pantalla los meses sin firma en la app se ven como
+  «✓ En papel» / «Este rol ya está firmado en papel».
 - **Cédulas mal tipeadas en el padrón**: `roles.cedula_valida` (dígito verificador
   ecuatoriano). Al cargar el historial, si la del padrón no es válida y la de WinAfin
   sí, al confirmar se corrige en el padrón (`store.corregir_cedula`, si nadie más la

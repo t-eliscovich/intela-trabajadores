@@ -15,8 +15,22 @@
   <div class="cifra"><b>{{ totales.total_descuentos|dinero }}</b><small>descuentos</small></div>
   <div class="cifra"><b class="grande">{{ totales.liquido|dinero }}</b><small>líquido a pagar</small></div>
   {% if piden %}<div class="cifra"><b {% if firmados < piden %}style="color:var(--ambar)"{% endif %}>{{ firmados }} de {{ piden }}</b><small>firmaron</small></div>
-  {% else %}<div class="cifra"><b class="tenue" style="font-size:18px;line-height:31px">Historial</b><small>no se pide firma</small></div>{% endif %}
+  {% else %}<div class="cifra"><b style="font-size:18px;line-height:31px;color:var(--verde)">✓ En papel</b><small>firmado fuera de la app</small></div>{% endif %}
 </div>
+
+{% if piden and firmados < piden %}
+<div class="bloque no-imprime">
+  <details>
+    <summary style="border-top:0">¿Este mes ya lo firmaron en papel?</summary>
+    <form method="POST" action="{{ url_for('admin_roles_papel') }}" class="relleno" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <input type="hidden" name="mes" value="{{ '%d-%02d'|format(anio, mes) }}">
+      <p class="tenue" style="margin:0;flex:1;min-width:260px;font-size:14px">Si el rol de {{ nombre_mes(anio, mes).lower() }} ya se firmó en papel, márquelo aquí: a los {{ piden - firmados }} que faltan ya no se les pide firma en la app. Las firmas que ya se hicieron en la app se quedan.</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600;font-size:14px;white-space:nowrap"><input type="checkbox" name="confirmo" value="1" required style="width:18px;height:18px"> Confirmo que todos firmaron en papel</label>
+      <button class="btn suave" type="submit">Marcar como firmado en papel</button>
+    </form>
+  </details>
+</div>
+{% endif %}
 
 {% if recientes %}
 <div class="bloque">
@@ -48,7 +62,7 @@
         <td class="der oculta-chico">{{ r.total_ingresos|dinero }}</td>
         <td class="der oculta-chico">{{ r.total_descuentos|dinero }}</td>
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
-        <td>{% if not r.pide_firma %}<span class="etiqueta">Historial</span><span class="chico">no se pide firma</span>
+        <td>{% if not r.pide_firma %}<span class="etiqueta ok">✓ En papel</span><span class="chico">firmado fuera de la app</span>
             {% elif r.firmado_en %}<span class="etiqueta ok">✓ Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>
             {% else %}<span class="etiqueta pendiente">Sin firmar</span>{% if r.wa %} <a class="chico" style="display:inline" href="{{ r.wa }}" target="_blank" rel="noopener">avisarle por WhatsApp</a>{% endif %}{% endif %}</td>
         <td class="der"><a class="btn suave chico" href="{{ url_for('admin_rol', id_=r.id) }}">{{ 'Ver constancia' if r.firmado_en else 'Ver recibo' }}</a></td>
@@ -83,7 +97,7 @@ function filtrar(){
     {% for m in meses %}
       <tr><td><a href="{{ url_for('admin_roles', mes='%d-%02d'|format(m.anio, m.mes)) }}">{{ nombre_mes(m.anio, m.mes) }}</a></td>
           <td class="der">{{ m.cuantos }} trabajadores</td><td class="der">{{ m.total|dinero }}</td>
-          <td class="der tenue">{% if m.piden_firma %}{{ m.firmados }} de {{ m.piden_firma }} firmaron{% else %}historial{% endif %}</td></tr>
+          <td class="der tenue">{% if m.piden_firma %}{{ m.firmados }} de {{ m.piden_firma }} firmaron{% else %}firmado en papel{% endif %}</td></tr>
     {% endfor %}
     </tbody></table>
   </details>

@@ -1651,6 +1651,20 @@ def admin_roles():
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
 
 
+@app.route("/admin/roles/papel", methods=["POST"])
+@requiere_admin
+def admin_roles_papel():
+    """«Ya lo firmaron en papel»: el mes deja de pedir firma en la app."""
+    anio, mes = leer_mes(request.form.get("mes"))
+    if request.form.get("confirmo") != "1":
+        flash("Marque «Confirmo que todos firmaron en papel» para seguir.", "error")
+    else:
+        n = store.firmado_en_papel(anio, mes)
+        flash(f"Listo: {nombre_mes(anio, mes).lower()} queda firmado en papel. "
+              f"{n} {'trabajador ya no ve' if n == 1 else 'trabajadores ya no ven'} el pedido de firma.", "ok")
+    return redirect(url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
+
+
 @app.route("/admin/roles/cargar", methods=["GET", "POST"])
 @requiere_admin
 def admin_roles_cargar():
@@ -1939,7 +1953,7 @@ def yo_rol_firmar():
         if r["firmado_en"]:
             raise ValueError("Este rol ya está firmado.")
         if not r.get("pide_firma", True):
-            raise ValueError("Este mes es del historial: no hace falta firmarlo.")
+            raise ValueError("Este rol ya está firmado en papel: no hace falta firmarlo aquí.")
         png = leer_firma(request.form.get("firma", ""))
         if not store.firmar_rol(id_, t["id"], png, request.headers.get("User-Agent", ""), roles.huella(r)):
             raise ValueError("No se pudo firmar. Vuelva a abrir la pantalla e intente de nuevo.")
