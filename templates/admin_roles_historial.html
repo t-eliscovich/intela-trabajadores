@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block titulo %}Cargar historial de roles{% endblock %}
+{% block titulo %}Cargar roles de pago{% endblock %}
 {% block contenido %}
+{% import "_nuevo_trabajador.html" as NT with context %}
 <style>
   .meses-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding:14px}
   .mes-card{position:relative;display:block;border:1.5px solid var(--borde);border-radius:12px;padding:12px 14px 12px 42px;
@@ -20,7 +21,7 @@
   .barra-cargar .resumen b{color:var(--tinta)}
 </style>
 
-<h1>Cargar historial <small>el rol acumulado de WinAfin: varios meses de una vez</small>
+<h1>Cargar roles de pago <small>el rol acumulado de WinAfin: uno o varios meses</small>
   <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_roles_cargar') }}">Elegir otro archivo</a></span>
 </h1>
 
@@ -37,6 +38,7 @@
         <input type="checkbox" name="m_{{ m.clave }}" value="1" {{ 'checked' if m.marcado }}>
         <div class="m">{{ nombre_mes(m.anio, m.mes) }}</div>
         <div class="d">{{ m.entran }} recibos · $ {{ m.liquido|dinero }}</div>
+        {% if m.pide_firma %}<span class="e nuevo" style="background:#eaf1ff;color:var(--acento)">Pide firma</span>{% else %}<span class="e">Firmado en papel</span>{% endif %}
         {% if m.en_curso %}<span class="e curso">Mes en curso</span>
         {% elif m.ya %}<span class="e ya">Ya cargado{% if m.ya.firmados %} · {{ m.ya.firmados }} firmaron{% endif %}</span>
         {% else %}<span class="e nuevo">Nuevo</span>{% endif %}
@@ -46,7 +48,7 @@
     <div class="nota">
       Se marcan solos los meses nuevos y cerrados. <b>El mes en curso</b> no conviene cargarlo: todavía no está cerrado.
       <b>Un mes ya cargado</b> se reemplaza si lo marca (por ejemplo, septiembre ya está cargado desde el rol del mes).
-      Los meses del historial <b>no le piden firma</b> al trabajador: ya se pagaron.
+      Desde <b>{{ nombre_mes(*FIRMA_DESDE).lower() }}</b> el trabajador <b>firma en la app</b>; los meses anteriores quedan como firmados en papel.
     </div>
   </div>
 
@@ -63,9 +65,10 @@
     </div>
   </div>
 
-  {% macro elegir(p) %}
+  {% macro elegir(p, crear=False) %}
     <select name="t_{{ p.cedula }}" style="min-width:220px">
-      <option value="" {{ 'selected' if not p.trabajador_id }}>— No cargar —</option>
+      <option value="" {{ 'selected' if not p.trabajador_id and p.como != 'nuevo' }}>— No cargar —</option>
+      {% if crear %}{{ NT.opcion(p.como == 'nuevo') }}{% endif %}
       {% for t in padron %}<option value="{{ t.id }}" {{ 'selected' if t.id == p.trabajador_id }}>{{ t.nombre }}{% if not t.activo %} (de baja){% endif %}</option>{% endfor %}
     </select>
   {% endmacro %}
@@ -77,8 +80,9 @@
       <thead><tr><th>En el archivo</th><th>En el padrón</th><th>¿Es la misma persona?</th></tr></thead>
       <tbody>{% for p in a_revisar %}
         <tr><td><b>{{ p.nombre_rol }}</b><span class="chico">C.I. {{ p.cedula }} · {{ p.meses }} {{ 'mes' if p.meses == 1 else 'meses' }}</span>{% if p.aviso %}<span class="chico" style="color:var(--ambar)">{{ p.aviso }}</span>{% endif %}</td>
-            <td>{{ elegir(p) }}{% if p.cedula_padron %}<span class="chico">C.I. {{ p.cedula_padron }}</span>{% endif %}</td>
+            <td>{{ elegir(p, True) }}{% if p.cedula_padron %}<span class="chico">C.I. {{ p.cedula_padron }}</span>{% endif %}</td>
             <td><label style="display:flex;gap:8px;align-items:center;white-space:nowrap;font-weight:600"><input type="checkbox" name="ok_{{ p.cedula }}" value="1" {{ 'checked' if p.confirmado }} style="width:20px;height:20px"> Es la misma persona</label></td></tr>
+        {{ NT.campos(p.cedula, None, 3, p.nombre_rol.title(), p.cedula) }}
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -86,11 +90,12 @@
 
   {% if sin_encontrar %}
   <div class="bloque">
-    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Si ya no trabajan, déjelos en «No cargar». Si es alguien del padrón con otra cédula, elíjalo y toque «Revisar de nuevo».</p></div>
+    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Si es nuevo, elija «Crearlo en el sistema»: la cédula viene en el archivo, sólo falta la fecha de ingreso. Si es alguien del padrón con otra cédula, elíjalo y toque «Revisar de nuevo». Si ya no trabaja, déjelo en «No cargar».</p></div>
     <div class="desliza"><table>
       <thead><tr><th>En el archivo</th><th class="der">Meses</th><th>Es</th></tr></thead>
       <tbody>{% for p in sin_encontrar %}
-        <tr><td><b>{{ p.nombre_rol }}</b><span class="chico">C.I. {{ p.cedula }}</span></td><td class="der">{{ p.meses }}</td><td>{{ elegir(p) }}</td></tr>
+        <tr><td><b>{{ p.nombre_rol }}</b><span class="chico">C.I. {{ p.cedula }}</span></td><td class="der">{{ p.meses }}</td><td>{{ elegir(p, True) }}</td></tr>
+        {{ NT.campos(p.cedula, p.nuevo if p.como == 'nuevo' else None, 3, p.nombre_rol.title(), p.cedula) }}
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -122,8 +127,9 @@
   <div class="barra-cargar">
     <div class="resumen">Se cargan <b>{{ recibos }} recibos</b> de <b>{{ elegidos|length }} {{ 'mes' if elegidos|length == 1 else 'meses' }}</b> · líquido $ {{ total|dinero }}{% if sin_confirmar %} · {{ sin_confirmar|length }} sin confirmar no entran{% endif %}</div>
     <button class="btn suave" type="submit" name="confirmar" value="0">Revisar de nuevo</button>
-    <button class="btn verde" type="submit" name="confirmar" value="1" {{ 'disabled' if repetidos or not elegidos }}>Cargar historial</button>
+    <button class="btn verde" type="submit" name="confirmar" value="1" {{ 'disabled' if repetidos or not elegidos }}>Cargar</button>
   </div>
   <p class="ayuda" style="margin-top:8px">Si marcó o desmarcó un mes o una persona, toque «Revisar de nuevo» para ver los números antes de cargar.</p>
 </form>
+{{ NT.script() }}
 {% endblock %}

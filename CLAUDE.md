@@ -192,6 +192,22 @@ la pestaña «Rol de pagos» y lo FIRMA CON EL DEDO en la app. **Nada de imprimi
   del celular, la hoja impresa («Por Industria Textil…» en la firma de la empresa), la
   constancia («Empleador») y el texto de la firma («recibió de …»).
 
+**Crear a quien viene en el rol y no está en el padrón** (Tamara 13/10/2026: «ofrecé
+crearlas en el sistema»). En las dos revisiones (rol del mes y acumulado), a los «No
+están en el padrón» y a los «parecidos» se les ofrece «➕ Crearlo en el sistema»
+(`_nuevo_trabajador.html`): nombre (del rol, en Mayúscula Inicial), cédula, fecha de
+ingreso, y opcionales área, celular y vacaciones que le quedan (saldo inicial a hoy).
+**El rol del mes de WinAfin NO trae cédula** → se escribe a mano (una vez: después se
+une por código). **El acumulado SÍ** → viene puesta. Se valida todo antes de crear a
+nadie (`_revisar_nuevos`: dígito verificador, cédula ya en el padrón «ya es de …»,
+repetida, fecha futura) y el error queda en rojo en la fila; se crean al tocar «Cargar».
+
+**Desde octubre 2026 contabilidad sube el ACUMULADO cada mes** (Tamara 13/10). Por eso la
+firma depende del MES, no del archivo: `config.FIRMA_DESDE = (2026, 10)` → desde ahí
+`pide_firma = true`; antes, «firmado en papel». Las tarjetas de meses lo dicen («Pide
+firma» / «Firmado en papel»). El acumulado no trae horas ni días: el recibo sale sin
+ese detalle.
+
 **Constancia de conocimiento y acceso a roles de pago** (texto de Tamara, 13/10/2026,
 en `constancia.py`). **Firma obligatoria**: la primera vez que el trabajador entra a
 «Rol de pagos» (y cualquier ruta /yo/rol*) va a /yo/constancia; hasta firmarla no ve

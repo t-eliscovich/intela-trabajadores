@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Cargar el rol de pagos{% endblock %}
 {% block contenido %}
+{% import "_nuevo_trabajador.html" as NT with context %}
 <h1>Cargar el rol de pagos <small>el Excel que sale de WinAfin, una vez por mes</small>
   <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_roles') }}">Volver a Roles de pago</a></span>
 </h1>
@@ -89,20 +90,22 @@ document.getElementById('archivo').addEventListener('change', function(){
   <div class="mensaje error">Hay {{ repetidos|length }} {{ 'trabajador elegido' if repetidos|length == 1 else 'trabajadores elegidos' }} para dos filas del rol: {% for tid, fs in repetidos.items() %}{{ fs[0].nombre_padron }}{{ ', ' if not loop.last }}{% endfor %}. Corríjalo abajo.</div>
   {% endif %}
 
-  {% macro elegir(b) %}
+  {% macro elegir(b, crear=False) %}
     <select name="t_{{ b.fila }}" style="min-width:220px">
-      <option value="" {{ 'selected' if not b.trabajador_id }}>— No cargar —</option>
+      <option value="" {{ 'selected' if not b.trabajador_id and b.como != 'nuevo' }}>— No cargar —</option>
+      {% if crear %}{{ NT.opcion(b.como == 'nuevo') }}{% endif %}
       {% for t in padron %}<option value="{{ t.id }}" {{ 'selected' if t.id == b.trabajador_id }}>{{ t.nombre }}{% if not t.activo %} (de baja){% endif %}</option>{% endfor %}
     </select>
   {% endmacro %}
 
   {% if sin_encontrar %}
   <div class="bloque">
-    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Elija a quién corresponde y toque «Revisar de nuevo»: va a pasar abajo para que confirme. Si no está, déjelo en «No cargar» y dé de alta al trabajador en Cargar planilla.</p></div>
+    <div class="titulo"><h2 style="color:var(--rojo)">No están en el padrón ({{ sin_encontrar|length }})</h2><p>Si es alguien del padrón, elíjalo y toque «Revisar de nuevo»: va a pasar abajo para que confirme. Si es nuevo, elija «Crearlo en el sistema» y complete su cédula y fecha de ingreso. Si ya no trabaja, déjelo en «No cargar».</p></div>
     <div class="desliza"><table>
       <thead><tr><th>En el rol</th><th class="der">Código</th><th class="der">Líquido</th><th>Es</th></tr></thead>
       <tbody>{% for b in sin_encontrar %}
-        <tr><td><b>{{ b.nombre_rol }}</b>{% if b.aviso %}<span class="chico" style="color:var(--ambar)">{{ b.aviso }}</span>{% endif %}</td><td class="der tenue">{{ b.codigo }}</td><td class="der">{{ b.liquido|dinero }}</td><td>{{ elegir(b) }}</td></tr>
+        <tr><td><b>{{ b.nombre_rol }}</b>{% if b.aviso %}<span class="chico" style="color:var(--ambar)">{{ b.aviso }}</span>{% endif %}</td><td class="der tenue">{{ b.codigo }}</td><td class="der">{{ b.liquido|dinero }}</td><td>{{ elegir(b, True) }}</td></tr>
+        {{ NT.campos(b.fila, b.nuevo if b.como == 'nuevo' else None, 4, b.nombre_rol.title()) }}
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -116,8 +119,9 @@ document.getElementById('archivo').addEventListener('change', function(){
       <tbody>{% for b in a_revisar %}
         <tr><td><b>{{ b.nombre_rol }}</b>{% if b.aviso %}<span class="chico" style="color:var(--ambar)">{{ b.aviso }}</span>{% endif %}</td>
             <td class="der tenue">{{ b.codigo }}</td>
-            <td>{{ elegir(b) }}{% if b.cedula_padron %}<span class="chico">C.I. {{ b.cedula_padron }}</span>{% endif %}</td>
+            <td>{{ elegir(b, True) }}{% if b.cedula_padron %}<span class="chico">C.I. {{ b.cedula_padron }}</span>{% endif %}</td>
             <td><label style="display:flex;gap:8px;align-items:center;white-space:nowrap;font-weight:600"><input type="checkbox" name="ok_{{ b.fila }}" value="1" {{ 'checked' if b.confirmado }} style="width:20px;height:20px"> Es la misma persona</label></td></tr>
+        {{ NT.campos(b.fila, None, 4, b.nombre_rol.title()) }}
       {% endfor %}</tbody>
     </table></div>
   </div>
@@ -166,4 +170,5 @@ document.getElementById('archivo').addEventListener('change', function(){
   </div>
 </form>
 {% endif %}
+{% if revision %}{{ NT.script() }}{% endif %}
 {% endblock %}

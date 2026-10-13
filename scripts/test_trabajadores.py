@@ -911,7 +911,7 @@ check("lee el acumulado: saltea la fila de totales, completa el 0 de la cédula,
       and _b[0]["liquido"] == 443.3)
 r = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(AC), "Rol_Acumulado.xlsx")}, content_type="multipart/form-data")
 html = r.get_data(as_text=True)
-check("el mismo botón de cargar abre la revisión del historial", "Cargar historial" in html and "Elija los meses" in html)
+check("el mismo botón de cargar abre la revisión del acumulado", "Cargar roles de pago" in html and "Elija los meses" in html)
 check("marca solos los meses nuevos; septiembre (ya cargado) y el mes en curso no",
       'name="m_2026-06" value="1" checked' in html and 'name="m_2026-07" value="1" checked' in html
       and 'name="m_2026-09" value="1" checked' not in html and f'name="m_{HOY.year}-{HOY.month:02d}" value="1" checked' not in html
@@ -924,7 +924,7 @@ check("si cambió los meses marcados, no carga: pide revisar", "Cambió los mese
 r = c.post("/admin/roles/cargar", data=dict(d_ac, confirmar="1", meses_revisados="2026-06,2026-07"), follow_redirects=True)
 html = r.get_data(as_text=True)
 jul = base.roles_del_mes(2026, 7)
-check("carga junio y julio: Rosa y María (por cédula); el de otra cédula sin confirmar no entra", "historial cargado, 3 recibos de 2 meses" in html
+check("carga junio y julio: Rosa y María (por cédula); el de otra cédula sin confirmar no entra", "3 recibos cargados de 2 meses" in html
       and sorted(x["trabajador_id"] for x in jul) == sorted([rosa, maria]) and len(base.roles_del_mes(2026, 6)) == 1)
 check("septiembre no se tocó (sigue la firma)", any(x["firmado_en"] for x in base.roles_del_mes(2026, 9)) or True)
 check("el historial no pide firma ni suma al globito", all(not x["pide_firma"] for x in jul) and "En papel" in c.get("/admin/roles?mes=2026-07").get_data(as_text=True))
@@ -974,6 +974,39 @@ _firm = next((x for x in base.roles_del_mes(2026, 9) if x["firmado_en"]), None)
 if _firm:
     check("si firmó en la app, la hoja lleva la firma y la constancia", "Firmado en la aplicación" in c.get(f"/admin/roles/{_firm['id']}/imprimir").get_data(as_text=True))
 check("un mes firmado en papel lo dice en la hoja", "Firmado en papel" in c.get(f"/admin/roles/{base.roles_del_mes(2026, 7)[0]['id']}/imprimir").get_data(as_text=True))
+# --- crear a quien no está en el padrón (Tamara 13/10) y la firma por mes ---
+ROLN = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7}),
+              _fila_rol(77, "NUEVO INGRESO PEDRO PABLO", {"campr1": 470}, {"campr12": 44.42})])
+html = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(ROLN), "rol4.xlsx"), "mes": "4", "anio": "2026"}, content_type="multipart/form-data").get_data(as_text=True)
+_fila_n = next(b["fila"] for b in R.leer_rol(ROLN, "rol4.xlsx")[0] if b["codigo"] == 77)
+check("rol del mes: al que no se encuentra (o sólo se parece) le ofrece «Crearlo en el sistema»", '<option value="nuevo"' in html and f'data-clave="{_fila_n}"' in html)
+dn = {"archivo_b64": _b64.b64encode(ROLN).decode(), "archivo_nombre": "rol4.xlsx", "mes": "4", "anio": "2026",
+      "anio_revisado": "2026", "mes_revisado": "4", f"t_{_fila_n}": "nuevo", f"n_ing_{_fila_n}": "2026-03-02", "confirmar": "1"}
+r = c.post("/admin/roles/cargar", data=dn, follow_redirects=True)
+check("sin cédula no lo crea y lo dice en rojo", "Falta la cédula" in r.get_data(as_text=True) and base.trabajador_por_cedula("1712345671") is None)
+r = c.post("/admin/roles/cargar", data=dict(dn, **{f"n_ced_{_fila_n}": "1712345671"}), follow_redirects=True)
+check("una cédula que no pasa el dígito verificador no se acepta", "no es válida" in r.get_data(as_text=True))
+r = c.post("/admin/roles/cargar", data=dict(dn, **{f"n_ced_{_fila_n}": _ced_rosa}), follow_redirects=True)
+check("una cédula que ya está en el padrón: dice de quién es", "ya es de" in r.get_data(as_text=True))
+r = c.post("/admin/roles/cargar", data=dict(dn, **{f"n_ced_{_fila_n}": "1710034065", f"n_area_{_fila_n}": "TT", f"n_cel_{_fila_n}": "0993334444"}), follow_redirects=True)
+_nt = base.trabajador_por_cedula("1710034065")
+check("con cédula y fecha de ingreso: lo crea y le carga el rol", "Se creó 1 trabajador nuevo" in r.get_data(as_text=True) and _nt
+      and _nt["nombre"] == "Nuevo Ingreso Pedro Pablo" and _nt["area"] == "TT" and _nt["fecha_ingreso"] == date(2026, 3, 2)
+      and any(x["trabajador_id"] == _nt["id"] for x in base.roles_del_mes(2026, 4)) and _nt["codigo_rol"] == 77)
+AC3 = _xlsx_ac([_fila_ac(2026, 10, 90, 1722880638, "OTRO NUEVO JUAN", 480, 45), _fila_ac(2026, 3, 90, 1722880638, "OTRO NUEVO JUAN", 480, 45)])
+html = c.post("/admin/roles/cargar", data={"archivo": (BytesIO(AC3), "Rol_Acumulado.xlsx")}, content_type="multipart/form-data").get_data(as_text=True)
+check("acumulado: ofrece crearlo con la cédula que trae el archivo", "Crearlo en el sistema" in html and "viene en el archivo" in html and "1722880638" in html)
+check("acumulado: octubre «Pide firma», marzo «Firmado en papel»", "Pide firma" in html and "Firmado en papel" in html)
+da = {"archivo_b64": _b64.b64encode(AC3).decode(), "archivo_nombre": "Rol_Acumulado.xlsx", "m_2026-10": "1", "m_2026-03": "1",
+      "meses_revisados": "2026-10,2026-03", "t_1722880638": "nuevo", "confirmar": "1"}
+r = c.post("/admin/roles/cargar", data=da, follow_redirects=True)
+check("acumulado: sin fecha de ingreso no lo crea", "Falta la fecha de ingreso" in r.get_data(as_text=True) and base.trabajador_por_cedula("1722880638") is None)
+r = c.post("/admin/roles/cargar", data=dict(da, n_ing_1722880638="2025-08-01"), follow_redirects=True)
+_n2 = base.trabajador_por_cedula("1722880638")
+_oct = [x for x in base.roles_del_mes(2026, 10) if x["trabajador_id"] == (_n2 or {}).get("id")]
+_mar = [x for x in base.roles_del_mes(2026, 3) if x["trabajador_id"] == (_n2 or {}).get("id")]
+check("acumulado: lo crea con la cédula del archivo y carga sus dos meses", "Se creó 1 trabajador nuevo" in r.get_data(as_text=True) and _n2 and _oct and _mar)
+check("acumulado: octubre pide firma, marzo queda firmado en papel", _oct and _oct[0]["pide_firma"] and _mar and not _mar[0]["pide_firma"])
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
 check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}),
                      cl.post("/yo/constancia", data={"banco": "BanEcuador", "cuenta": "55555", "cuenta2": "55555", "firma": _png_firma()}),

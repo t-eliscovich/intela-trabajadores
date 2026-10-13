@@ -1602,7 +1602,7 @@ def nombre_mes(anio: int, mes: int) -> str:
 
 
 app.jinja_env.globals["nombre_mes"] = nombre_mes
-app.jinja_env.globals.update(EMPRESA=config.EMPRESA, RAZON_SOCIAL=config.RAZON_SOCIAL, RUC=config.RUC)
+app.jinja_env.globals.update(FIRMA_DESDE=config.FIRMA_DESDE, EMPRESA=config.EMPRESA, RAZON_SOCIAL=config.RAZON_SOCIAL, RUC=config.RUC)
 app.jinja_env.globals["cedula_valida"] = roles.cedula_valida
 
 # El archivo que se subió viaja escondido en el formulario entre «Revisar» y
@@ -1672,6 +1672,68 @@ def admin_roles_papel():
     return redirect(url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
 
 
+# ---- crear en el sistema a quien viene en el rol y no está en el padrón (Tamara 13/10) ----
+def _nombre_bonito(nombre_rol: str) -> str:
+    """«AGUILAR CHACHALO VINICIO HERNAN» → «Aguilar Chachalo Vinicio Hernan»."""
+    return " ".join(w[:1].upper() + w[1:].lower() for w in (nombre_rol or "").split())
+
+
+def _datos_nuevo(f, clave: str, nombre_rol: str, cedula: str | None = None) -> dict:
+    """Lo que escribió contabilidad para crear a alguien (tal cual, para volver a mostrarlo)."""
+    return {"nombre": (f.get(f"n_nom_{clave}") or "").strip() or _nombre_bonito(nombre_rol),
+            "cedula": cedula if cedula is not None else (f.get(f"n_ced_{clave}") or "").strip(),
+            "cedula_fija": cedula is not None,
+            "ingreso": (f.get(f"n_ing_{clave}") or "").strip(), "area": (f.get(f"n_area_{clave}") or "").strip(),
+            "celular": (f.get(f"n_cel_{clave}") or "").strip(), "saldo": (f.get(f"n_sal_{clave}") or "").strip(),
+            "error": None}
+
+
+def _validar_nuevo(n: dict, cedulas_padron: dict, vistas: set) -> dict:
+    """Valida un trabajador nuevo; devuelve lo que se guarda o levanta ValueError."""
+    if not n["cedula"]:
+        raise ValueError("Falta la cédula.")
+    cedula = limpiar_cedula(n["cedula"])
+    if len(cedula) == 10 and not roles.cedula_valida(cedula):
+        raise ValueError(f"La cédula {cedula} no es válida: revise los números.")
+    if cedula in cedulas_padron:
+        raise ValueError(f"La cédula {cedula} ya es de {cedulas_padron[cedula]}: elíjalo en la lista en vez de crearlo.")
+    if cedula in vistas:
+        raise ValueError(f"La cédula {cedula} está puesta dos veces.")
+    if len(n["nombre"]) < 5:
+        raise ValueError("Falta el nombre completo.")
+    if not n["ingreso"]:
+        raise ValueError("Falta la fecha de ingreso.")
+    ingreso = leer_fecha(n["ingreso"])
+    if ingreso > hoy():
+        raise ValueError("La fecha de ingreso es futura.")
+    if n["area"] and n["area"] not in AREAS:
+        raise ValueError("El área no es válida.")
+    perfil = leer_perfil({"area": n["area"], "celular": n["celular"]})
+    saldo = leer_decimal(n["saldo"], "El saldo de vacaciones") if n["saldo"] else None
+    vistas.add(cedula)
+    return {"cedula": cedula, "nombre": n["nombre"], "ingreso": ingreso, "perfil": perfil, "saldo": saldo}
+
+
+def _crear_nuevo(v: dict) -> int:
+    return store.crear_trabajador(v["cedula"], v["nombre"], v["ingreso"], v["saldo"],
+                                  hoy() if v["saldo"] is not None else None, v["perfil"])
+
+
+def _revisar_nuevos(nuevos: list[dict], padron: list[dict]) -> bool:
+    """Valida todos; deja el error en cada uno. True si están todos bien."""
+    cedulas = {re.sub(r"\D", "", t["cedula"]): t["nombre"] for t in padron}
+    vistas: set = set()
+    todo_bien = True
+    for x in nuevos:
+        try:
+            x["valido"] = _validar_nuevo(x["nuevo"], cedulas, vistas)
+            x["nuevo"]["error"] = None
+        except ValueError as exc:
+            x["valido"], x["nuevo"]["error"] = None, str(exc)
+            todo_bien = False
+    return todo_bien
+
+
 @app.route("/admin/roles/cargar", methods=["GET", "POST"])
 @requiere_admin
 def admin_roles_cargar():
@@ -1718,6 +1780,9 @@ def admin_roles_cargar():
                 pass
             elif elegido == "":
                 b["trabajador_id"], b["como"], b["nombre_padron"] = None, None, None
+            elif elegido == "nuevo":
+                b["trabajador_id"], b["como"], b["nombre_padron"], b["aviso"] = None, "nuevo", None, None
+                b["nuevo"] = _datos_nuevo(f, str(b["fila"]), b["nombre_rol"])
             elif elegido.isdigit() and int(elegido) in por_id:
                 if int(elegido) != b["trabajador_id"]:
                     b["trabajador_id"], b["como"] = int(elegido), "elegido"
@@ -1727,6 +1792,8 @@ def admin_roles_cargar():
         b["confirmado"] = bool(f.get(f"ok_{b['fila']}")) if b["como"] in ("parecido", "elegido") else True
         if b["trabajador_id"]:
             b["cedula_padron"] = por_id[b["trabajador_id"]]["cedula"]
+    nuevos = [b for b in buenas if b["como"] == "nuevo"]
+    nuevos_bien = _revisar_nuevos(nuevos, padron) if nuevos else True
     repetidos = {}
     for b in buenas:
         if b["trabajador_id"] and b["confirmado"]:
@@ -1740,10 +1807,18 @@ def admin_roles_cargar():
     elif f.get("confirmar") == "1":
         if repetidos:
             flash("Hay un trabajador elegido para dos filas del rol. Corríjalo antes de cargar.", "error")
+        elif not nuevos_bien:
+            flash("Revise los datos de los trabajadores nuevos (lo que está en rojo) antes de cargar.", "error")
         else:
+            for b in nuevos:
+                b["trabajador_id"] = _crear_nuevo(b["valido"])
             entran = [b for b in buenas if b["trabajador_id"] and b["confirmado"]]
             r = store.cargar_roles(anio, mes, entran, g.usuario["usuario"])
             msg = f"Listo: rol de {nombre_mes(anio, mes).lower()} cargado para {r['cargados']} trabajadores."
+            if nuevos:
+                msg += (f" Se {'creó' if len(nuevos) == 1 else 'crearon'} {len(nuevos)} "
+                        f"{'trabajador nuevo' if len(nuevos) == 1 else 'trabajadores nuevos'}: "
+                        + ", ".join(b["valido"]["nombre"] for b in nuevos) + ".")
             if r["reemplazados"]:
                 msg += " Reemplazó al que estaba cargado."
             if r["firmas_perdidas"]:
@@ -1753,9 +1828,9 @@ def admin_roles_cargar():
             flash(msg, "ok")
             return redirect(url_for("admin_roles", mes=f"{anio}-{mes:02d}"))
 
-    entran = [b for b in buenas if b["trabajador_id"] and b["confirmado"]]
+    entran = [b for b in buenas if (b["trabajador_id"] or b["como"] == "nuevo") and b["confirmado"]]
     return render_template(
-        "admin_roles_cargar.html", anio=anio, mes=mes, revision=True,
+        "admin_roles_cargar.html", anio=anio, mes=mes, revision=True, nuevos=nuevos, AREAS=AREAS,
         archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
         buenas=buenas, malas=malas, entran=entran, ya=ya, repetidos=repetidos,
         sin_encontrar=[b for b in buenas if not b["trabajador_id"]],
@@ -1792,12 +1867,17 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
         elegido = f.get(f"t_{clave}") if revisando else None
         if elegido == "":
             p["trabajador_id"], p["como"], p["nombre_padron"], p["aviso"] = None, None, None, None
+        elif elegido == "nuevo":
+            p["trabajador_id"], p["como"], p["nombre_padron"], p["aviso"] = None, "nuevo", None, None
+            p["nuevo"] = _datos_nuevo(f, clave, p["nombre_rol"], cedula=clave)
         elif elegido and elegido.isdigit() and int(elegido) in por_id and int(elegido) != p["trabajador_id"]:
             p["trabajador_id"], p["como"], p["nombre_padron"] = int(elegido), "elegido", por_id[int(elegido)]["nombre"]
             p["aviso"] = None
-        p["confirmado"] = p["como"] == "cedula" or bool(f.get(f"ok_{clave}"))
+        p["confirmado"] = p["como"] in ("cedula", "nuevo") or bool(f.get(f"ok_{clave}"))
         if p["trabajador_id"]:
             p["cedula_padron"] = por_id[p["trabajador_id"]]["cedula"]
+    nuevos = [p for p in lista if p["como"] == "nuevo"]
+    nuevos_bien = _revisar_nuevos(nuevos, padron) if nuevos else True
     repetidos = defaultdict(list)
     for p in lista:
         if p["trabajador_id"] and p["confirmado"]:
@@ -1815,10 +1895,12 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
         clave = f"{anio}-{mes:02d}"
         marcado = (bool(f.get(f"m_{clave}")) if revisando
                    else not en_curso and (anio, mes) not in ya)
-        entran = [b for b in del_mes if personas[b["cedula"]]["trabajador_id"] and personas[b["cedula"]]["confirmado"]]
+        entran = [b for b in del_mes if (personas[b["cedula"]]["trabajador_id"] or personas[b["cedula"]]["como"] == "nuevo")
+                  and personas[b["cedula"]]["confirmado"]]
         meses.append({"anio": anio, "mes": mes, "clave": clave, "filas": len(del_mes), "entran": len(entran),
                       "liquido": round(sum(b["liquido"] for b in entran), 2), "en_curso": en_curso,
-                      "ya": ya.get((anio, mes)), "marcado": marcado, "recibos": entran})
+                      "ya": ya.get((anio, mes)), "marcado": marcado, "recibos": entran,
+                      "pide_firma": (anio, mes) >= config.FIRMA_DESDE})
     elegidos = [m for m in meses if m["marcado"]]
 
     revisados = set(filter(None, (f.get("meses_revisados") or "").split(",")))
@@ -1829,7 +1911,15 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
             flash("Hay un trabajador elegido para dos personas del archivo. Corríjalo antes de cargar.", "error")
         elif not elegidos:
             flash("Marque al menos un mes para cargar.", "error")
+        elif not nuevos_bien:
+            flash("Revise los datos de los trabajadores nuevos (lo que está en rojo) antes de cargar.", "error")
         else:
+            for p in nuevos:
+                p["trabajador_id"] = _crear_nuevo(p["valido"])
+            if nuevos:
+                flash(f"Se {'creó' if len(nuevos) == 1 else 'crearon'} {len(nuevos)} "
+                      f"{'trabajador nuevo' if len(nuevos) == 1 else 'trabajadores nuevos'}: "
+                      + ", ".join(p["valido"]["nombre"] for p in nuevos) + ".", "ok")
             total = 0
             corregidas = []
             for p in lista:
@@ -1840,10 +1930,10 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
                 filas = []
                 for b in m["recibos"]:
                     filas.append(dict(b, trabajador_id=personas[b["cedula"]]["trabajador_id"]))
-                r = store.cargar_roles(m["anio"], m["mes"], filas, g.usuario["usuario"], pide_firma=False)
+                r = store.cargar_roles(m["anio"], m["mes"], filas, g.usuario["usuario"], pide_firma=m["pide_firma"])
                 total += r["cargados"]
             nombres = ", ".join(nombre_mes(m["anio"], m["mes"]).lower() for m in sorted(elegidos, key=lambda m: (m["anio"], m["mes"])))
-            flash(f"Listo: historial cargado, {total} recibos de {len(elegidos)} {'mes' if len(elegidos) == 1 else 'meses'} ({nombres}). "
+            flash(f"Listo: {total} recibos cargados de {len(elegidos)} {'mes' if len(elegidos) == 1 else 'meses'} ({nombres}). "
                   "Cada trabajador ya los ve en su celular.", "ok")
             if corregidas:
                 flash(f"Se corrigió la cédula en el padrón de {len(corregidas)} "
@@ -1853,6 +1943,7 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
 
     return render_template(
         "admin_roles_historial.html", archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
+        nuevos=nuevos, AREAS=AREAS,
         meses=meses, elegidos=elegidos, malas=malas, repetidos=repetidos,
         sin_encontrar=[p for p in lista if not p["trabajador_id"]],
         a_revisar=[p for p in lista if p["trabajador_id"] and p["como"] != "cedula"],

@@ -31,3 +31,8 @@ ZONA = os.environ.get("TRABAJADORES_ZONA", "America/Guayaquil")
 EMPRESA = os.environ.get("TRABAJADORES_EMPRESA", "INTELA")
 RAZON_SOCIAL = os.environ.get("TRABAJADORES_RAZON_SOCIAL", "Industria Textil Latinoamericana Cía. Ltda.")
 RUC = os.environ.get("TRABAJADORES_RUC", "")
+
+# Desde qué mes (año, mes) el trabajador firma el rol EN LA APP (Tamara 13/10/2026:
+# «todos firmados hasta septiembre»; desde octubre se firma en la app). Los meses
+# anteriores que se carguen quedan como firmados en papel.
+FIRMA_DESDE = (2026, 10)

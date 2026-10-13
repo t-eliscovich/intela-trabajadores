@@ -1,0 +1,34 @@
+{# Crear en el sistema a alguien que viene en el rol y no está en el padrón (Tamara, 13/10/2026).
+   clave: la fila (rol del mes) o la cédula (acumulado). n: lo que ya escribió contabilidad.
+   cols: cuántas columnas ocupa la fila. #}
+{% macro opcion(sel) %}<option value="nuevo" {{ 'selected' if sel }}>➕ Crearlo en el sistema</option>{% endmacro %}
+{% macro campos(clave, n, cols, nombre_rol, cedula_fija=None) %}
+<tr class="nuevo-fila" data-clave="{{ clave }}" {% if not n %}hidden{% endif %}>
+  <td colspan="{{ cols }}" style="background:#f3f7ff;padding:10px 12px 12px">
+    <div style="font-size:12px;font-weight:700;color:var(--azul);margin-bottom:6px">Trabajador nuevo · se crea al tocar «Cargar»</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 10px;align-items:end">
+      <div style="grid-column:span 2"><label class="campo">Nombre y apellido</label><input name="n_nom_{{ clave }}" value="{{ n.nombre if n else nombre_rol }}"></div>
+      <div><label class="campo">Cédula</label>
+        {% if cedula_fija %}<input value="{{ cedula_fija }}" disabled><span class="chico">viene en el archivo</span>
+        {% else %}<input name="n_ced_{{ clave }}" value="{{ n.cedula if n else '' }}" inputmode="numeric" placeholder="10 números">{% endif %}</div>
+      <div><label class="campo">Fecha de ingreso</label><input type="date" name="n_ing_{{ clave }}" value="{{ n.ingreso if n else '' }}"></div>
+      <div><label class="campo">Área <span class="tenue">(opcional)</span></label>
+        <select name="n_area_{{ clave }}"><option value="">—</option>{% for a in AREAS %}<option {{ 'selected' if n and n.area == a }}>{{ a }}</option>{% endfor %}</select></div>
+      <div><label class="campo">Celular <span class="tenue">(opcional)</span></label><input name="n_cel_{{ clave }}" value="{{ n.celular if n else '' }}" inputmode="tel"></div>
+      <div><label class="campo">Vacaciones que le quedan <span class="tenue">(días, opcional)</span></label><input name="n_sal_{{ clave }}" value="{{ n.saldo if n else '' }}" inputmode="decimal"></div>
+    </div>
+    {% if n and n.error %}<div class="negativo" style="margin-top:6px;font-size:13px">{{ n.error }}</div>{% endif %}
+  </td>
+</tr>
+{% endmacro %}
+{% macro script() %}
+<script>
+// Al elegir «Crearlo en el sistema» aparecen los datos para crearlo.
+document.querySelectorAll('select[name^="t_"]').forEach(function(s){
+  s.addEventListener('change', function(){
+    var fila = document.querySelector('.nuevo-fila[data-clave="' + s.name.slice(2) + '"]');
+    if (fila) fila.hidden = s.value !== 'nuevo';
+  });
+});
+</script>
+{% endmacro %}
