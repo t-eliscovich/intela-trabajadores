@@ -598,9 +598,15 @@ r = c.get(f"/admin/comidas/excel?mes={HOY.year}-{HOY.month:02d}")
 check("el Excel del mes baja", r.status_code == 200 and "spreadsheetml" in r.mimetype and f"comidas-{HOY.year}-{HOY.month:02d}.xlsx" in r.headers.get("Content-Disposition", ""))
 from openpyxl import load_workbook  # noqa: E402
 wb = load_workbook(BytesIO(r.data))
-check("con tres hojas: por día, por trabajador, invitados", wb.sheetnames == ["Por día", "Por trabajador", "Invitados"])
+check("primero por semana (como el resumen), después por día, por trabajador, invitados", wb.sheetnames == ["Por semana", "Por día", "Por trabajador", "Invitados"])
+_ps = wb["Por semana"]
+_tm = [row for row in _ps.iter_rows(values_only=True) if row[0] == "Total del mes"][0]
+_sem = [row for row in _ps.iter_rows(min_row=4, values_only=True) if row[0] and " al " in str(row[0])]
+check("las semanas suman el total del mes, y son las de la pantalla", _sem and sum(r[4] for r in _sem) == _tm[4]
+      and all(str(r[0]).split(" (")[0] in c.get(f"/admin/comidas?mes={HOY.year}-{HOY.month:02d}").get_data(as_text=True) for r in _sem[:1]))
 hd = wb["Por día"]
 tot = [row for row in hd.iter_rows(values_only=True) if row[0] == "Total"][0]
+check("y el total del mes es el mismo en las dos hojas", tot[5] == _tm[4])
 pantalla = c.get(f"/admin/comidas?mes={HOY.year}-{HOY.month:02d}").get_data(as_text=True)
 check("los totales del Excel son los de la pantalla", f'<b class="grande">{tot[2]}</b><small>Almuerzos' in pantalla and f'<b class="grande">{tot[3]}</b><small>Cenas' in pantalla)
 ht = wb["Por trabajador"]

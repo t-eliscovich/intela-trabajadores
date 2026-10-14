@@ -1448,9 +1448,35 @@ def admin_comidas_excel():
     centro = Alignment(horizontal="center")
 
     wb = Workbook()
-    # --- Por día ---
+    # --- Por semana: lo mismo que el resumen de la pantalla (Tamara 14/10/2026) ---
+    filas_dia = []
+    for d in dias:
+        if d > hoy():
+            break
+        filas_dia.append({"fecha": d,
+                          "almuerzo": sum(1 for m in marcados.values() if (d, "almuerzo") in m),
+                          "cena": sum(1 for m in marcados.values() if (d, "cena") in m),
+                          "invitados": sum(i["cantidad"] for i in inv.get(d, []))})
     h = wb.active
-    h.title = "Por día"
+    h.title = "Por semana"
+    h.append([f"Comidas de {MESES[mes]} {anio} — Intela · por semana (lunes a domingo)"])
+    h["A1"].font = Font(bold=True, size=13)
+    h.append([])
+    h.append(["Semana", "Almuerzos", "Cenas", "Invitados", "Total"])
+    for c in h[3]:
+        c.font = negrita
+    for w in _por_semana(filas_dia):
+        h.append([f"{fecha_corta(w['desde'])} al {fecha_corta(w['hasta'])} ({w['desde'].strftime('%d/%m')} – {w['hasta'].strftime('%d/%m')})",
+                  w["almuerzo"], w["cena"], w["invitados"], w["total"]])
+    ta, tc, ti = (sum(f[k] for f in filas_dia) for k in ("almuerzo", "cena", "invitados"))
+    h.append(["Total del mes", ta, tc, ti, ta + tc + ti])
+    for c in h[h.max_row]:
+        c.font = negrita
+    for col, ancho in zip("ABCDE", (34, 11, 8, 10, 8)):
+        h.column_dimensions[col].width = ancho
+
+    # --- Por día ---
+    h = wb.create_sheet("Por día")
     h.append([f"Comidas de {MESES[mes]} {anio} — Intela"])
     h["A1"].font = Font(bold=True, size=13)
     h.append([])
