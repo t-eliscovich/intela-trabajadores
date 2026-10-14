@@ -1,11 +1,10 @@
 <style>
   /* El recibo como el de papel de WinAfin (Tamara 14/10/2026). */
   .rec{background:#fff;color:#0f172a;border:1.5px solid #0f172a;border-radius:4px;font-size:13px;margin:10px}
-  .rec .rec-marca{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:28px;line-height:1;color:#e0245e;text-transform:none;letter-spacing:.01em}
+  .rec .rec-marca{display:block;width:96px;height:auto}
   .rec .rec-cant{text-transform:none;font-size:11.5px;font-weight:600;color:#334155;letter-spacing:0}
   .rec-cab{display:grid;grid-template-columns:auto 1fr;border-bottom:1.5px solid #0f172a}
   .rec-logo{padding:6px 12px;border-right:1px solid #0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .rec-marca{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:26px;line-height:1;color:#e0245e;letter-spacing:.01em}
   .rec-tit{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
   .rec-nombre{padding:6px 12px;display:flex;flex-direction:column;justify-content:center;text-align:center;min-width:0}
   .rec-nombre b{font-size:14px;line-height:1.2}
@@ -47,7 +46,7 @@
   /* En el celular: Ingresos arriba de Descuentos, y las fechas en dos renglones. */
   @media(max-width:600px){
     .rec{margin:8px;font-size:12.5px}
-    .rec .rec-marca{font-size:24px}
+    .rec .rec-marca{width:80px}
     .rec-datos{grid-template-columns:repeat(4,minmax(0,1fr))}
     .rec-datos > div:nth-child(4){border-right:0}
     .rec-datos .rec-periodo{grid-column:1/-1;border-top:1px solid #0f172a;border-right:0;padding:3px}
