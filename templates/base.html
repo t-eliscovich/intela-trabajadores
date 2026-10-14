@@ -295,7 +295,12 @@
   .dia-quienes li small{display:block;font-size:12px;color:var(--gris-claro)}
   .dia-quienes li small.turno{display:inline;margin-left:6px}
   .turnos{display:grid;gap:0}
-  @media (max-width:640px){.turnos{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important}}
+  /* En el celular, un horario debajo del otro: los nombres reales son largos
+     («Villalba Villalba Hermes Oswaldo») y en dos columnas se cortaban (Tamara 14/10). */
+  @media (max-width:640px){.turnos{grid-template-columns:minmax(0,1fr) !important}
+    .turnos .turno{border-right:0 !important;padding-bottom:0}
+    .turnos .turno + .turno{border-top:1px solid var(--borde)}}
+  .turno-nombre > span{white-space:normal;overflow-wrap:anywhere}
   .turnos .turno{min-width:0}
   .turno-nombre.invitado span{white-space:normal}
   .turnos .turno{border-right:1px solid var(--borde);padding:0 0 8px}
@@ -358,7 +363,7 @@
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint=='comedor_dia' }}">Comensales</a>
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint=='admin_comidas' }}">Comidas del mes</a>
     </nav>
-    <div class="quien">{{ g.usuario.nombre }} · <a href="{{ url_for('admin_salir') }}">salir</a></div>
+    <div class="quien quien-yo"><span>{{ g.usuario.nombre }}</span><a class="btn-salir" href="{{ url_for('admin_salir') }}">Salir</a></div>
     {% elif g.token %}
     <nav></nav>
     <div class="quien">Comedor</div>
