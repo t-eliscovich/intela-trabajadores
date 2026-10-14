@@ -779,7 +779,7 @@ def comedor_invitados():
             raise ValueError("Diga quiénes son los invitados (por ejemplo: proveedor, familiar).")
         ya = _invitados_de(t, hoy(), tipo)
         if ya + cantidad > MAX_INVITADOS:
-            raise ValueError(f"Ya tiene {ya} {'invitado' if ya == 1 else 'invitados'} hoy; el máximo es {MAX_INVITADOS}.")
+            raise ValueError(f"Ya tiene {ya} {'invitado' if ya == 1 else 'invitados'} en {'este almuerzo' if tipo == 'almuerzo' else 'esta cena'}; el máximo es {MAX_INVITADOS}.")
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
     turno = store.turno_marcado(t["id"], hoy(), tipo) or leer_turno(None, tipo)

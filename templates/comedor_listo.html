@@ -15,7 +15,7 @@
 
   {% if t.puede_invitar and invitados < 3 %}
   <div class="bloque" style="text-align:left">
-    <div class="titulo"><h2>¿Trae invitados?</h2><p>Hasta 3 por día{% if invitados %} · ya tiene {{ invitados }}{% endif %}.</p></div>
+    <div class="titulo"><h2>¿Trae invitados?</h2><p>Hasta 3 por comida{% if invitados %} · ya tiene {{ invitados }}{% endif %}.</p></div>
     <div class="relleno">
       <form method="POST" action="{{ u('comedor_invitados') }}" class="formulario">
         <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
