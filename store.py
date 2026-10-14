@@ -359,7 +359,36 @@ ESQUEMA = """
     );
     ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS rol text NOT NULL DEFAULT 'contabilidad';
     UPDATE trabajadores.usuario SET rol = 'comedor' WHERE rol = 'cafeteria';
+
+    -- Tipo de trabajador (Tamara 14/10/2026): 'planta' (vacaciones por ley),
+    -- 'temporal' (comedor y rol, SIN vacaciones hasta pasar a planta) y
+    -- 'jubilado' (rol de pagos; sin vacaciones, como en la planilla de contabilidad).
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'planta';
+    -- Pausado: no se borra ni se da de baja; no entra ni se registra en el comedor
+    -- hasta que contabilidad lo reanude («que se pausen», Tamara 14/10/2026).
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS pausado_en timestamptz;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS pausado_por text;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS motivo_pausa text;
+    -- Se puede cargar a alguien sin cédula (queda un aviso en la campanita hasta ponerla).
+    ALTER TABLE trabajadores.trabajador ALTER COLUMN cedula DROP NOT NULL;
+
+    -- La campanita de contabilidad: cosas para revisar. `clave` agrupa los avisos
+    -- automáticos (sin_cedula, no_en_planilla) para no repetirlos y cerrarlos solos;
+    -- 'nota' = uno que dejó alguien a mano.
+    CREATE TABLE IF NOT EXISTS trabajadores.aviso (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer REFERENCES trabajadores.trabajador(id),
+        clave          text NOT NULL DEFAULT 'nota',
+        texto          text NOT NULL,
+        creado_en      timestamptz NOT NULL DEFAULT now(),
+        creado_por     text NOT NULL,
+        resuelto_en    timestamptz,
+        resuelto_por   text
+    );
+    CREATE INDEX IF NOT EXISTS aviso_abierto_idx ON trabajadores.aviso (resuelto_en, creado_en DESC);
 """
+
+TIPOS_TRABAJADOR = {"planta": "Planta", "temporal": "Temporal", "jubilado": "Jubilado"}
 
 
 # --------------------------------------------------------------------------
@@ -686,26 +715,103 @@ def reactivar(id_: int) -> None:
               (id_,))
 
 
-def cargar_lote(filas: list[dict], hoy: date) -> dict:
-    """La carga masiva inicial. Cada fila: cedula, nombre, fecha_ingreso y,
-    opcional, `saldo` (los días que le quedan HOY).
+def perfil_sin_pisar(existente: dict, perfil: dict) -> dict:
+    """Lo que viene vacío en la planilla NO borra lo que ya tiene (el celular o la
+    dirección que corrigió el trabajador desde su perfil, por ejemplo)."""
+    return {k: (perfil.get(k) if perfil.get(k) is not None else existente.get(k)) for k in PERFIL}
 
-    Si la cédula ya existe se actualizan nombre, fecha y perfil; el saldo sólo
-    se carga a los NUEVOS, para no pisarlo si se pega la planilla dos veces.
+
+def cargar_lote(filas: list[dict], hoy: date) -> dict:
+    """La carga masiva. Cada fila: cedula, nombre, fecha_ingreso y, opcional,
+    `saldo` (los días que le quedan HOY), el perfil y el `tipo`.
+
+    Si la cédula ya existe se actualizan nombre, fecha, lo que venga del perfil
+    (lo vacío no pisa) y el tipo si viene; el saldo sólo se carga a los NUEVOS,
+    para no pisarlo si se pega la planilla dos veces.
     """
     nuevos = actualizados = 0
     for f in filas:
         perfil = {k: f.get(k) for k in PERFIL}
         existente = trabajador_por_cedula(f["cedula"])
         if existente:
-            editar_trabajador(existente["id"], f["cedula"], f["nombre"], f["fecha_ingreso"], perfil)
+            editar_trabajador(existente["id"], f["cedula"], f["nombre"], f["fecha_ingreso"],
+                              perfil_sin_pisar(existente, perfil))
+            if f.get("tipo"):
+                poner_tipo(existente["id"], f["tipo"])
             actualizados += 1
             continue
         saldo = f.get("saldo")
-        crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
-                         saldo, hoy if saldo is not None else None, perfil)
+        id_ = crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
+                               saldo, hoy if saldo is not None else None, perfil)
+        if f.get("tipo"):
+            poner_tipo(id_, f["tipo"])
         nuevos += 1
     return {"nuevos": nuevos, "actualizados": actualizados}
+
+
+# --------------------------------------------------------------------------
+# Tipo (planta / temporal / jubilado) y pausa
+# --------------------------------------------------------------------------
+def poner_tipo(id_: int, tipo: str) -> None:
+    if tipo not in TIPOS_TRABAJADOR:
+        raise ValueError(f"No sé qué tipo de trabajador es «{tipo}».")
+    _ejecutar("UPDATE trabajadores.trabajador SET tipo=%s WHERE id=%s", (tipo, id_))
+
+
+def pausar(id_: int, motivo: str, quien: str) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET pausado_en=now(), pausado_por=%s, motivo_pausa=%s "
+              "WHERE id=%s", (quien, motivo or None, id_))
+
+
+def reanudar(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET pausado_en=NULL, pausado_por=NULL, motivo_pausa=NULL "
+              "WHERE id=%s", (id_,))
+
+
+# --------------------------------------------------------------------------
+# La campanita: avisos para contabilidad
+# --------------------------------------------------------------------------
+_AVISO = """SELECT a.*, t.nombre, t.cedula FROM trabajadores.aviso a
+              LEFT JOIN trabajadores.trabajador t ON t.id = a.trabajador_id"""
+
+
+def crear_aviso(trabajador_id: int | None, texto: str, quien: str, clave: str = "nota") -> int | None:
+    """Un aviso automático (clave distinta de 'nota') no se repite mientras
+    haya uno abierto igual para la misma persona."""
+    if clave != "nota" and _uno("SELECT id FROM trabajadores.aviso WHERE trabajador_id IS NOT DISTINCT FROM %s "
+                                "AND clave=%s AND resuelto_en IS NULL", (trabajador_id, clave)):
+        return None
+    fila = _ejecutar("INSERT INTO trabajadores.aviso (trabajador_id, clave, texto, creado_por) "
+                     "VALUES (%s,%s,%s,%s) RETURNING id", (trabajador_id, clave, texto, quien))
+    return fila["id"]
+
+
+def avisos_abiertos() -> list[dict]:
+    return _todos(_AVISO + " WHERE a.resuelto_en IS NULL ORDER BY a.creado_en DESC, a.id DESC")
+
+
+def avisos_resueltos(limite: int = 40) -> list[dict]:
+    return _todos(_AVISO + " WHERE a.resuelto_en IS NOT NULL ORDER BY a.resuelto_en DESC LIMIT %s", (limite,))
+
+
+def avisos_de(trabajador_id: int) -> list[dict]:
+    return _todos(_AVISO + " WHERE a.trabajador_id=%s AND a.resuelto_en IS NULL ORDER BY a.creado_en DESC",
+                  (trabajador_id,))
+
+
+def cuantos_avisos() -> int:
+    fila = _uno("SELECT count(*) AS n FROM trabajadores.aviso WHERE resuelto_en IS NULL")
+    return int(fila["n"]) if fila else 0
+
+
+def resolver_aviso(id_: int, quien: str) -> None:
+    _ejecutar("UPDATE trabajadores.aviso SET resuelto_en=now(), resuelto_por=%s "
+              "WHERE id=%s AND resuelto_en IS NULL", (quien, id_))
+
+
+def resolver_avisos(trabajador_id: int, clave: str, quien: str) -> None:
+    _ejecutar("UPDATE trabajadores.aviso SET resuelto_en=now(), resuelto_por=%s "
+              "WHERE trabajador_id=%s AND clave=%s AND resuelto_en IS NULL", (quien, trabajador_id, clave))
 
 
 # --------------------------------------------------------------------------

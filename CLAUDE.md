@@ -273,3 +273,23 @@ las funciones de `store` una por una, no el módulo entero.
   verde) → registrado. Sin «¿Es usted?», sin desplegable, sin deshacer. «No soy yo» vuelve.
 - **Comensales (contabilidad)**: «Sin registrar» lista también al que tiene una sola
   comida, con un desplegable de comida+horario (`leer_horario`, «cena|19:00»).
+
+**Cambios del 14/10/2026 (tarde, Tamara) — temporales, jubilados, pausar, campanita:**
+- **`trabajador.tipo`**: `planta` (vacaciones por ley), `temporal` (comedor y rol, SIN
+  vacaciones: no acumula ni pide días que descuentan; botón «Pasar a planta» en la ficha,
+  las vacaciones cuentan desde la fecha de ingreso) y `jubilado` (rol de pagos; sin
+  vacaciones «lo mismo que marca el Excel»; `/yo` lo manda al rol, sin pestaña Vacaciones).
+  `tiene_vacaciones(t)` decide. En la lista: «sin vacaciones» y saldo «—».
+- **Pausar** (no borrar ni dar de baja; «que se pausen»): `pausado_en/por`, `motivo_pausa`.
+  Pausado = sigue activo y las vacaciones corren, pero NO entra con la cédula ni se registra
+  en el comedor (`puede_entrar(t)`) y no sale en «Sin registrar». «Reanudar» en la ficha.
+- **La campanita** 🔔 (tabla `aviso`, `/admin/avisos`, globo en la barra de contabilidad):
+  avisos con `clave` — `sin_cedula` (alta sin cédula; se cierra solo al ponerla),
+  `no_en_planilla` (al pegar la planilla con «Es la planilla completa», los de planta
+  activos no pausados que no vienen; no se repite; se cierra al reanudar o dar de baja) y
+  `nota` (a mano, «Dejar un aviso» en la ficha). «Listo» lo resuelve; los resueltos quedan.
+- **Sin cédula se puede cargar** (`cedula` admite NULL): no entra ni come hasta tenerla.
+- **Pegar la planilla**: una celda VACÍA ya no borra lo que tenía (`store.perfil_sin_pisar`;
+  antes pegar el padrón borraba el celular que el trabajador corrigió). Columna 9 = tipo.
+- **Áreas** (planilla de octubre): ADM Administración, AC Acabados, BO Bodega,
+  MC Mantenimiento, TJ Tejeduría, TT Tintorería (`NOMBRES_AREA`; CC→AC, KK→TJ).

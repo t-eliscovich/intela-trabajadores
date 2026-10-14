@@ -2,13 +2,38 @@
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block contenido %}
 <h1>{{ t.nombre }}
-  <small>cédula {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida, revísela</span>{% endif %}{% if t.area %} · {{ t.area }}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
+  <small>{% if t.cedula %}cédula {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida, revísela</span>{% endif %}{% else %}<span class="etiqueta baja">sin cédula</span>{% endif %}{% if t.area %} · {{ t.area }}{% if t.area in NOMBRES_AREA %} {{ NOMBRES_AREA[t.area] }}{% endif %}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
   {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
+  {% if t.pausado_en %}<span class="etiqueta pendiente" title="{{ t.motivo_pausa or '' }}">pausado</span>{% endif %}
+  {% if (t.tipo or 'planta') != 'planta' %}<span class="etiqueta">{{ TIPOS_TRABAJADOR[t.tipo] }}</span>{% endif %}
   <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a></span>
 </h1>
 
+{% if t.pausado_en %}
+<div class="aviso">Pausado desde el {{ t.pausado_en|fecha }} por {{ t.pausado_por }}{% if t.motivo_pausa %}: {{ t.motivo_pausa }}{% endif %}. No puede entrar ni registrarse en el comedor. <a href="#pausa">Reanudar</a></div>
+{% endif %}
+{% for a in avisos %}
+<div class="aviso" style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+  <span>🔔 {{ a.texto }} <span class="chico" style="display:inline">· {{ a.creado_en|fecha }} {{ a.creado_por }}</span></span>
+  <form method="POST" class="enlinea"><input type="hidden" name="accion" value="aviso_listo"><input type="hidden" name="id" value="{{ a.id }}"><button class="btn suave chico" type="submit">Listo</button></form>
+</div>
+{% endfor %}
+
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
 <div>
+  {% if (t.tipo or 'planta') != 'planta' %}
+  <div class="bloque">
+    <div class="titulo"><h2>Vacaciones</h2></div>
+    <div class="relleno" style="font-size:14px">
+      <p style="margin:0 0 6px">En Intela desde <b>{{ t.fecha_ingreso|fecha }}</b> · <b>{{ TIPOS_TRABAJADOR[t.tipo] }}</b>: no tiene vacaciones.</p>
+      {% if t.tipo == 'temporal' %}
+      <form method="POST" class="enlinea"><input type="hidden" name="accion" value="tipo"><input type="hidden" name="tipo" value="planta">
+        <button class="btn chico" type="submit">Pasar a planta</button></form>
+      <p class="ayuda">Al pasarlo a planta, sus vacaciones cuentan desde la fecha de ingreso. Si deben contar desde otro día, cámbiela en «Editar los datos».</p>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
   <div class="bloque">
     <div class="titulo"><h2>Vacaciones</h2></div>
     <ul class="vac-resumen">
@@ -25,6 +50,7 @@
     <div class="vac-saldo"><span>Le quedan</span><b class="{{ 'negativo' if v.saldo < 0 }}">{{ v.saldo|num(1) }}</b></div>
     <div class="nota">El {{ v.proxima_carga|fecha }}{% if v.proxima_tipo == 'aniversario' %} (cumple el año){% endif %} se acreditan {{ v.proxima_cantidad|num }} más.</div>
   </div>
+  {% endif %}
 
   <div class="bloque">
     <div class="titulo"><h2>Días tomados</h2><p>Toque el lápiz para corregir uno.</p></div>
@@ -147,10 +173,11 @@
       <div class="relleno">
         <form method="POST" class="formulario">
           <input type="hidden" name="accion" value="editar">
-          <div><label class="campo">Cédula</label><input name="cedula" value="{{ t.cedula }}" required></div>
+          <div><label class="campo">Cédula</label><input name="cedula" value="{{ t.cedula or '' }}" {% if t.cedula %}required{% endif %}></div>
           <div style="grid-column:span 2"><label class="campo">Nombre</label><input name="nombre" value="{{ t.nombre }}" required></div>
           <div><label class="campo">Ingreso</label><input name="fecha_ingreso" value="{{ t.fecha_ingreso|fecha }}" required></div>
           <div><label class="campo">Área</label>{% with actual=t.area %}{% include "_area.html" %}{% endwith %}</div>
+          <div><label class="campo">Tipo</label><select name="tipo">{% for k, n in TIPOS_TRABAJADOR.items() %}<option value="{{ k }}" {% if (t.tipo or 'planta') == k %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
           <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" value="{{ t.fecha_nacimiento|fecha if t.fecha_nacimiento else '' }}"></div>
           <div><label class="campo">Celular</label><input name="celular" value="{{ t.celular or '' }}"></div>
           <div style="grid-column:span 2"><label class="campo">Dirección</label><input name="direccion" value="{{ t.direccion or '' }}"></div>
@@ -172,6 +199,33 @@
         </form>
       </div>
     </details>
+    <details>
+      <summary>Dejar un aviso en la campanita</summary>
+      <div class="relleno">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="aviso">
+          <div style="grid-column:span 2"><label class="campo">Qué hay que revisar</label><input name="texto" maxlength="300" required placeholder="por ejemplo: confirmar la fecha de ingreso"></div>
+          <div><button class="btn suave" type="submit">Dejar aviso</button></div>
+        </form>
+      </div>
+    </details>
+    {% if t.activo %}
+    <details id="pausa" {% if t.pausado_en %}open{% endif %}>
+      <summary>{{ 'Reanudar' if t.pausado_en else 'Pausar' }}</summary>
+      <div class="relleno">
+        {% if t.pausado_en %}
+        <form method="POST"><input type="hidden" name="accion" value="reanudar"><button class="btn suave" type="submit">Reanudar</button></form>
+        {% else %}
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="pausar">
+          <div style="grid-column:span 2"><label class="campo">Motivo</label><input name="motivo" maxlength="200" placeholder="por ejemplo: no está en la planilla de octubre"></div>
+          <div><button class="btn suave" type="submit">Pausar</button></div>
+          <p class="ayuda ancho">No se borra ni se da de baja: no puede entrar ni registrarse en el comedor hasta que lo reanude. Las vacaciones siguen contando.</p>
+        </form>
+        {% endif %}
+      </div>
+    </details>
+    {% endif %}
     <details>
       <summary>{{ 'Volver a activar' if not t.activo else 'Dar de baja' }}</summary>
       <div class="relleno">

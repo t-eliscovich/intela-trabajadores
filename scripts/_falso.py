@@ -54,6 +54,7 @@ class BaseFalsa:
         self.cert: dict[int, dict] = {}
         self.rol: dict[int, dict] = {}
         self.cons: dict[int, dict] = {}
+        self.avi: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
         self.alm_quien: dict[tuple, str] = {}
@@ -215,6 +216,8 @@ class BaseFalsa:
         return self._con_totales(t) if t else None
 
     def trabajador_por_cedula(self, cedula):
+        if not cedula:
+            return None
         for t in self.trab.values():
             if t["cedula"] == cedula:
                 return self._con_totales(t)
@@ -227,7 +230,7 @@ class BaseFalsa:
 
     def crear_trabajador(self, cedula, nombre, fecha_ingreso, saldo_inicial=None,
                          fecha_saldo_inicial=None, perfil=None):
-        if self.trabajador_por_cedula(cedula):
+        if cedula and self.trabajador_por_cedula(cedula):
             raise RuntimeError("duplicate key value violates unique constraint")
         id_ = self._id()
         perfil = perfil or {}
@@ -235,9 +238,60 @@ class BaseFalsa:
                           "fecha_ingreso": fecha_ingreso, "activo": True, "puede_invitar": False,
                           "fecha_salida": None, "saldo_inicial": saldo_inicial,
                           "fecha_saldo_inicial": fecha_saldo_inicial, "creado_en": datetime.now(),
-                          "codigo_rol": None, "nombre_rol": None,
+                          "codigo_rol": None, "nombre_rol": None, "tipo": "planta",
+                          "pausado_en": None, "pausado_por": None, "motivo_pausa": None,
                           **{k: perfil.get(k) for k in self.PERFIL}}
         return id_
+
+    # --- tipo, pausa y avisos (misma lógica que store) ---
+    def poner_tipo(self, id_, tipo):
+        if tipo not in ("planta", "temporal", "jubilado"):
+            raise ValueError(f"No sé qué tipo de trabajador es «{tipo}».")
+        self.trab[id_]["tipo"] = tipo
+
+    def pausar(self, id_, motivo, quien):
+        self.trab[id_].update(pausado_en=datetime.now(), pausado_por=quien, motivo_pausa=motivo or None)
+
+    def reanudar(self, id_):
+        self.trab[id_].update(pausado_en=None, pausado_por=None, motivo_pausa=None)
+
+    def perfil_sin_pisar(self, existente, perfil):
+        return {k: (perfil.get(k) if perfil.get(k) is not None else existente.get(k)) for k in self.PERFIL}
+
+    def _aviso_con_trab(self, a):
+        t = self.trab.get(a["trabajador_id"]) or {}
+        return dict(a, nombre=t.get("nombre"), cedula=t.get("cedula"))
+
+    def crear_aviso(self, trabajador_id, texto, quien, clave="nota"):
+        if clave != "nota" and any(a["trabajador_id"] == trabajador_id and a["clave"] == clave and not a["resuelto_en"]
+                                   for a in self.avi.values()):
+            return None
+        id_ = self._id()
+        self.avi[id_] = {"id": id_, "trabajador_id": trabajador_id, "clave": clave, "texto": texto,
+                         "creado_en": datetime.now(), "creado_por": quien, "resuelto_en": None, "resuelto_por": None}
+        return id_
+
+    def avisos_abiertos(self):
+        return [self._aviso_con_trab(a) for a in sorted(self.avi.values(), key=lambda a: -a["id"]) if not a["resuelto_en"]]
+
+    def avisos_resueltos(self, limite=40):
+        return [self._aviso_con_trab(a) for a in self.avi.values() if a["resuelto_en"]][:limite]
+
+    def avisos_de(self, trabajador_id):
+        return [a for a in self.avisos_abiertos() if a["trabajador_id"] == trabajador_id]
+
+    def cuantos_avisos(self):
+        return len(self.avisos_abiertos())
+
+    def resolver_aviso(self, id_, quien):
+        a = self.avi.get(id_)
+        if a and not a["resuelto_en"]:
+            a.update(resuelto_en=datetime.now(), resuelto_por=quien)
+
+    def resolver_avisos(self, trabajador_id, clave, quien):
+        for a in self.avi.values():
+            if a["trabajador_id"] == trabajador_id and a["clave"] == clave and not a["resuelto_en"]:
+                a.update(resuelto_en=datetime.now(), resuelto_por=quien)
 
     def corregir_cedula(self, id_, cedula):
         if any(t["cedula"] == cedula and t["id"] != id_ for t in self.trab.values()):
@@ -287,12 +341,17 @@ class BaseFalsa:
             perfil = {k: f.get(k) for k in self.PERFIL}
             ex = self.trabajador_por_cedula(f["cedula"])
             if ex:
-                self.editar_trabajador(ex["id"], f["cedula"], f["nombre"], f["fecha_ingreso"], perfil)
+                self.editar_trabajador(ex["id"], f["cedula"], f["nombre"], f["fecha_ingreso"],
+                                       self.perfil_sin_pisar(ex, perfil))
+                if f.get("tipo"):
+                    self.poner_tipo(ex["id"], f["tipo"])
                 actualizados += 1
                 continue
             saldo = f.get("saldo")
-            self.crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
-                                  saldo, hoy if saldo is not None else None, perfil)
+            id_ = self.crear_trabajador(f["cedula"], f["nombre"], f["fecha_ingreso"],
+                                        saldo, hoy if saldo is not None else None, perfil)
+            if f.get("tipo"):
+                self.poner_tipo(id_, f["tipo"])
             nuevos += 1
         return {"nuevos": nuevos, "actualizados": actualizados}
 

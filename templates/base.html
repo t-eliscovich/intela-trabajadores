@@ -45,6 +45,10 @@
   .quien-yo .btn-salir{flex:0 0 auto;padding:6px 12px;border:1px solid rgba(255,255,255,.35);border-radius:8px;
         color:#fff;text-decoration:none;font-weight:700;font-size:13px}
   /* Menú del usuario (arriba a la derecha): lo que se usa poco, como Cargar planilla. */
+  .campanita{margin-left:auto;padding:6px 8px;border-radius:8px;text-decoration:none;font-size:17px;line-height:1;white-space:nowrap;color:#fff}
+  .campanita:hover,.campanita.activo{background:rgba(255,255,255,.1)}
+  .campanita .globo{margin-left:2px;vertical-align:2px}
+  .campanita + .menu-usuario{margin-left:0}
   .menu-usuario{position:relative;overflow:visible}
   .menu-usuario > summary{list-style:none;cursor:pointer;padding:8px 10px;border-radius:8px;color:#dbe6f0;display:inline-block;
         background:none;border:0;font-weight:600;font-size:13px}
@@ -375,6 +379,7 @@
       <a href="{{ url_for('admin_comidas') }}" class="{{ 'activo' if request.endpoint in ('admin_comidas','admin_comidas_imprimir','admin_feriados') }}">Comidas del mes</a>
       <a href="{{ url_for('comedor_dia') }}" class="{{ 'activo' if request.endpoint in ('comedor_dia','comedor') }}">Comensales</a>
     </nav>
+    <a class="campanita {{ 'activo' if request.endpoint == 'admin_avisos' }}" href="{{ url_for('admin_avisos') }}" title="Avisos para revisar">🔔{% if n_avisos %}<span class="globo">{{ n_avisos }}</span>{% endif %}</a>
     <details class="quien menu-usuario">
       <summary class="{{ 'activo' if request.endpoint in ('admin_carga','admin_historial','admin_usuarios') }}">{{ g.usuario.nombre }} <span class="flecha">▾</span></summary>
       <div class="menu-usuario-caja">

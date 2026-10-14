@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}Avisos{% endblock %}
+{% block contenido %}
+<h1>Avisos <small>{{ abiertos|length }} para revisar</small></h1>
+
+<div class="bloque">
+  <div class="titulo"><h2>Para revisar</h2><p>Toque el nombre para ir a la ficha. «Listo» lo saca de la campanita.</p></div>
+  {% if abiertos %}
+  <table><tbody>
+  {% for a in abiertos %}
+    <tr>
+      <td style="min-width:170px">{% if a.trabajador_id %}<a href="{{ url_for('admin_trabajador', id_=a.trabajador_id) }}"><b>{{ a.nombre }}</b></a>{% else %}<b>General</b>{% endif %}</td>
+      <td>{{ a.texto }} <span class="chico">{{ a.creado_en|fecha }} · {{ a.creado_por }}</span></td>
+      <td class="der"><form method="POST" class="enlinea"><input type="hidden" name="id" value="{{ a.id }}"><button class="btn suave chico" type="submit">Listo</button></form></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}
+  <div class="vacio"><h3>No hay nada para revisar</h3><p>Aquí aparece, por ejemplo, quien no tiene cédula o no está en la última planilla.</p></div>
+  {% endif %}
+</div>
+
+{% if resueltos %}
+<div class="bloque">
+  <details>
+    <summary>Resueltos ({{ resueltos|length }})</summary>
+    <table><tbody>
+    {% for a in resueltos %}
+      <tr>
+        <td class="tenue" style="min-width:170px">{{ a.nombre or 'General' }}</td>
+        <td class="tenue">{{ a.texto }} <span class="chico">resuelto el {{ a.resuelto_en|fecha }} · {{ a.resuelto_por }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+  </details>
+</div>
+{% endif %}
+{% endblock %}

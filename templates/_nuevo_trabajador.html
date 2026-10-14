@@ -13,7 +13,7 @@
         {% else %}<input name="n_ced_{{ clave }}" value="{{ n.cedula if n else '' }}" inputmode="numeric" placeholder="10 números">{% endif %}</div>
       <div class="f"><label class="campo">Fecha de ingreso</label><input type="date" name="n_ing_{{ clave }}" value="{{ n.ingreso if n else '' }}"></div>
       <div class="f"><label class="campo">Área</label>
-        <select name="n_area_{{ clave }}"><option value="">opcional</option>{% for a in AREAS %}<option {{ 'selected' if n and n.area == a }}>{{ a }}</option>{% endfor %}</select></div>
+        <select name="n_area_{{ clave }}"><option value="">opcional</option>{% for a in AREAS %}<option value="{{ a }}" {{ 'selected' if n and n.area == a }}>{{ a }} · {{ NOMBRES_AREA[a] }}</option>{% endfor %}</select></div>
       <div class="f"><label class="campo">Celular</label><input name="n_cel_{{ clave }}" value="{{ n.celular if n else '' }}" inputmode="tel" placeholder="opcional"></div>
       <div class="f"><label class="campo">Vacaciones (días)</label><input name="n_sal_{{ clave }}" value="{{ n.saldo if n else '' }}" inputmode="decimal" placeholder="opcional" title="Días de vacaciones que le quedan hoy"></div>
     </div>

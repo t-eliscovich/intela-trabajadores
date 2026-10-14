@@ -24,8 +24,8 @@ hoy = A.hoy()
 
 # (cédula, nombre, ingreso, saldo de HOY según contabilidad; None = sin dato)
 GENTE = [("1712345675", "Juan Pérez", date(2017, 3, 25), 26, {"area": "TT", "fecha_nacimiento": date(1990, 8, 12), "celular": "0991234567", "dias_por_anio": 20}),
-         ("0912345675", "María López", date(2023, 8, 1), None, {"area": "KK"}),
-         ("1103456784", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "CC", "dias_por_anio": 22}),
+         ("0912345675", "María López", date(2023, 8, 1), None, {"area": "TJ"}),
+         ("1103456784", "Carlos Andrade", date(2012, 11, 2), 21, {"area": "AC", "dias_por_anio": 22}),
          ("0603456781", "Rosa Quishpe", date(2026, 3, 16), None, {}),
          ("1723456784", "Luis Tipán", date(2019, 1, 7), 3, {"area": "ADM", "celular": "0987654321"})]
 ids = {}
@@ -53,6 +53,15 @@ for i, nom in enumerate(ids):
         if f.weekday() < 5 and (d + i) % 4 == 1:
             base.marcar_comida(ids[nom], f, "cena", "trabajador", ("18:30", "19:00")[(d + i) % 2])
 base.dar_de_baja(base.crear_trabajador("1715151518", "Pedro Salido", date(2015, 5, 5)), date(2026, 7, 31))
+# un temporal, un jubilado, uno pausado y uno sin cédula, con sus avisos en la campanita
+ids["Kevin Cuenca"] = base.crear_trabajador("1150293213", "Kevin Cuenca", date(2026, 8, 1), None, None, {"area": "TT"})
+base.poner_tipo(ids["Kevin Cuenca"], "temporal")
+ids["Blanca Ortiz"] = base.crear_trabajador("1701488833", "Blanca Ortiz", date(2020, 2, 1), None, None, {"area": "ADM"})
+base.poner_tipo(ids["Blanca Ortiz"], "jubilado")
+base.pausar(ids["Rosa Quishpe"], "no está en la planilla de octubre", "conta")
+ids["Felipe López"] = base.crear_trabajador(None, "Felipe López", date(2025, 4, 1), None, None, {"area": "ADM"})
+base.crear_aviso(ids["Felipe López"], "Le falta la cédula. Sin cédula no puede entrar ni registrarse en el comedor.", "conta", "sin_cedula")
+base.crear_aviso(ids["Luis Tipán"], "No está en la planilla pegada el 14/10/2026. ¿Sigue trabajando? Si no, páuselo o dele de baja.", "conta", "no_en_planilla")
 
 from werkzeug.security import generate_password_hash  # noqa: E402
 base.crear_usuario("conta", generate_password_hash("x"), "Contabilidad")
@@ -139,6 +148,12 @@ guardar("admin_usuarios", c.get("/admin/usuarios").get_data(as_text=True))
 guardar("admin_solicitudes", c.get("/admin/solicitudes").get_data(as_text=True))
 guardar("admin_buscar", c.get("/admin?q=juan").get_data(as_text=True))
 guardar("admin_historial", c.get("/admin/historial").get_data(as_text=True))
+guardar("admin_avisos", c.get("/admin/avisos").get_data(as_text=True))
+guardar("admin_trabajador_temporal", c.get(f"/admin/trabajador/{ids['Kevin Cuenca']}").get_data(as_text=True))
+guardar("admin_trabajador_sin_cedula", c.get(f"/admin/trabajador/{ids['Felipe López']}").get_data(as_text=True))
+guardar("admin_trabajador_pausado", c.get(f"/admin/trabajador/{ids['Rosa Quishpe']}").get_data(as_text=True))
+_t = A.app.test_client(); _t.post("/", data={"cedula": "1150293213"})
+guardar("yo_vacaciones_temporal", _t.get("/yo/vacaciones").get_data(as_text=True))
 c2 = A.app.test_client(); c2.post("/", data={"cedula": "0603456781"})
 guardar("yo_vacaciones_nuevo", c2.get("/yo/vacaciones").get_data(as_text=True))
 guardar("admin_roles", c.get("/admin/roles").get_data(as_text=True))

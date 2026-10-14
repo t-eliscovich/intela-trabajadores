@@ -1077,11 +1077,68 @@ _pegadas = [x[:60] for x in _store_real._sentencias(_store_real.ESQUEMA)
             if len(_re0.findall(r"^\s*(CREATE|ALTER|UPDATE|INSERT|DROP)\b", x, _re0.M)) > 1]
 check("el esquema no tiene sentencias pegadas (falta un ;)" + (f": {_pegadas}" if _pegadas else ""), not _pegadas)
 
+# --- 5b. temporales, jubilados, pausar, campanita (Tamara 14/10/2026) ----------
+print("Tipos, pausa y campanita:")
+tmp = base.crear_trabajador("1754114138", "Temporal Prueba", date(2025, 1, 1), None, None, {"celular": "0991111111"})
+base.poner_tipo(tmp, "temporal")
+jub = base.crear_trabajador("1701488833", "Jubilada Prueba", date(2020, 2, 1))
+base.poner_tipo(jub, "jubilado")
+html = c.get("/admin").get_data(as_text=True)
+check("la lista muestra «sin vacaciones» a temporales y jubilados", "sin vacaciones" in html and "Temporal" in html and "Jubilado" in html)
+html = c.get(f"/admin/trabajador/{tmp}").get_data(as_text=True)
+check("la ficha del temporal ofrece «Pasar a planta» y no muestra «Le quedan»", "Pasar a planta" in html and "Le quedan" not in html)
+tt = A.app.test_client()
+tt.post("/", data={"cedula": "1754114138"})
+html = tt.get("/yo/vacaciones").get_data(as_text=True)
+check("el temporal ve que todavía no acumula", "todavía no acumula" in html and "Vacaciones</option>" not in html)
+r = tt.post("/yo/pedir", data={"tipo": "vacaciones", "desde": A.hoy().isoformat(), "hasta": A.hoy().isoformat()}, follow_redirects=True)
+check("el temporal no puede pedir vacaciones", "todavía no tiene vacaciones" in r.get_data(as_text=True))
+tj = A.app.test_client()
+tj.post("/", data={"cedula": "1701488833"})
+check("el jubilado va directo al rol", "/yo/rol" in tj.get("/yo").headers.get("Location", ""))
+c.post(f"/admin/trabajador/{tmp}", data={"accion": "tipo", "tipo": "planta"})
+check("Pasar a planta", base.trabajador(tmp)["tipo"] == "planta")
+# pausar
+c.post(f"/admin/trabajador/{tmp}", data={"accion": "pausar", "motivo": "no está en la planilla"})
+check("pausado: queda activo y con su historia", base.trabajador(tmp)["activo"] and base.trabajador(tmp)["pausado_en"])
+r = A.app.test_client().post("/", data={"cedula": "1754114138"})
+check("pausado no entra con la cédula", r.status_code == 200 and "No encontramos" in r.get_data(as_text=True))
+check("pausado se ve en la lista", "pausado" in c.get("/admin").get_data(as_text=True))
+c.post(f"/admin/trabajador/{tmp}", data={"accion": "reanudar"})
+check("reanudar", base.trabajador(tmp)["pausado_en"] is None)
+# sin cédula → campanita
+c.post("/admin", data={"cedula": "", "nombre": "Sin Cedula Prueba", "fecha_ingreso": "01/04/2025", "area": "ADM"})
+sc = next(t for t in base.trabajadores() if t["nombre"] == "Sin Cedula Prueba")
+check("se puede cargar sin cédula", sc["cedula"] is None)
+check("y queda un aviso en la campanita", any(a["trabajador_id"] == sc["id"] and a["clave"] == "sin_cedula" for a in base.avisos_abiertos()))
+html = c.get("/admin/avisos").get_data(as_text=True)
+check("/admin/avisos lista el aviso", "Sin Cedula Prueba" in html and "Le falta la cédula" in html)
+check("el globito de la campanita cuenta", "🔔<span class=\"globo\">" in c.get("/admin").get_data(as_text=True))
+c.post(f"/admin/trabajador/{sc['id']}", data={"accion": "editar", "cedula": "", "nombre": "Sin Cedula Prueba", "fecha_ingreso": "01/04/2025"})
+check("se edita sin cédula sin error", base.trabajador(sc["id"])["cedula"] is None)
+c.post(f"/admin/trabajador/{sc['id']}", data={"accion": "editar", "cedula": "1803616000", "nombre": "Sin Cedula Prueba", "fecha_ingreso": "01/04/2025"})
+check("al poner la cédula el aviso se cierra solo", not any(a["trabajador_id"] == sc["id"] for a in base.avisos_abiertos()))
+# planilla completa: los que no están → campanita; lo vacío no pisa el celular
+antes = {t["id"] for t in base.trabajadores() if (t.get("tipo") or "planta") == "planta" and t["cedula"]}
+c.post("/admin/carga", data={"texto": "1754114138\tTemporal Prueba\t01/01/2025\t\tTJ\t\t\t\ttemporal", "completa": "1", "confirmar": "1"})
+check("la planilla no borra el celular que ya tenía", base.trabajador(tmp)["celular"] == "0991111111")
+check("la planilla pone área y tipo", base.trabajador(tmp)["area"] == "TJ" and base.trabajador(tmp)["tipo"] == "temporal")
+avisados = {a["trabajador_id"] for a in base.avisos_abiertos() if a["clave"] == "no_en_planilla"}
+check("los de planta que no están quedan en la campanita (sin repetir)", avisados == antes - {tmp})
+c.post("/admin/carga", data={"texto": "1754114138\tTemporal Prueba\t01/01/2025", "completa": "1", "confirmar": "1"})
+check("pegar dos veces no repite avisos", len([a for a in base.avisos_abiertos() if a["clave"] == "no_en_planilla"]) == len(avisados))
+for a in base.avisos_abiertos():
+    c.post("/admin/avisos", data={"id": a["id"]})
+check("«Listo» vacía la campanita", base.cuantos_avisos() == 0)
+check("la lista de áreas nueva", A.AREAS == ("ADM", "AC", "BO", "MC", "TJ", "TT"))
+for x in (tmp, jub, sc["id"]):
+    base.trab.pop(x)
+
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
 for ruta in ("/admin/constancias", "/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",
              "/admin/comidas", "/admin/comidas/imprimir", "/admin/feriados", "/admin/usuarios", "/admin/solicitudes",
-             "/admin/historial", "/comedor", "/comedor/dia", "/healthz"):
+             "/admin/historial", "/admin/avisos", "/comedor", "/comedor/dia", "/healthz"):
     check(f"{ruta} abre", c.get(ruta).status_code == 200)
 r = c.get("/healthz")
 check("healthz cuenta trabajadores y usuarios", r.get_json()["trabajadores_activos"] == len(base.trabajadores()) and r.get_json()["hay_usuarios"])

@@ -15,11 +15,12 @@
   <summary style="display:none"></summary>
   <div class="relleno">
     <form method="POST" class="formulario">
-      <div><label class="campo">Cédula</label><input name="cedula" inputmode="numeric" required></div>
+      <div><label class="campo">Cédula <span class="op">· si no la tiene, déjela vacía</span></label><input name="cedula" inputmode="numeric"></div>
       <div style="grid-column:span 2"><label class="campo">Nombre y apellido</label><input name="nombre" required></div>
       <div><label class="campo">Fecha de ingreso</label><input name="fecha_ingreso" placeholder="25/03/2024" required></div>
       <div><label class="campo">Saldo inicial (días que le quedan hoy)</label><input name="saldo" placeholder="vacío = contar desde el ingreso"></div>
       <div><label class="campo">Área</label>{% with actual=none %}{% include "_area.html" %}{% endwith %}</div>
+      <div><label class="campo">Tipo</label><select name="tipo">{% for k, n in TIPOS_TRABAJADOR.items() %}<option value="{{ k }}">{{ n }}</option>{% endfor %}</select></div>
       <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" placeholder="12/08/1990"></div>
       <div><label class="campo">Celular</label><input name="celular" placeholder="0991234567"></div>
       <div><label class="campo">Días por año</label><input name="dias_por_anio" placeholder="vacío = por ley"></div>
@@ -47,23 +48,29 @@
     {% for f in filas %}
       <tr>
         <td style="min-width:170px"><a href="{{ url_for('admin_trabajador', id_=f.id) }}"><b>{{ f.nombre }}</b></a>
-            {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}</td>
-        <td class="oculta-chico tenue">{{ f.cedula }}{% if not cedula_valida(f.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador: revise que esté bien escrita">cédula no válida</span>{% endif %}</td>
-        <td class="oculta-chico tenue">{{ f.area or '' }}</td>
+            {% if not f.activo %} <span class="etiqueta baja">baja {{ f.fecha_salida|fecha }}</span>{% endif %}
+            {% if f.pausado_en %} <span class="etiqueta pendiente">pausado</span>{% endif %}
+            {% if (f.tipo or 'planta') != 'planta' %} <span class="etiqueta">{{ TIPOS_TRABAJADOR[f.tipo] }}</span>{% endif %}</td>
+        <td class="oculta-chico tenue">{% if not f.cedula %}<span class="etiqueta baja">sin cédula</span>{% else %}{{ f.cedula }}{% endif %}{% if f.cedula and not cedula_valida(f.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador: revise que esté bien escrita">cédula no válida</span>{% endif %}</td>
+        <td class="oculta-chico tenue" {% if f.area in NOMBRES_AREA %}title="{{ NOMBRES_AREA[f.area] }}"{% endif %}>{{ f.area or '' }}</td>
         <td class="oculta-chico tenue">{{ f.fecha_ingreso|fecha }}</td>
         <td class="der">{{ f.v.anios }}</td>
+        {% if (f.tipo or 'planta') != 'planta' %}
+        <td class="oculta-chico tenue" colspan="2" style="text-align:center">sin vacaciones</td><td></td><td class="oculta-chico"></td><td></td><td class="der tenue">—</td>
+        {% else %}
         <td class="der oculta-chico tenue">{% if f.v.primer_anio %}— <span class="chico">cumple el año el {{ f.v.aniversario|fecha }}</span>{% else %}{{ f.v.este_anio|num(1) }}{% if f.v.fijo is not none %} <span class="chico">fijo</span>{% endif %}{% endif %}</td>
         <td class="der oculta-chico tenue">{% if f.v.fecha_saldo %}{{ f.v.inicial|num(1) }} <span class="chico">{{ f.v.fecha_saldo|fecha }}</span>{% endif %}</td>
         <td class="der">{{ f.v.ganados|num }}</td>
         <td class="der oculta-chico tenue">{{ f.v.ajustes|num(1) if f.v.ajustes else '' }}</td>
         <td class="der">{{ f.v.tomados|num(1) }}</td>
         <td class="der"><b class="{{ 'negativo' if f.v.saldo < 0 }}">{{ f.v.saldo|num(1) }}</b></td>
+        {% endif %}
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  <div class="nota">El primer año no suma: al cumplirlo se acreditan los 15 de una. Después, cada 1 de enero los días del año: 15, más uno por cada año de antigüedad que pase de cinco (tope 30). Saldo = saldo inicial + acreditados desde entonces + ajustes − tomados.</div>
+  <div class="nota">El primer año no suma: al cumplirlo se acreditan los 15 de una. Después, cada 1 de enero los días del año: 15, más uno por cada año de antigüedad que pase de cinco (tope 30). Saldo = saldo inicial + acreditados desde entonces + ajustes − tomados. Temporales y jubilados no tienen vacaciones; un temporal empieza a acumular cuando pasa a planta.</div>
   {% elif q %}
   <div class="vacio"><h3>Nadie coincide con «{{ q }}»</h3><p>Pruebe con menos letras, o con la cédula.</p></div>
   {% else %}

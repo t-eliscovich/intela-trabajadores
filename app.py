@@ -59,8 +59,11 @@ MESES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 DIAS_CORTOS = ["L", "M", "M", "J", "V", "S", "D"]
 TIPOS_COMIDA = (("almuerzo", "A"), ("cena", "C"))
-# Las áreas de la fábrica, como las usa contabilidad en su planilla (Dep).
-AREAS = ("ADM", "BO", "CC", "KK", "TT")
+# Las áreas de la fábrica, como las usa contabilidad en su planilla (Dep). Desde la
+# planilla de octubre 2026: CC pasó a AC y KK a TJ (Tamara 14/10/2026, con los nombres).
+NOMBRES_AREA = {"ADM": "Administración", "AC": "Acabados", "BO": "Bodega",
+                "MC": "Mantenimiento", "TJ": "Tejeduría", "TT": "Tintorería"}
+AREAS = tuple(NOMBRES_AREA)
 
 
 def leer_tipo_comida(texto: str | None) -> str:
@@ -222,6 +225,16 @@ def mes_siguiente(anio: int, mes: int) -> str:
     return f"{a}-{m:02d}"
 
 
+def puede_entrar(t: dict | None) -> bool:
+    """Activo y no pausado: entra con su cédula y se registra en el comedor."""
+    return bool(t) and t["activo"] and not t.get("pausado_en")
+
+
+def tiene_vacaciones(t: dict) -> bool:
+    """Sólo los de planta. Temporales y jubilados no acumulan (Tamara 14/10/2026)."""
+    return (t.get("tipo") or "planta") == "planta"
+
+
 def _resumen(t: dict) -> dict:
     return vacaciones.resumen(t["fecha_ingreso"], float(t["tomados"]), float(t["ajustes"]), hoy(),
                               t.get("saldo_inicial"), t.get("fecha_saldo_inicial"),
@@ -306,13 +319,18 @@ def _globales():
             pendientes = store.cuantas_pendientes()
         except Exception:  # noqa: BLE001
             pendientes = 0
-    sin_firmar = 0
+    sin_firmar = avisos = 0
     if g.get("usuario") and g.usuario.get("rol") == "contabilidad" and not ERROR_ARRANQUE:
         try:
             sin_firmar = store.sin_firmar_ultimo_mes()
         except Exception:  # noqa: BLE001
             sin_firmar = 0
-    return {"n_roles_sin_firmar": sin_firmar, "MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
+        try:
+            avisos = store.cuantos_avisos()
+        except Exception:  # noqa: BLE001
+            avisos = 0
+    return {"n_roles_sin_firmar": sin_firmar, "MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS, "NOMBRES_AREA": NOMBRES_AREA,
+            "TIPOS_TRABAJADOR": store.TIPOS_TRABAJADOR, "n_avisos": avisos,
             "TURNOS": TURNOS, "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes,
             "cod_rol": cod_rol}
@@ -362,7 +380,7 @@ def entrar():
         except ValueError as exc:
             flash(str(exc), "error")
             return render_template("entrar.html")
-        if not t or not t["activo"]:
+        if not puede_entrar(t):
             flash("No encontramos esa cédula. Pregunte en contabilidad.", "error")
             return render_template("entrar.html")
         # Sólo se reemplaza la sesión del trabajador: si contabilidad prueba una
@@ -376,7 +394,7 @@ def entrar():
 def _mi_trabajador():
     id_ = session.get("trabajador_id")
     t = store.trabajador(id_) if id_ else None
-    if not t or not t["activo"]:
+    if not puede_entrar(t):
         session.pop("trabajador_id", None)
         return None
     return t
@@ -384,6 +402,9 @@ def _mi_trabajador():
 
 @app.route("/yo")
 def yo():
+    t = _mi_trabajador()
+    if t and t.get("tipo") == "jubilado":
+        return redirect(url_for("yo_rol"))
     return redirect(url_for("yo_vacaciones"))
 
 
@@ -392,8 +413,10 @@ def yo_vacaciones():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if t.get("tipo") == "jubilado":
+        return redirect(url_for("yo_rol"))
     con_cert = {c["solicitud_id"] for c in store.certificados_de(t["id"]) if c["solicitud_id"]}
-    return render_template("yo_vacaciones.html", t=t, v=_resumen(t),
+    return render_template("yo_vacaciones.html", t=t, v=_resumen(t), con_vacaciones=tiene_vacaciones(t),
                            vacaciones=store.vacaciones(t["id"]),
                            pedidos=store.solicitudes(t["id"]), con_cert=con_cert)
 
@@ -500,6 +523,8 @@ def yo_pedir():
     f = request.form
     try:
         tipo = leer_tipo_ausencia(f.get("tipo"))
+        if not tiene_vacaciones(t) and store.TIPOS_AUSENCIA[tipo][1]:
+            raise ValueError("Como temporal, todavía no tiene vacaciones. Pregunte en contabilidad.")
         desde, hasta = leer_fecha(f.get("desde", "")), leer_fecha(f.get("hasta", ""))
         dias = float(vacaciones.dias_entre(desde, hasta))
         h = hoy()
@@ -729,7 +754,7 @@ def comedor():
         except ValueError as exc:
             return _tablet("comedor.html", error=str(exc))
         t = store.trabajador_por_cedula(cedula)
-        if not t or not t["activo"]:
+        if not puede_entrar(t):
             return _tablet("comedor.html", error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
             return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo))
@@ -745,7 +770,7 @@ def _trabajador_del_form():
     cedula = limpiar_cedula(request.form.get("cedula", ""))
     tipo = leer_tipo_comida(request.form.get("tipo"))
     t = store.trabajador_por_cedula(cedula)
-    if not t or not t["activo"]:
+    if not puede_entrar(t):
         raise ValueError("No encontramos esa cédula.")
     return t, tipo
 
@@ -867,7 +892,7 @@ def comedor_dia():
         faltan = [dict(t, ya=ya.get(t["id"], set()),
                        whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha))
                        if t["id"] not in ya and es_contabilidad() else None)
-                  for t in store.trabajadores() if len(ya.get(t["id"], ())) < len(TIPOS_COMIDA)]
+                  for t in store.trabajadores() if puede_entrar(t) and len(ya.get(t["id"], ())) < len(TIPOS_COMIDA)]
     return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, columnas=columnas,
                            faltan=faltan, invitados=invitados, edita=es_contabilidad(), agrega=agrega,
                            horario_ahora=f"{comida_de_ahora()}|{turno_de_ahora(comida_de_ahora())}",
@@ -918,21 +943,30 @@ def admin_salir():
 def admin():
     if request.method == "POST":
         try:
-            cedula = limpiar_cedula(request.form.get("cedula", ""))
+            # Sin cédula se puede (Tamara 14/10/2026): queda en la campanita hasta ponerla.
+            cedula = limpiar_cedula(request.form.get("cedula", "")) if (request.form.get("cedula") or "").strip() else None
             nombre = (request.form.get("nombre") or "").strip()
             if not nombre:
                 raise ValueError("Falta el nombre.")
             ingreso = leer_fecha(request.form.get("fecha_ingreso", ""))
             if ingreso > hoy():
                 raise ValueError("La fecha de ingreso no puede ser futura.")
-            if store.trabajador_por_cedula(cedula):
+            if cedula and store.trabajador_por_cedula(cedula):
                 raise ValueError(f"La cédula {cedula} ya está cargada.")
+            tipo = request.form.get("tipo") or "planta"
+            if tipo not in store.TIPOS_TRABAJADOR:
+                raise ValueError("Elija planta, temporal o jubilado.")
             saldo = (request.form.get("saldo") or "").strip()
             saldo = leer_decimal(saldo, "El saldo") if saldo else None
             id_ = store.crear_trabajador(cedula, nombre, ingreso, saldo,
                                          hoy() if saldo is not None else None,
                                          leer_perfil(request.form))
-            flash(f"{nombre} cargado.", "ok")
+            if tipo != "planta":
+                store.poner_tipo(id_, tipo)
+            if not cedula:
+                store.crear_aviso(id_, "Le falta la cédula. Sin cédula no puede entrar ni registrarse en el comedor.",
+                                  g.usuario["usuario"], "sin_cedula")
+            flash(f"{nombre} cargado." + ("" if cedula else " Falta la cédula: quedó en la campanita."), "ok")
             return redirect(url_for("admin_trabajador", id_=id_))
         except ValueError as exc:
             flash(str(exc), "error")
@@ -950,7 +984,7 @@ def _coincide(t: dict, q: str) -> bool:
     def plano(x):
         return unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
     aguja = plano(q)
-    return all(p in plano(f"{t['nombre']} {t['cedula']} {t.get('area') or ''}") for p in aguja.split())
+    return all(p in plano(f"{t['nombre']} {t['cedula'] or ''} {t.get('area') or ''} {t.get('tipo') or ''}") for p in aguja.split())
 
 
 @app.route("/admin/trabajador/<int:id_>", methods=["GET", "POST"])
@@ -969,7 +1003,7 @@ def admin_trabajador(id_):
     for c in store.certificados_de(id_):
         if c["vacacion_id"]:
             certs.setdefault(c["vacacion_id"], []).append(c)
-    return render_template("admin_trabajador.html", t=t, v=_resumen(t),
+    return render_template("admin_trabajador.html", t=t, v=_resumen(t), avisos=store.avisos_de(id_),
                            vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs,
                            roles_pago=store.roles_de(id_), constancia_roles=store.constancia_de(id_))
 
@@ -1018,13 +1052,40 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         nombre = (f.get("nombre") or "").strip()
         if not nombre:
             raise ValueError("Falta el nombre.")
-        cedula = limpiar_cedula(f.get("cedula", ""))
-        otro = store.trabajador_por_cedula(cedula)
-        if otro and otro["id"] != t["id"]:
-            raise ValueError(f"La cédula {cedula} ya es de {otro['nombre']}.")
+        if not (f.get("cedula") or "").strip() and not t["cedula"]:
+            cedula = None  # todavía sin cédula: se puede guardar lo demás
+        else:
+            cedula = limpiar_cedula(f.get("cedula", ""))
+            otro = store.trabajador_por_cedula(cedula)
+            if otro and otro["id"] != t["id"]:
+                raise ValueError(f"La cédula {cedula} ya es de {otro['nombre']}.")
         ingreso = leer_fecha(f.get("fecha_ingreso", ""))
+        tipo = f.get("tipo") or t.get("tipo") or "planta"
         store.editar_trabajador(t["id"], cedula, nombre, ingreso, leer_perfil(f))
+        if tipo != (t.get("tipo") or "planta"):
+            store.poner_tipo(t["id"], tipo)
+        if cedula and not t["cedula"]:
+            store.resolver_avisos(t["id"], "sin_cedula", quien)
         flash("Datos guardados.", "ok")
+    elif accion == "tipo":
+        store.poner_tipo(t["id"], f.get("tipo") or "")
+        flash(f"{t['nombre']} pasó a {store.TIPOS_TRABAJADOR[f.get('tipo')].lower()}.", "ok")
+    elif accion == "pausar":
+        store.pausar(t["id"], (f.get("motivo") or "").strip()[:200], quien)
+        flash(f"{t['nombre']} quedó pausado. No se borró nada.", "ok")
+    elif accion == "reanudar":
+        store.reanudar(t["id"])
+        store.resolver_avisos(t["id"], "no_en_planilla", quien)
+        flash(f"{t['nombre']} vuelve a estar activo.", "ok")
+    elif accion == "aviso":
+        texto = (f.get("texto") or "").strip()[:300]
+        if not texto:
+            raise ValueError("Escriba qué hay que revisar.")
+        store.crear_aviso(t["id"], texto, quien)
+        flash("Aviso guardado en la campanita.", "ok")
+    elif accion == "aviso_listo":
+        store.resolver_aviso(int(f.get("id", 0) or 0), quien)
+        flash("Aviso resuelto.", "ok")
     elif accion == "saldo_inicial":
         saldo = (f.get("saldo") or "").strip()
         if saldo:
@@ -1038,6 +1099,7 @@ def _accion_trabajador(t: dict, accion: str) -> None:
             flash("Sin saldo inicial: se cuenta desde el ingreso.", "ok")
     elif accion == "baja":
         store.dar_de_baja(t["id"], leer_fecha(f.get("fecha_salida", "")))
+        store.resolver_avisos(t["id"], "no_en_planilla", quien)
         flash(f"{t['nombre']} dado de baja.", "ok")
     elif accion == "reactivar":
         store.reactivar(t["id"])
@@ -1105,7 +1167,8 @@ def _separador(linea: str) -> str:
 
 def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
     """Cada fila: cédula · nombre · fecha de ingreso · [saldo de días] · [área]
-    · [fecha de nacimiento] · [celular] · [días por año].
+    · [fecha de nacimiento] · [celular] · [días por año] · [tipo: planta,
+    temporal o jubilado].
 
     Devuelve (buenas, descartadas). Si la primera fila tiene letras donde va
     la cédula, es un título y se salta.
@@ -1120,7 +1183,7 @@ def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
         celdas = [c.strip().strip('"') for c in linea.split(sep)]
         if n == 1 and not re.search(r"\d", celdas[0]):
             continue  # la fila de títulos
-        celdas += [""] * (8 - len(celdas))
+        celdas += [""] * (9 - len(celdas))
         try:
             cedula = limpiar_cedula(celdas[0])
             nombre = celdas[1]
@@ -1132,11 +1195,14 @@ def leer_pegado(texto: str) -> tuple[list[dict], list[dict]]:
             saldo = leer_decimal(celdas[3], "El saldo") if celdas[3] else None
             perfil = leer_perfil({"area": celdas[4], "fecha_nacimiento": celdas[5],
                                   "celular": celdas[6], "dias_por_anio": celdas[7]})
+            tipo = celdas[8].strip().lower() or None
+            if tipo and tipo not in store.TIPOS_TRABAJADOR:
+                raise ValueError(f"El tipo «{celdas[8]}» no es planta, temporal ni jubilado.")
             if cedula in vistas:
                 raise ValueError("Cédula repetida en la planilla.")
             vistas.add(cedula)
             buenas.append({"cedula": cedula, "nombre": nombre, "fecha_ingreso": ingreso,
-                           "saldo": saldo, "fila": n, **perfil})
+                           "saldo": saldo, "fila": n, "tipo": tipo, **perfil})
         except ValueError as exc:
             malas.append({"fila": n, "texto": linea.strip()[:80], "motivo": str(exc)})
     return buenas, malas
@@ -1205,13 +1271,30 @@ def admin_carga():
             return redirect(url_for("admin"))
         return render_template("admin_carga_vacaciones.html", texto=texto, buenas=buenas, malas=malas)
     buenas, malas = leer_pegado(texto) if texto else ([], [])
+    completa = request.form.get("completa") == "1"
+    # «Es la planilla completa»: los de planta activos que no vienen pegados van a la campanita
+    # (Tamara 14/10/2026: no se borran ni se dan de baja solos; contabilidad decide).
+    faltan = _no_estan_en_lo_pegado(buenas) if (completa and buenas) else []
     if confirmar and buenas:
         r = store.cargar_lote(buenas, hoy())
-        flash(f"Listo: {r['nuevos']} nuevos, {r['actualizados']} actualizados.", "ok")
+        avisados = 0
+        for t in faltan:
+            if store.crear_aviso(t["id"], f"No está en la planilla pegada el {hoy().strftime('%d/%m/%Y')}. "
+                                 "¿Sigue trabajando? Si no, páuselo o dele de baja.",
+                                 g.usuario["usuario"], "no_en_planilla"):
+                avisados += 1
+        flash(f"Listo: {r['nuevos']} nuevos, {r['actualizados']} actualizados."
+              + (f" {avisados} que no estaban en la planilla quedaron en la campanita." if avisados else ""), "ok")
         return redirect(url_for("admin"))
     existentes = {t["cedula"] for t in store.trabajadores(incluir_inactivos=True)} if buenas else set()
     return render_template("admin_carga.html", texto=texto, buenas=buenas, malas=malas,
-                           existentes=existentes)
+                           existentes=existentes, completa=completa, faltan=faltan)
+
+
+def _no_estan_en_lo_pegado(buenas: list[dict]) -> list[dict]:
+    pegadas = {b["cedula"] for b in buenas}
+    return [t for t in store.trabajadores() if t["cedula"] and t["cedula"] not in pegadas
+            and (t.get("tipo") or "planta") == "planta" and not t.get("pausado_en")]
 
 
 # --------------------------------------------------------------------------
@@ -1333,6 +1416,18 @@ def _texto_aviso(p: dict) -> str:
     if p["estado"] == "cancelada":
         return f"Hola {nombre}, su pedido de {que} {cuando} quedó cancelado ({p['respuesta']}). Saludos, Intela."
     return f"Hola {nombre}, su pedido de {que} {cuando} no se pudo aprobar: {p['respuesta']}. Saludos, Intela."
+
+
+@app.route("/admin/avisos", methods=["GET", "POST"])
+@requiere_admin
+def admin_avisos():
+    """La campanita: lo que contabilidad tiene que revisar."""
+    if request.method == "POST":
+        store.resolver_aviso(int(request.form.get("id", 0) or 0), g.usuario["usuario"])
+        flash("Aviso resuelto.", "ok")
+        return redirect(url_for("admin_avisos"))
+    return render_template("admin_avisos.html", abiertos=store.avisos_abiertos(),
+                           resueltos=store.avisos_resueltos())
 
 
 @app.route("/admin/historial", methods=["GET", "POST"])
