@@ -45,23 +45,24 @@
 </div>
 {% endfor %}
 
-{% if edita %}
+{% if agrega %}
 <div class="bloque">
-  <details>
-    <summary>Sin registrar ({{ faltan|length }})</summary>
+  <details {{ 'open' if not edita }}>
+    <summary>{{ 'Sin registrar' if edita else 'Agregar comensal' }} ({{ faltan|length }})</summary>
+    <div class="relleno" style="padding:8px 12px"><input type="search" placeholder="Buscar por nombre…" oninput="var q=this.value.toLowerCase();document.querySelectorAll('.fila-falta').forEach(function(f){f.style.display=f.dataset.n.indexOf(q)<0?'none':''})"></div>
     <table><tbody>
     {% for t in faltan %}
-      <tr>
+      <tr class="fila-falta" data-n="{{ t.nombre|lower }}">
         <td>{{ t.nombre }} <span class="chico">{{ t.area or '' }}{% if t.ya %} · ya tiene {{ 'el almuerzo' if 'almuerzo' in t.ya else 'la cena' }}{% endif %}</span></td>
         <td class="der" style="white-space:nowrap">
           {% if t.whatsapp %}<a class="btn verde chico" href="{{ t.whatsapp }}" target="_blank" rel="noopener">Avisar</a>{% endif %}
-          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}">{{ elegir_horario(('cena|19:00' if 'almuerzo' in t.ya else '')) }} <button class="btn suave chico" type="submit">Registrar</button></form>
+          <form method="POST" class="enlinea"><input type="hidden" name="accion" value="marcar"><input type="hidden" name="trabajador_id" value="{{ t.id }}">{{ elegir_horario('cena|19:00' if 'almuerzo' in t.ya else ('almuerzo|12:00' if 'cena' in t.ya else horario_ahora)) }} <button class="btn suave chico" type="submit">Registrar</button></form>
         </td>
       </tr>
     {% endfor %}
     </tbody></table>
   </details>
-  <div class="nota">Registrar, cambiar (✎) o quitar desde aquí queda con su usuario. Sirve para cualquier día: use ‹ para ir a días anteriores. El usuario del comedor sólo ve los comensales.</div>
+  <div class="nota">{% if edita %}Registrar, cambiar (✎) o quitar desde aquí queda con su usuario. Sirve para cualquier día: use ‹ para ir a días anteriores. El usuario del comedor sólo agrega comensales de hoy.{% else %}Lo que agregue aquí queda con su usuario. Para cambiar o quitar, avise a contabilidad.{% endif %}</div>
 </div>
 {% endif %}
 <style>

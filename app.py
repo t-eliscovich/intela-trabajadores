@@ -803,10 +803,11 @@ def comedor_dia():
     if fecha > hoy():
         fecha = hoy()  # no hay comensales de mañana
     if request.method == "POST":
-        if not es_contabilidad():
+        accion = request.form.get("accion", "")
+        # el comedor puede AGREGAR comensales de HOY (Tamara 14/10/2026); cambiar y quitar, sólo contabilidad
+        if not es_contabilidad() and not (accion == "marcar" and fecha == hoy()):
             abort(403)
         try:
-            accion = request.form.get("accion", "")
             if accion == "marcar":
                 if request.form.get("horario"):
                     tipo, turno = leer_horario(request.form.get("horario"))
@@ -844,16 +845,19 @@ def comedor_dia():
                 cols.append((turno, gente, inv))
         columnas[tipo] = cols
     faltan = []
-    if es_contabilidad():  # el comedor no ve quién falta ni ningún celular
+    agrega = es_contabilidad() or fecha == hoy()  # el comedor agrega comensales de hoy, sin celulares
+    if agrega:
         # el que almorzó también puede faltar la cena: sale con lo que ya tiene
         ya = {}
         for c in comieron:
             ya.setdefault(c["trabajador_id"], set()).add(c["tipo"])
         faltan = [dict(t, ya=ya.get(t["id"], set()),
-                       whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha)) if t["id"] not in ya else None)
+                       whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha))
+                       if t["id"] not in ya and es_contabilidad() else None)
                   for t in store.trabajadores() if len(ya.get(t["id"], ())) < len(TIPOS_COMIDA)]
     return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, columnas=columnas,
-                           faltan=faltan, invitados=invitados, edita=es_contabilidad(),
+                           faltan=faltan, invitados=invitados, edita=es_contabilidad(), agrega=agrega,
+                           horario_ahora=f"{comida_de_ahora()}|{turno_de_ahora(comida_de_ahora())}",
                            total_invitados=sum(i["cantidad"] for i in invitados),
                            feriado=store.feriados(fecha.year).get(fecha),
                            ayer=(fecha - timedelta(days=1)).isoformat(),

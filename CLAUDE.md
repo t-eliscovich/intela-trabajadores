@@ -76,7 +76,7 @@ registrar/registrado, horario, sin registrar, quitar. No «quién comió»,
 (precargados los nacionales de Ecuador, editables en /admin/feriados) salen en
 gris en Comidas del mes y se ocultan si no comió nadie.
 
-**El usuario del comedor SÓLO MIRA** (Tamara, 17/09/2026: «no debe ver nada más
+**El usuario del comedor mira y AGREGA comensales de HOY** (Tamara 14/10/2026: «que pueda agregar comensales también»; con su usuario, sin celulares; cambiar y quitar sigue siendo de contabilidad). Antes: SÓLO MIRABA (Tamara, 17/09/2026: «no debe ver nada más
 que quién comió, nada de celulares»). Con `rol = 'comedor'` (antes `cafeteria`;
 el esquema lo renombra) entra a /comedor/dia y ve los comensales del día, nada
 más: sin «Sin registrar», sin celulares ni wa.me, sin botones de registrar o
