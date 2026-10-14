@@ -4,8 +4,12 @@
 {% block contenido %}
 {% include "_recibo_estilos.html" %}
 <style>
-  .rol-acciones{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-bottom:12px}
-  @media(max-width:560px){.rol-acciones{grid-template-columns:1fr 1fr}.rol-acciones .vuelta{grid-column:1/-1;justify-self:start}.rol-acciones .hueco{display:none}}
+  /* Que la fila de botones nunca sea más ancha que el recibo (Tamara 14/10: «esta tabla está toda torcida»):
+     se acomodan en dos renglones si no entran, sin salirse por la derecha. */
+  .rol-acciones{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;min-width:0}
+  .rol-acciones .btn{min-width:0;white-space:nowrap}
+  .rol-acciones .hueco{flex:1 1 0;min-width:0}
+  @media(max-width:620px){.rol-acciones .hueco{flex-basis:100%;height:0}.rol-acciones .btn:not(.vuelta){flex:1 1 0}}
 </style>
 <div class="rol-acciones">
   <a class="btn suave chico vuelta" href="{{ url_for('admin_roles', mes='%d-%02d'|format(r.anio, r.mes)) }}">‹ {{ nombre_mes(r.anio, r.mes) }}</a>

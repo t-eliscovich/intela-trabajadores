@@ -58,6 +58,7 @@ class BaseFalsa:
         self.cert: dict[int, dict] = {}
         self.rol: dict[int, dict] = {}
         self.cons: dict[int, dict] = {}
+        self.cod: dict[int, dict] = {}
         self.avi: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
@@ -701,6 +702,66 @@ class BaseFalsa:
 
     def activar_usuario(self, id_, activo):
         self.usu[id_]["activo"] = activo
+
+
+class _ClaveRol:
+    """La contraseña del rol y los códigos por correo, en memoria."""
+
+    def guardar_clave_rol(self, trabajador_id, clave_hash, email):
+        self.trab[trabajador_id].update(clave_rol_hash=clave_hash, clave_rol_en=datetime.now(), email=email,
+                                        clave_rol_fallidos=0, clave_rol_trabado_hasta=None)
+
+    def borrar_clave_rol(self, trabajador_id):
+        self.trab[trabajador_id].update(clave_rol_hash=None, clave_rol_en=None, clave_rol_fallidos=0,
+                                        clave_rol_trabado_hasta=None)
+
+    def clave_rol_fallida(self, trabajador_id):
+        from datetime import timedelta
+        t = self.trab[trabajador_id]
+        n = (t.get("clave_rol_fallidos") or 0) + 1
+        if n >= 5:
+            t.update(clave_rol_fallidos=0, clave_rol_trabado_hasta=datetime.now() + timedelta(minutes=15))
+        else:
+            t["clave_rol_fallidos"] = n
+
+    def clave_rol_buena(self, trabajador_id):
+        self.trab[trabajador_id].update(clave_rol_fallidos=0, clave_rol_trabado_hasta=None)
+
+    def clave_rol_trabada(self, trabajador_id):
+        h = self.trab[trabajador_id].get("clave_rol_trabado_hasta")
+        return bool(h and h > datetime.now())
+
+    def codigos_recientes(self, trabajador_id, minutos):
+        from datetime import timedelta
+        desde = datetime.now() - timedelta(minutes=minutos)
+        return sum(1 for c in self.cod.values() if c["trabajador_id"] == trabajador_id and c["creado_en"] > desde)
+
+    def crear_codigo_correo(self, trabajador_id, email, codigo_hash):
+        from datetime import timedelta
+        for c in self.cod.values():
+            if c["trabajador_id"] == trabajador_id and not c["usado_en"]:
+                c["usado_en"] = datetime.now()
+        id_ = self._id()
+        self.cod[id_] = {"id": id_, "trabajador_id": trabajador_id, "email": email, "codigo_hash": codigo_hash,
+                         "creado_en": datetime.now(), "vence_en": datetime.now() + timedelta(minutes=15),
+                         "intentos": 0, "usado_en": None}
+        return id_
+
+    def codigo_vivo(self, trabajador_id):
+        vivos = [c for c in self.cod.values() if c["trabajador_id"] == trabajador_id and not c["usado_en"]
+                 and c["vence_en"] > datetime.now() and c["intentos"] < 5]
+        return dict(max(vivos, key=lambda c: c["creado_en"])) if vivos else None
+
+    def codigo_intento_malo(self, id_):
+        self.cod[id_]["intentos"] += 1
+
+    def codigo_usado(self, id_):
+        self.cod[id_]["usado_en"] = datetime.now()
+
+
+for _n in dir(_ClaveRol):
+    if not _n.startswith("_"):
+        setattr(BaseFalsa, _n, getattr(_ClaveRol, _n))
 
 
 FUNCIONES = [n for n in dir(BaseFalsa) if not n.startswith("_") and callable(getattr(BaseFalsa, n))]

@@ -923,6 +923,111 @@ def _png_firma():
     return "data:image/png;base64," + _b64.b64encode(b.getvalue()).decode()
 
 
+# --- CONTRASEÑA DEL ROL (Tamara 14/10/2026: «tiene que poner cédula e email, le llega el código
+# y luego registra contraseña») ---
+from werkzeug.security import check_password_hash  # noqa: E402
+MANDADOS = []
+A.correo.mandar_codigo = lambda para, nombre, codigo, minutos, para_que: (MANDADOS.append(
+    {"para": para, "nombre": nombre, "codigo": codigo, "para_que": para_que}), (True, ""))[1]
+
+
+def _sin_espera():
+    """Los tests no esperan el minuto entre códigos."""
+    for x in base.cod.values():
+        x["creado_en"] -= timedelta(minutes=61)
+
+
+r = rw.get("/yo/rol")
+check("el rol pide contraseña antes que nada (también la constancia, que tiene la cuenta)", r.status_code == 302 and "/yo/rol/clave" in r.headers["Location"]
+      and "/yo/rol/clave" in rw.get("/yo/constancia").headers.get("Location", "")
+      and "/yo/rol/clave" in rw.get(f"/yo/rol/{rid_rosa}/imprimir").headers.get("Location", ""))
+check("las vacaciones siguen sin contraseña", rw.get("/yo/vacaciones").status_code == 200)
+html = rw.get("/yo/rol/clave").get_data(as_text=True)
+check("la primera vez: «Proteja su rol de pagos», los 3 pasos y el correo", "Proteja su rol de pagos" in html and "Correo" in html
+      and "Código" in html and 'name="email"' in html and "Mandarme el código" in html)
+r = rw.post("/yo/rol/clave", data={"accion": "mandar", "email": "no es correo"})
+check("un correo mal escrito no manda nada", "no parece un correo" in r.get_data(as_text=True) and not MANDADOS)
+r = rw.post("/yo/rol/clave", data={"accion": "mandar", "email": "Rosa.Vera@Gmail.com "})
+html = r.get_data(as_text=True)
+check("manda el código al correo y lo muestra tapado", len(MANDADOS) == 1 and MANDADOS[0]["para"] == "rosa.vera@gmail.com"
+      and MANDADOS[0]["nombre"] == "Ana" and len(MANDADOS[0]["codigo"]) == 6 and "ro•••a@gmail.com" in html and "Cree su contraseña" in html
+      and 'autocomplete="one-time-code"' in html)
+check("el código no se guarda a la vista (va cifrado)", all(MANDADOS[0]["codigo"] not in x["codigo_hash"] for x in base.cod.values()))
+r = rw.post("/yo/rol/clave", data={"accion": "reenviar", "email": "rosa.vera@gmail.com"})
+check("no manda otro antes de un minuto", "hace menos de un minuto" in r.get_data(as_text=True) and len(MANDADOS) == 1)
+_bueno = MANDADOS[0]["codigo"]
+_malo = "000000" if _bueno != "000000" else "111111"
+r = rw.post("/yo/rol/clave", data={"accion": "crear", "codigo": _malo, "clave": "rosa2026", "repetir": "rosa2026"})
+check("un código malo no sirve", "Ese código no sirve" in r.get_data(as_text=True) and not base.trabajador(rosa).get("clave_rol_hash"))
+r = rw.post("/yo/rol/clave", data={"accion": "crear", "codigo": _bueno, "clave": "rosa2026", "repetir": "otra2026"})
+check("las dos contraseñas tienen que ser iguales (y no pierde el código escrito)", "no son iguales" in r.get_data(as_text=True)
+      and f'value="{_bueno}"' in r.get_data(as_text=True))
+r = rw.post("/yo/rol/clave", data={"accion": "crear", "codigo": _bueno, "clave": "1700000001", "repetir": "1700000001"})
+check("la cédula no sirve de contraseña", "muy fácil" in r.get_data(as_text=True))
+r = rw.post("/yo/rol/clave", data={"accion": "crear", "codigo": _bueno, "clave": "rosa2026", "repetir": "rosa2026"})
+_t = base.trabajador(rosa)
+check("con el código bueno guarda la contraseña (cifrada) y el correo, y abre el rol", r.status_code == 302 and _t["clave_rol_hash"]
+      and "rosa2026" not in _t["clave_rol_hash"] and _t["email"] == "rosa.vera@gmail.com" and "/yo/constancia" in rw.get("/yo/rol").headers["Location"])
+r = A.app.test_client(); r.post("/", data={"cedula": "1700000001"})
+check("con la cédula sola, en otro celular, el rol sigue cerrado", "/yo/rol/clave" in r.get("/yo/rol").headers["Location"])
+_otro_cel = r
+html = _otro_cel.get("/yo/rol/clave").get_data(as_text=True)
+check("y ahí pide la contraseña, con «¿Olvidó su contraseña?»", "Escriba su contraseña" in html and "¿Olvidó su contraseña?" in html)
+check("el código ya usado no sirve otra vez", "no sirve" in _otro_cel.post("/yo/rol/clave", data={"accion": "crear", "codigo": _bueno,
+      "clave": "intruso1", "repetir": "intruso1"}).get_data(as_text=True))
+for _i in range(5):
+    _otro_cel.post("/yo/rol/clave", data={"accion": "entrar", "clave": "mala"})
+r = _otro_cel.post("/yo/rol/clave", data={"accion": "entrar", "clave": "rosa2026"})
+check("después de 5 contraseñas malas se traba un rato, aunque ponga la buena", "espere 15 minutos" in r.get_data(as_text=True)
+      and "/yo/rol/clave" in _otro_cel.get("/yo/rol").headers["Location"])
+base.clave_rol_buena(rosa)
+r = _otro_cel.post("/yo/rol/clave", data={"accion": "entrar", "clave": "rosa2026"})
+check("con la contraseña buena entra", r.status_code == 302 and "/yo/constancia" in _otro_cel.get("/yo/rol").headers["Location"])
+_sin_espera()
+_otro_cel = A.app.test_client(); _otro_cel.post("/", data={"cedula": "1700000001"})
+r = _otro_cel.post("/yo/rol/clave", data={"accion": "olvide"})
+check("¿Olvidó su contraseña?: le manda un código al correo que tiene", MANDADOS[-1]["para"] == "rosa.vera@gmail.com"
+      and MANDADOS[-1]["para_que"] == "olvido" and "Cambie su contraseña" in r.get_data(as_text=True))
+_otro_cel.post("/yo/rol/clave", data={"accion": "crear", "codigo": MANDADOS[-1]["codigo"], "clave": "nueva2026", "repetir": "nueva2026"})
+check("con el código, cambia la contraseña; el celular que entró con la vieja se cierra solo",
+      check_password_hash(base.trabajador(rosa)["clave_rol_hash"], "nueva2026") and "/yo/rol/clave" in rw.get("/yo/rol").headers["Location"])
+rw.post("/yo/rol/clave", data={"accion": "entrar", "clave": "nueva2026"})
+r = rw.post("/yo/rol/salir")
+check("«Salir del rol» lo cierra en ese celular", "/yo/rol/clave" in rw.get("/yo/rol").headers["Location"])
+rw.post("/yo/rol/clave", data={"accion": "entrar", "clave": "nueva2026"})
+html = c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True)
+check("contabilidad ve en la ficha que tiene contraseña y a qué correo", "Contraseña del rol" in html and "rosa.vera@gmail.com" in html
+      and "Borrar contraseña" in html)
+_cl4 = A.app.test_client(); _cl4.post("/", data={"cedula": "1700000001"})
+_h, _hen = base.trabajador(rosa)["clave_rol_hash"], base.trabajador(rosa)["clave_rol_en"]
+c.post(f"/admin/trabajador/{rosa}", data={"accion": "borrar_clave_rol"})
+check("si contabilidad la borra, la vuelve a crear con su correo", not base.trabajador(rosa)["clave_rol_hash"]
+      and "Proteja su rol" in _cl4.get("/yo/rol/clave").get_data(as_text=True))
+base.trab[rosa].update(clave_rol_hash=_h, clave_rol_en=_hen)
+
+
+_falso_mandar = A.correo.mandar_codigo
+os.environ["MAIL_ENVIAR"] = "0"
+import importlib  # noqa: E402
+_cr = importlib.reload(importlib.import_module("correo"))
+check("el correo de verdad nunca rompe: apagado o sin SES dice por qué", _cr.mandar_codigo("x@y.ec", "Ana", "123456", 15, "crear")[0] is False
+      and "apagado" in _cr.mandar_codigo("x@y.ec", "Ana", "123456", 15, "crear")[1])
+os.environ.pop("MAIL_ENVIAR")
+A.correo.mandar_codigo = lambda *a, **k: (False, "SES caído")
+_cl5 = A.app.test_client(); _t5 = base.crear_trabajador("1700000555", "Prueba Correo", date(2020, 1, 1)); _cl5.post("/", data={"cedula": "1700000555"})
+r = _cl5.post("/yo/rol/clave", data={"accion": "mandar", "email": "p@correo.ec"})
+check("si el correo no sale, se lo dice simple y no le pide un código que no le llegó", "No pudimos mandar el correo" in r.get_data(as_text=True)
+      and "Mandarme el código" in r.get_data(as_text=True))
+A.correo.mandar_codigo = _falso_mandar
+
+
+def _con_clave(cl, tid, clave="clave2026"):
+    """Para los demás tests: crea la contraseña del rol y lo deja abierto."""
+    _sin_espera()
+    cl.post("/yo/rol/clave", data={"accion": "mandar", "email": f"t{tid}@correo.ec"})
+    cl.post("/yo/rol/clave", data={"accion": "crear", "codigo": MANDADOS[-1]["codigo"], "clave": clave, "repetir": clave})
+
+
 r = rw.get("/yo/rol")
 check("sin la constancia firmada, «Rol de pagos» manda a firmarla", r.status_code == 302 and "/yo/constancia" in r.headers["Location"])
 check("y tampoco deja imprimir ni firmar roles", "/yo/constancia" in rw.get(f"/yo/rol/{rid_rosa}/imprimir").headers.get("Location", "")
@@ -957,7 +1062,7 @@ check("la ve impresa con la huella", _c["huella"] in c.get(f"/admin/constancias/
 check("el comedor y el trabajador no entran a las constancias", m.get("/admin/constancias").status_code == 302 and rw.get("/admin/constancias").status_code == 302)
 check("Roles de pago muestra cuántos firmaron la constancia", "Constancia de roles de pago" in c.get("/admin/roles").get_data(as_text=True))
 check("y la ficha, el banco y la cuenta", "2200123456" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
-_c2 = base.crear_trabajador("1700000999", "Prueba Anular", date(2020, 1, 1)); _w2 = A.app.test_client(); _w2.post("/", data={"cedula": "1700000999"})
+_c2 = base.crear_trabajador("1700000999", "Prueba Anular", date(2020, 1, 1)); _w2 = A.app.test_client(); _w2.post("/", data={"cedula": "1700000999"}); _con_clave(_w2, _c2)
 _w2.post("/yo/constancia", data={"banco": "Produbanco", "cuenta": "123456", "cuenta2": "123456", "firma": _png_firma()})
 _id2 = base.constancia_de(_c2)["id"]
 r = c.post("/admin/constancias", data={"id": _id2, "motivo": ""}, follow_redirects=True)
@@ -1185,9 +1290,14 @@ _mar = [x for x in base.roles_del_mes(2026, 3) if x["trabajador_id"] == (_n2 or 
 check("acumulado: lo crea con la cédula del archivo y carga sus dos meses", "Se creó 1 trabajador nuevo" in r.get_data(as_text=True) and _n2 and _oct and _mar)
 check("acumulado: octubre pide firma, marzo queda firmado en papel", _oct and _oct[0]["pide_firma"] and _mar and not _mar[0]["pide_firma"])
 check("el comedor no entra a Roles de pago", m.get("/admin/roles").status_code == 302)
-check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in (lambda cl: (base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1)), cl.post("/", data={"cedula": "1711112222"}),
-                     cl.post("/yo/constancia", data={"banco": "BanEcuador", "cuenta": "55555", "cuenta2": "55555", "firma": _png_firma()}),
-                     cl.get("/yo/rol").get_data(as_text=True))[3])(A.app.test_client()))
+def _sin_rol_todavia(cl):
+    tid = base.crear_trabajador("1711112222", "Sin Rol Todavía", date(2025, 1, 1))
+    cl.post("/", data={"cedula": "1711112222"}); _con_clave(cl, tid)
+    cl.post("/yo/constancia", data={"banco": "BanEcuador", "cuenta": "55555", "cuenta2": "55555", "firma": _png_firma()})
+    return cl.get("/yo/rol").get_data(as_text=True)
+
+
+check("sin rol todavía, el trabajador ve un aviso amable", "Todavía no hay roles" in _sin_rol_todavia(A.app.test_client()))
 
 import re as _re0  # noqa: E402
 _pegadas = [x[:60] for x in _store_real._sentencias(_store_real.ESQUEMA)

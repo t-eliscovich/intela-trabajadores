@@ -101,7 +101,7 @@
 <div class="bloque">
   <div class="desliza">
   <table>
-    <thead><tr>{% if rev %}<th class="caja-sel no-imprime"><input type="checkbox" id="todos" title="Elegir todos los que se ven"></th>{% endif %}<th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th>{% if rev %}<th>Revisó</th><th>Contabilidad</th>{% endif %}<th>Firma</th><th class="oculta-chico"></th></tr></thead>
+    <thead><tr>{% if rev %}<th class="caja-sel no-imprime"><input type="checkbox" id="todos" title="Elegir todos los que se ven"></th>{% endif %}<th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th>{% if rev %}<th>Revisó</th><th>Firmó</th>{% endif %}<th>Firma</th><th class="oculta-chico"></th></tr></thead>
     <tbody>
     {% for r in filas %}
       {% set paso = '' if not r.necesita_aprobacion else ('aprobado' if r.aprobado_en else ('aprobar' if r.revisado_en else 'revisar')) %}
@@ -112,8 +112,8 @@
         <td class="der oculta-chico">{{ r.total_descuentos|dinero }}</td>
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
         {% if rev %}
-        <td>{% if r.revisado_en %}<span class="etiqueta ok">✓ {{ r.revisado_por }}</span><span class="chico">{{ r.revisado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
-        <td>{% if r.aprobado_en %}<span class="etiqueta ok">✓ {{ r.aprobado_por }}</span><span class="chico">{{ r.aprobado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
+        <td>{% if r.revisado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.revisado_por }}">✓ {{ r.revisado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.revisado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
+        <td>{% if r.aprobado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.aprobado_por }}">✓ {{ r.aprobado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.aprobado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
         {% endif %}
         <td>{% if not r.visible %}<span class="tenue">Todavía no lo ve</span>
             {% elif not r.pide_firma %}<span class="etiqueta ok">✓ En papel</span><span class="chico">firmado fuera de la app</span>

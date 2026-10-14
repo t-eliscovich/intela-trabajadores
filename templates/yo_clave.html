@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block titulo %}Rol de pagos · contraseña{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block barra_derecha %}{% include "_barra_yo.html" %}{% endblock %}
+{% block contenido %}
+{# La contraseña del rol de pagos (Tamara 14/10/2026): «pone cédula e email, le llega
+   el código y luego registra contraseña. Hacelo lindo». Tres modos en una pantalla:
+   correo (la primera vez) → codigo (el de 6 números + la contraseña nueva) → entrar. #}
+{% include "_pestanas_yo.html" %}
+<style>
+  .candado{background:var(--papel);border:1px solid var(--borde);border-radius:20px;padding:22px 18px 20px;
+           box-shadow:0 10px 30px rgba(15,41,66,.06)}
+  .candado-icono{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;margin:0 auto 12px;
+                 background:linear-gradient(160deg,#1e3a5f,#0f2942);color:#fff}
+  .candado-icono svg{width:28px;height:28px}
+  .candado h1{display:block;text-align:center;font-size:22px;letter-spacing:-.02em;margin:0 0 6px}
+  .candado .bajada{text-align:center;color:var(--gris);margin:0 auto 18px;max-width:330px;font-size:15px}
+  .pasitos{display:flex;justify-content:center;gap:6px;margin:0 0 18px;padding:0;list-style:none}
+  .pasitos li{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--gris-claro)}
+  .pasitos li b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;
+                background:#eef1f5;color:var(--gris)}
+  .pasitos li.ya b{background:var(--verde);color:#fff}
+  .pasitos li.ahora{color:var(--azul)}
+  .pasitos li.ahora b{background:var(--azul);color:#fff}
+  .pasitos li + li::before{content:"";width:14px;height:2px;background:var(--borde);border-radius:2px;margin-right:2px}
+  .candado label{display:block;font-weight:700;font-size:14px;margin:0 0 6px}
+  .candado input{width:100%;height:52px;font-size:18px;border-radius:12px}
+  .candado .campo-sep{margin-top:14px}
+  .seis{text-align:center;font-size:30px !important;letter-spacing:.42em;font-weight:800;font-variant-numeric:tabular-nums;
+        padding-left:.42em}
+  .candado .btn.grande{width:100%;height:54px;font-size:17px;border-radius:14px;margin-top:16px}
+  .candado .ayuda{font-size:13px;color:var(--gris);margin:6px 0 0}
+  .enlaces{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:14px}
+  .enlaces form{display:inline}
+  .enlaces button{background:none;border:0;padding:0;color:var(--acento);font:inherit;cursor:pointer;text-decoration:underline}
+  .correo-a{display:inline-block;background:#eef3fa;color:var(--azul);font-weight:700;border-radius:999px;padding:3px 12px;margin-top:4px}
+  .ver-clave{position:relative}
+  .ver-clave button{position:absolute;right:6px;top:6px;height:40px;padding:0 10px;border:0;background:none;color:var(--gris);
+                    font-size:13px;font-weight:700;cursor:pointer}
+  .seguro{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:10px 12px;border-radius:12px;background:#f6f8fb;
+          font-size:13px;color:var(--gris)}
+</style>
+
+<div class="candado">
+  <div class="candado-icono" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.4" fill="currentColor"/></svg>
+  </div>
+
+  {% if modo == 'entrar' %}
+    <h1>Su rol de pagos</h1>
+    <p class="bajada">Escriba su contraseña para ver y firmar sus roles.</p>
+    <form method="POST" action="{{ url_for('yo_rol_clave') }}" autocomplete="on">
+      <input type="hidden" name="accion" value="entrar"><input type="hidden" name="next" value="{{ next or '' }}">
+      <input type="hidden" name="username" value="{{ t.cedula }}" autocomplete="username">
+      <label for="clave">Contraseña</label>
+      <div class="ver-clave"><input id="clave" type="password" name="clave" required autofocus autocomplete="current-password">
+        <button type="button" data-ver="clave">Ver</button></div>
+      <button class="btn grande" type="submit">Entrar</button>
+    </form>
+    <div class="enlaces">
+      <form method="POST" action="{{ url_for('yo_rol_clave') }}"><input type="hidden" name="accion" value="olvide"><input type="hidden" name="next" value="{{ next or '' }}">
+        <button type="submit">¿Olvidó su contraseña?</button></form>
+    </div>
+    {% if tapado %}<p class="ayuda" style="text-align:center;margin-top:8px">Si la olvidó, le mandamos un código a {{ tapado }}.</p>{% endif %}
+
+  {% elif modo == 'correo' %}
+    <h1>Proteja su rol de pagos</h1>
+    <p class="bajada">Su rol es personal. Para verlo, cree una contraseña: le mandamos un código a su correo para confirmar que es usted.</p>
+    <ol class="pasitos"><li class="ahora"><b>1</b>Correo</li><li><b>2</b>Código</li><li><b>3</b>Contraseña</li></ol>
+    <form method="POST" action="{{ url_for('yo_rol_clave') }}" autocomplete="on">
+      <input type="hidden" name="accion" value="mandar"><input type="hidden" name="next" value="{{ next or '' }}">
+      <label for="email">Su correo</label>
+      <input id="email" type="email" name="email" value="{{ email }}" required autofocus inputmode="email" autocomplete="email"
+             autocapitalize="none" spellcheck="false" placeholder="nombre@gmail.com">
+      <p class="ayuda">Use un correo que usted revise. Ahí le llega el código y, si se olvida la contraseña, el código para cambiarla.</p>
+      <button class="btn grande" type="submit">Mandarme el código</button>
+    </form>
+    <div class="seguro"><span aria-hidden="true">🔒</span><span>Sólo usted ve su rol. Ni sus compañeros ni nadie con su cédula lo pueden abrir sin su contraseña.</span></div>
+
+  {% elif modo == 'codigo' %}
+    <h1>{{ 'Cambie su contraseña' if t.clave_rol_hash else 'Cree su contraseña' }}</h1>
+    <p class="bajada">Le mandamos un código de 6 números a<br><span class="correo-a">{{ tapado }}</span></p>
+    {% if not t.clave_rol_hash %}<ol class="pasitos"><li class="ya"><b>✓</b>Correo</li><li class="ahora"><b>2</b>Código</li><li class="ahora"><b>3</b>Contraseña</li></ol>{% endif %}
+    <form method="POST" action="{{ url_for('yo_rol_clave') }}" autocomplete="off">
+      <input type="hidden" name="accion" value="crear"><input type="hidden" name="next" value="{{ next or '' }}">
+      <input type="hidden" name="username" value="{{ t.cedula }}" autocomplete="username">
+      <label for="codigo">El código del correo</label>
+      <input id="codigo" class="seis" name="codigo" value="{{ codigo or '' }}" required inputmode="numeric" pattern="[0-9 ]{6,7}"
+             maxlength="7" autocomplete="one-time-code" placeholder="······" {% if not codigo %}autofocus{% endif %}>
+      <p class="ayuda">Vale por {{ minutos }} minutos. Si no lo ve, revise «Spam» o «Promociones».</p>
+      <div class="campo-sep"><label for="clave">Contraseña nueva</label>
+        <div class="ver-clave"><input id="clave" type="password" name="clave" required minlength="6" autocomplete="new-password" {% if codigo %}autofocus{% endif %}>
+          <button type="button" data-ver="clave">Ver</button></div>
+        <p class="ayuda">Al menos 6 letras o números. Que no sea su cédula.</p></div>
+      <div class="campo-sep"><label for="repetir">Repita la contraseña</label>
+        <input id="repetir" type="password" name="repetir" required minlength="6" autocomplete="new-password"></div>
+      <button class="btn verde grande" type="submit">Guardar y ver mi rol</button>
+    </form>
+    <div class="enlaces">
+      <form method="POST" action="{{ url_for('yo_rol_clave') }}"><input type="hidden" name="accion" value="{{ 'olvide' if t.clave_rol_hash else 'reenviar' }}">
+        <input type="hidden" name="email" value="{{ email }}"><input type="hidden" name="next" value="{{ next or '' }}">
+        <button type="submit">Mandarme otro código</button></form>
+      {% if not t.clave_rol_hash %}<a href="{{ url_for('yo_rol_clave', correo=1, next=next) }}">Cambiar el correo</a>{% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{% if modo == 'entrar' %}
+<p class="tenue" style="text-align:center;font-size:13px;margin-top:14px">Sus vacaciones se ven sin contraseña, sólo con la cédula.</p>
+{% endif %}
+
+<script>
+  document.querySelectorAll('[data-ver]').forEach(function(b){ b.onclick=function(){
+    var i=document.getElementById(b.dataset.ver), ver=i.type==='password'; i.type=ver?'text':'password'; b.textContent=ver?'Ocultar':'Ver'; }; });
+  var seis=document.getElementById('codigo');
+  if(seis) seis.addEventListener('input', function(){ var v=seis.value.replace(/\D/g,'').slice(0,6); if(seis.value!==v) seis.value=v;
+    if(v.length===6){ var c=document.getElementById('clave'); if(c && !c.value) c.focus(); } });
+</script>
+{% endblock %}

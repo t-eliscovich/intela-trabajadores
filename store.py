@@ -1362,3 +1362,87 @@ def cambiar_clave(id_: int, clave_hash: str) -> None:
 
 def activar_usuario(id_: int, activo: bool) -> None:
     _ejecutar("UPDATE trabajadores.usuario SET activo=%s WHERE id=%s", (activo, id_))
+
+
+# --------------------------------------------------------------------------
+# Contraseña del rol de pagos (Tamara 14/10/2026)
+# --------------------------------------------------------------------------
+INTENTOS_CLAVE_ROL = 5      # después de 5 claves malas, se traba
+MINUTOS_TRABADO = 15
+MINUTOS_CODIGO = 15
+INTENTOS_CODIGO = 5
+
+
+def guardar_clave_rol(trabajador_id: int, clave_hash: str, email: str) -> None:
+    _ejecutar("""UPDATE trabajadores.trabajador
+                    SET clave_rol_hash = %s, clave_rol_en = now(), email = %s,
+                        clave_rol_fallidos = 0, clave_rol_trabado_hasta = NULL
+                  WHERE id = %s""", (clave_hash, email, trabajador_id))
+
+
+def borrar_clave_rol(trabajador_id: int) -> None:
+    """Contabilidad la borra (cambió de correo, o alguien la creó por él): la vuelve a crear."""
+    _ejecutar("""UPDATE trabajadores.trabajador
+                    SET clave_rol_hash = NULL, clave_rol_en = NULL, clave_rol_fallidos = 0,
+                        clave_rol_trabado_hasta = NULL
+                  WHERE id = %s""", (trabajador_id,))
+
+
+def clave_rol_fallida(trabajador_id: int) -> None:
+    _ejecutar(f"""UPDATE trabajadores.trabajador
+                     SET clave_rol_fallidos = CASE WHEN clave_rol_fallidos + 1 >= {INTENTOS_CLAVE_ROL}
+                                                   THEN 0 ELSE clave_rol_fallidos + 1 END,
+                         clave_rol_trabado_hasta = CASE WHEN clave_rol_fallidos + 1 >= {INTENTOS_CLAVE_ROL}
+                                                        THEN now() + interval '{MINUTOS_TRABADO} minutes'
+                                                        ELSE clave_rol_trabado_hasta END
+                   WHERE id = %s""", (trabajador_id,))
+
+
+def clave_rol_buena(trabajador_id: int) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET clave_rol_fallidos = 0, clave_rol_trabado_hasta = NULL WHERE id = %s",
+              (trabajador_id,))
+
+
+def clave_rol_trabada(trabajador_id: int) -> bool:
+    r = _uno("SELECT clave_rol_trabado_hasta > now() AS t FROM trabajadores.trabajador WHERE id = %s", (trabajador_id,))
+    return bool(r and r["t"])
+
+
+def codigos_recientes(trabajador_id: int, minutos: int) -> int:
+    r = _uno("""SELECT count(*) AS n FROM trabajadores.codigo_correo
+                 WHERE trabajador_id = %s AND creado_en > now() - make_interval(mins => %s)""",
+             (trabajador_id, minutos))
+    return int(r["n"]) if r else 0
+
+
+def crear_codigo_correo(trabajador_id: int, email: str, codigo_hash: str) -> int:
+    """Un código nuevo deja sin valor a los anteriores."""
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.codigo_correo SET usado_en = now()
+                            WHERE trabajador_id = %s AND usado_en IS NULL""", (trabajador_id,))
+            cur.execute(f"""INSERT INTO trabajadores.codigo_correo (trabajador_id, email, codigo_hash, vence_en)
+                            VALUES (%s, %s, %s, now() + interval '{MINUTOS_CODIGO} minutes') RETURNING id""",
+                        (trabajador_id, email, codigo_hash))
+            id_ = cur.fetchone()[0]
+            con.commit()
+            return id_
+        except Exception:
+            con.rollback()
+            raise
+
+
+def codigo_vivo(trabajador_id: int) -> dict | None:
+    """El último código que todavía sirve (no usado, no vencido, con intentos)."""
+    return _uno(f"""SELECT id, email, codigo_hash, intentos FROM trabajadores.codigo_correo
+                     WHERE trabajador_id = %s AND usado_en IS NULL AND vence_en > now()
+                       AND intentos < {INTENTOS_CODIGO}
+                     ORDER BY creado_en DESC LIMIT 1""", (trabajador_id,))
+
+
+def codigo_intento_malo(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.codigo_correo SET intentos = intentos + 1 WHERE id = %s", (id_,))
+
+
+def codigo_usado(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.codigo_correo SET usado_en = now() WHERE id = %s", (id_,))
