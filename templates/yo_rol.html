@@ -29,6 +29,7 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if not r.firmado_en and r.pide_firma is not sameas false %}<a class="btn verde" href="#form-firma" style="width:100%;margin-bottom:8px">Revise su rol y firme abajo ↓</a>{% endif %}
 <div class="bloque">{% with de_trabajador = true %}{% include "_recibo.html" %}{% endwith %}</div>
 {% if r.firmado_en or r.pide_firma is sameas false %}
 <a class="btn suave" href="{{ url_for('yo_rol_imprimir', id_=r.id, auto=1) }}" style="width:100%;margin-bottom:12px">Imprimir o guardar en PDF</a>

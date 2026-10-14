@@ -12,6 +12,7 @@
   .rec-datos{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1.5px solid #0f172a}
   .rec-datos > div{padding:4px 6px;text-align:center;border-right:1px solid #0f172a;font-variant-numeric:tabular-nums;font-size:12.5px}
   .rec-datos > div:last-child{border-right:0}
+  .rec-datos.sin-impresion{grid-template-columns:repeat(4,minmax(0,1fr))}
   .rec-datos span{display:block;font-size:8.5px;letter-spacing:.03em;margin-bottom:1px}
   .rec-periodo b,.rec-desc,.rec-firma .linea{text-transform:uppercase}
   .rec-periodo b{font-size:12.5px}
@@ -49,12 +50,17 @@
     .rec .rec-marca{width:80px}
     .rec-datos{grid-template-columns:repeat(4,minmax(0,1fr))}
     .rec-datos > div:nth-child(4){border-right:0}
+    .rec-datos.sin-impresion{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .rec-datos.sin-impresion > div:nth-child(3){border-right:0}
     .rec-datos .rec-periodo{grid-column:1/-1;border-top:1px solid #0f172a;border-right:0;padding:3px}
     .rec-datos > div{font-size:11.5px;padding:3px 3px}
     .rec-datos span{font-size:7.5px;letter-spacing:0}
     .rec-cols{grid-template-columns:1fr}
     .rec-col + .rec-col{border-left:0;border-top:1.5px solid #0f172a}
-    .rec-firmas{grid-template-columns:1fr;gap:10px}
+    .rec-firmas{grid-template-columns:1fr 1fr;gap:16px;padding:4px 10px 8px}
+    .rec-firma{font-size:10px}
+    .rec-firma .trazo{height:44px}
+    .rec-firma .trazo img{max-height:44px}
   }
   @media print{.rec{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .constancia{padding:10px 16px 12px}
