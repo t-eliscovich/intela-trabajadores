@@ -266,7 +266,7 @@ las funciones de `store` una por una, no el módulo entero.
   contabilidad y la hoja impresa): cabecera «intela · ROL DE PAGOS» + nombre, fechas de
   ingreso / salida / impresión, sueldo, período; Ingresos y Descuentos con COD
   (`cod_rol`: el lugar en `roles.INGRESOS` / `DESCUENTOS`, como WinAfin) · DESCRIPCIÓN ·
-  VALOR; totales en recuadro; A RECIBIR; firmas «Dpto. de RR.HH.» y el trabajador.
+  VALOR; totales en recuadro; A RECIBIR; firmas «Contabilidad» (antes «Dpto. de RR.HH.», Tamara 14/10) y el trabajador con su C.I. debajo.
 - **«Salir» siempre visible** en el celular del trabajador (`_barra_yo.html`).
 - **Los meses del rol en grilla de 4**, sin scroll de costado.
 - **La tablet es un toque** (el que puede invitar elige «¿Trae invitados? No·1·2·3» + quiénes DEBAJO del horario, misma pantalla, y toca Registrar): cédula → nombre + un botón por horario (el de ahora en

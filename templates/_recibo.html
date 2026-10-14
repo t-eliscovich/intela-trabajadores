@@ -44,12 +44,13 @@
   </div>
   {% if con_firmas %}
   <div class="rec-firmas">
-    <div class="rec-firma"><div class="trazo"></div><div class="linea">Dpto. de RR.HH.</div></div>
+    <div class="rec-firma"><div class="trazo"></div><div class="linea">Contabilidad</div></div>
     <div class="rec-firma">
       {% if r.firmado_en %}<div class="trazo"><img src="{{ url_firma(r.id) }}" alt="Firma"></div>
       {% elif r.pide_firma is sameas false %}<div class="trazo papel">✓ Firmado en papel</div>
       {% else %}<div class="trazo"></div>{% endif %}
       <div class="linea">{{ r.nombre }}</div>
+      {% if r.cedula %}<div class="ci">C.I. {{ r.cedula }}</div>{% endif %}
     </div>
   </div>
   {% endif %}

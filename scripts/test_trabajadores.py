@@ -1020,7 +1020,8 @@ check("el comedor no puede marcarlo", m.post("/admin/roles/papel", data={"mes": 
 _rid = next(x["id"] for x in base.roles_del_mes(2026, 9) if x["trabajador_id"] == rosa)
 html = rw.get(f"/yo/rol/{_rid}/imprimir").get_data(as_text=True)
 check("el trabajador imprime su recibo: INTELA, conceptos, líquido, sin provisiones", "INTELA" in html and "A recibir" in html
-      and "Dpto. de RR.HH." in html and "Fecha / ingreso" in html and "Aporte Patr" not in html and "window.print" in html)
+      and '<div class="linea">Contabilidad</div>' in html and "RR.HH" not in html and "Fecha / ingreso" in html and "Aporte Patr" not in html and "window.print" in html)
+check("debajo de la firma del trabajador va su cédula", f'C.I. {base.trabajador(rosa)["cedula"]}' in html)
 _otro = next(x["id"] for x in base.roles_del_mes(2026, 7) if x["trabajador_id"] != rosa)
 check("y NO el de otro (404)", rw.get(f"/yo/rol/{_otro}/imprimir").status_code == 404)
 check("sin sesión, a la cédula", A.app.test_client().get(f"/yo/rol/{_rid}/imprimir").status_code == 302)
