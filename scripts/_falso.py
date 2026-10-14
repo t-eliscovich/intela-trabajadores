@@ -104,7 +104,8 @@ class BaseFalsa:
     # --- rol de pagos ---
     def _rol_con_trab(self, r):
         t = self.trab[r["trabajador_id"]]
-        r = dict(r, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"))
+        r = dict(r, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"),
+                 fecha_ingreso=t.get("fecha_ingreso"), fecha_salida=t.get("fecha_salida"))
         r.pop("firma", None)
         return r
 
@@ -462,6 +463,16 @@ class BaseFalsa:
             self.alm_turno[(trabajador_id, fecha, tipo)] = turno
             self.alm_quien[(trabajador_id, fecha, tipo)] = marcado_por
         self.alm.add((trabajador_id, fecha, tipo))
+
+    def cambiar_comida(self, trabajador_id, fecha, tipo, tipo_nuevo, turno, marcado_por):
+        viejo, nuevo = (trabajador_id, fecha, tipo), (trabajador_id, fecha, tipo_nuevo)
+        if tipo != tipo_nuevo and nuevo in self.alm:
+            raise ValueError(f"Ya tiene {'el almuerzo' if tipo_nuevo == 'almuerzo' else 'la cena'} registrado ese día.")
+        if viejo not in self.alm:
+            return
+        hora = self.alm_hora.pop(viejo, datetime.now())
+        self.alm_turno.pop(viejo, None); self.alm_quien.pop(viejo, None); self.alm.discard(viejo)
+        self.alm.add(nuevo); self.alm_hora[nuevo] = hora; self.alm_turno[nuevo] = turno; self.alm_quien[nuevo] = marcado_por
 
     def poner_puede_invitar(self, trabajador_id, puede):
         self.trab[trabajador_id]["puede_invitar"] = bool(puede)

@@ -164,32 +164,29 @@ check("la tablet abre con el link, sin sesión, y pide la cédula", "Escriba su 
 check("el corte es a las 15", A.HORA_CENA == 15 and A.comida_de_ahora() in ("almuerzo", "cena"))
 r = k.post(T, data={"cedula": "1712345678"})
 html = r.get_data(as_text=True)
-check("con la cédula muestra el nombre y pregunta", "Juan Pérez" in html and "¿Es usted?" in html and (juan, HOY, A.comida_de_ahora()) not in base.alm)
-check("ofrece el horario, con el de ahora elegido", 'name="turno"' in html and f'value="{A.turno_de_ahora(A.comida_de_ahora())}" selected' in html
-      and (("12:00 a 12:30" in html and "13:30 a 14:00" in html) if A.comida_de_ahora() == "almuerzo" else ("18:30 a 19:00" in html and "19:00 a 19:30" in html)))
+check("con la cédula muestra el nombre y pregunta", "Juan Pérez" in html and "toque su horario" in html and (juan, HOY, A.comida_de_ahora()) not in base.alm)
+check("un botón por horario, el de ahora en verde", 'name="turno"' in html and f'kiosco-hora ahora" type="submit" name="turno" value="{A.turno_de_ahora(A.comida_de_ahora())}"' in html
+      and ((">12:00<" in html and ">13:30<" in html) if A.comida_de_ahora() == "almuerzo" else (">18:30<" in html and ">19:00<" in html)))
 check("horarios: almuerzo 4 de media hora, cena 2 (18:30 y 19:00)", A.TURNOS["almuerzo"] == ("12:00", "12:30", "13:00", "13:30") and A.TURNOS["cena"] == ("18:30", "19:00")
       and A.nombre_turno("13:30") == "13:30 a 14:00" and A.nombre_turno("19:00") == "19:00 a 19:30" and A.nombre_turno(None) == "")
 check("vacío → el de ahora; un horario de almuerzo no sirve para la cena", A.leer_turno("12:30", "almuerzo") == "12:30" and A.leer_turno("19:00", "cena") == "19:00"
       and A.leer_turno("", "almuerzo") == A.turno_de_ahora("almuerzo") and A.leer_turno("", "cena") in A.TURNOS["cena"] and "no existe" in _mensaje_de(lambda: A.leer_turno("12:30", "cena")))
 check("un horario inventado no", "no existe" in _mensaje_de(lambda: A.leer_turno("11:00", "almuerzo")))
-check("el No es un botón y vuelve a la cédula", '<button class="btn suave kiosco-btn" type="submit">No</button>' in html and f'action="{T}"' in html)
+check("«No soy yo» es un botón y vuelve a la cédula", '>No soy yo</button>' in html and f'action="{T}"' in html)
 TIPO = A.comida_de_ahora()
 TURNO = "12:30" if TIPO == "almuerzo" else "19:00"
 r = k.post(T + "/confirmar", data={"cedula": "1712345678", "tipo": TIPO, "turno": TURNO})
 html = r.get_data(as_text=True)
 check("con Sí queda registrado, por la tablet, con su horario", (juan, HOY, TIPO) in base.alm and "Buen provecho" in html and "registrado" in html
       and base.alm_turno[(juan, HOY, TIPO)] == TURNO)
-check("ofrece deshacer, pero invitados no (Juan todavía no tiene permiso)", "¿Trae invitados?" not in html and "deshacer" in html)
+check("NO ofrece deshacer (Tamara 14/10) ni invitados (Juan todavía no tiene permiso)", "¿Trae invitados?" not in html and "deshacer" not in html.lower())
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "1", "descripcion": "primo"})
 check("sin permiso no anota invitados", "no tiene permiso" in r.get_data(as_text=True) and not base.invitados_del_dia(HOY))
 base.poner_puede_invitar(juan, True)
 html = k.post(T, data={"cedula": "1712345678"}).get_data(as_text=True)
 check("con permiso (se da en la ficha) sí ofrece invitados", "¿Trae invitados?" in html)
 r = k.post(T + "/deshacer", data={"cedula": "1712345678", "tipo": TIPO})
-check("deshacer saca la comida recién registrada", (juan, HOY, TIPO) not in base.alm and "sin registrar" in r.get_data(as_text=True))
-base.alm_hora[(juan, HOY, TIPO)] = datetime.now() - timedelta(minutes=30); base.alm.add((juan, HOY, TIPO))
-r = k.post(T + "/deshacer", data={"cedula": "1712345678", "tipo": TIPO})
-check("pero no una de hace media hora", (juan, HOY, TIPO) in base.alm and "no se puede deshacer" in r.get_data(as_text=True))
+check("la tablet ya no deshace: la ruta no existe y la comida sigue", r.status_code in (404, 405) and (juan, HOY, TIPO) in base.alm)
 r = k.post(T, data={"cedula": "1712345678"})
 html = r.get_data(as_text=True)
 check("si vuelve, le dice que ya registró y le ofrece invitados", "Ya registró" in html and "¿Trae invitados?" in html)
@@ -256,6 +253,28 @@ html = cc.get("/comedor/dia").get_data(as_text=True)
 check("el almuerzo se ve agrupado por horario", base.alm_turno[(maria, HOY, "almuerzo")] == "13:00" and "13:00 a 13:30" in html and 'class="turno"' in html)
 r = cc.post(f"/comedor/dia?fecha={(HOY + timedelta(days=2)).isoformat()}", data={"accion": "marcar", "trabajador_id": maria, "tipo": "cena"})
 check("tampoco contabilidad registra comidas de mañana", (maria, HOY + timedelta(days=2), "cena") not in base.alm)
+
+# editar la comida (Tamara 14/10: «admin tiene que poder editar las comidas»)
+F = HOY.strftime("%d/%m/%Y")
+base.desmarcar_comida(maria, HOY, "cena")  # la de «mañana» cae en hoy
+check("cada comensal tiene el lápiz para cambiar", 'value="cambiar"' in html and "almuerzo|12:30" in html and "cena|19:00" in html)
+cc.post("/comedor/dia", data={"fecha": F, "accion": "cambiar", "trabajador_id": maria, "tipo": "almuerzo", "horario": "almuerzo|12:00"})
+check("cambia el horario y queda con su usuario", base.alm_turno[(maria, HOY, "almuerzo")] == "12:00" and base.alm_quien[(maria, HOY, "almuerzo")] == "oficina")
+cc.post("/comedor/dia", data={"fecha": F, "accion": "cambiar", "trabajador_id": maria, "tipo": "almuerzo", "horario": "cena|18:30"})
+check("pasa el almuerzo a cena", (maria, HOY, "almuerzo") not in base.alm and base.alm_turno[(maria, HOY, "cena")] == "18:30")
+html = cc.get("/comedor/dia").get_data(as_text=True)
+check("con una sola comida sigue en «Sin registrar», con lo que ya tiene", "ya tiene la cena" in html)
+cc.post("/comedor/dia", data={"fecha": F, "accion": "marcar", "trabajador_id": maria, "horario": "almuerzo|13:30"})
+check("y se le registra la otra con el desplegable", base.alm_turno[(maria, HOY, "almuerzo")] == "13:30")
+r = cc.post("/comedor/dia", data={"fecha": F, "accion": "cambiar", "trabajador_id": maria, "tipo": "cena", "horario": "almuerzo|12:00"}, follow_redirects=True)
+check("no pisa una comida que ya tiene", "Ya tiene el almuerzo" in r.get_data(as_text=True) and (maria, HOY, "cena") in base.alm)
+r = cc.post("/comedor/dia", data={"fecha": F, "accion": "cambiar", "trabajador_id": maria, "tipo": "cena", "horario": "cena|11:00"}, follow_redirects=True)
+check("un horario inventado no", "Elija un horario" in r.get_data(as_text=True))
+ayer = HOY - timedelta(days=1)
+cc.post("/comedor/dia", data={"fecha": ayer.strftime("%d/%m/%Y"), "accion": "marcar", "trabajador_id": maria, "horario": "almuerzo|12:30"})
+check("también días anteriores", (maria, ayer, "almuerzo") in base.alm)
+check("el comedor no edita", m.post("/comedor/dia", data={"fecha": F, "accion": "cambiar", "trabajador_id": maria, "tipo": "cena", "horario": "cena|19:00"}).status_code in (302, 403))
+base.desmarcar_comida(maria, ayer, "almuerzo"); base.alm_turno[(maria, HOY, "cena")] = "19:00"
 
 base.desmarcar_comida(maria, HOY, "almuerzo")
 iid = base.invitados_del_dia(HOY)[0]["id"]
@@ -969,8 +988,8 @@ check("el comedor no puede marcarlo", m.post("/admin/roles/papel", data={"mes": 
 # --- imprimir (Tamara 13/10: «que pueda imprimir el trabajador y admin») ---
 _rid = next(x["id"] for x in base.roles_del_mes(2026, 9) if x["trabajador_id"] == rosa)
 html = rw.get(f"/yo/rol/{_rid}/imprimir").get_data(as_text=True)
-check("el trabajador imprime su recibo: INTELA, conceptos, líquido, sin provisiones", "INTELA" in html and "Líquido a recibir" in html
-      and "Recibí conforme" in html and "Aporte Patr" not in html and "window.print" in html)
+check("el trabajador imprime su recibo: INTELA, conceptos, líquido, sin provisiones", "INTELA" in html and "A recibir" in html
+      and "Dpto. de RR.HH." in html and "Fecha / ingreso" in html and "Aporte Patr" not in html and "window.print" in html)
 _otro = next(x["id"] for x in base.roles_del_mes(2026, 7) if x["trabajador_id"] != rosa)
 check("y NO el de otro (404)", rw.get(f"/yo/rol/{_otro}/imprimir").status_code == 404)
 check("sin sesión, a la cédula", A.app.test_client().get(f"/yo/rol/{_rid}/imprimir").status_code == 302)

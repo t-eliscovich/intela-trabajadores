@@ -1,0 +1,3 @@
+{# Arriba a la derecha en las pantallas del trabajador: el nombre se corta si es
+   largo, pero «Salir» se ve SIEMPRE (Tamara 14/10: en el celular no aparecía). #}
+<div class="quien quien-yo"><span>{{ t.nombre }}</span><a class="btn-salir" href="{{ url_for('salir') }}">Salir</a></div>

@@ -314,7 +314,15 @@ def _globales():
             sin_firmar = 0
     return {"n_roles_sin_firmar": sin_firmar, "MESES": MESES, "DIAS_CORTOS": DIAS_CORTOS, "TIPOS_COMIDA": TIPOS_COMIDA, "AREAS": AREAS,
             "TURNOS": TURNOS, "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
-            "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes}
+            "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes,
+            "cod_rol": cod_rol}
+
+
+def cod_rol(concepto: str, descuento: bool = False) -> str:
+    """El código del concepto como en el recibo de papel de WinAfin: el lugar en
+    la lista (Sueldo 1, Horas 50% 2… Fondo de reserva 5; IESS 1, Anticipo 2…)."""
+    lista = [x[1] for x in (roles.DESCUENTOS if descuento else roles.INGRESOS)]
+    return str(lista.index(concepto) + 1) if concepto in lista else ""
 
 
 @app.context_processor
@@ -622,6 +630,14 @@ def turno_de_ahora(tipo: str = "almuerzo") -> str:
     return elegido
 
 
+def leer_horario(texto: str | None) -> tuple[str, str]:
+    """'cena|19:00' → ('cena', '19:00'): el desplegable de Comensales elige comida y horario juntos."""
+    tipo, _, turno = (texto or "").partition("|")
+    if tipo not in TURNOS or turno not in TURNOS[tipo]:
+        raise ValueError("Elija un horario.")
+    return tipo, turno
+
+
 def leer_turno(texto: str | None, tipo: str) -> str:
     """Vacío → el de ahora (toda comida lleva horario)."""
     if not texto:
@@ -747,19 +763,6 @@ def comedor_confirmar():
     return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=0, turno=turno)
 
 
-@app.route("/comedor/deshacer", methods=["POST"], endpoint="comedor_deshacer")
-@app.route("/comedor/t/<token>/deshacer", methods=["POST"], endpoint="comedor_deshacer_t")
-@requiere_comedor
-def comedor_deshacer():
-    try:
-        t, tipo = _trabajador_del_form()
-    except ValueError as exc:
-        return _tablet("comedor.html", error=str(exc))
-    if store.desmarcar_comida_reciente(t["id"], hoy(), tipo, MINUTOS_PARA_DESHACER):
-        return _tablet("comedor.html", tipo=tipo, aviso=f"Listo, {t['nombre']}: {'el almuerzo' if tipo == 'almuerzo' else 'la cena'} quedó sin registrar.")
-    return _tablet("comedor.html", tipo=tipo, error="Eso ya no se puede deshacer desde aquí. Avise en contabilidad.")
-
-
 @app.route("/comedor/invitados", methods=["POST"], endpoint="comedor_invitados")
 @app.route("/comedor/t/<token>/invitados", methods=["POST"], endpoint="comedor_invitados_t")
 @requiere_comedor
@@ -805,9 +808,18 @@ def comedor_dia():
         try:
             accion = request.form.get("accion", "")
             if accion == "marcar":
-                tipo = leer_tipo_comida(request.form.get("tipo"))
+                if request.form.get("horario"):
+                    tipo, turno = leer_horario(request.form.get("horario"))
+                else:
+                    tipo = leer_tipo_comida(request.form.get("tipo"))
+                    turno = leer_turno(request.form.get("turno"), tipo)
                 store.marcar_comida(int(request.form.get("trabajador_id", 0)), fecha, tipo,
-                                    g.usuario["usuario"], leer_turno(request.form.get("turno"), tipo))
+                                    g.usuario["usuario"], turno)
+            elif accion == "cambiar":
+                tipo_nuevo, turno = leer_horario(request.form.get("horario"))
+                store.cambiar_comida(int(request.form.get("trabajador_id", 0)), fecha,
+                                     leer_tipo_comida(request.form.get("tipo")), tipo_nuevo, turno,
+                                     g.usuario["usuario"])
             elif accion == "desmarcar":
                 store.desmarcar_comida(int(request.form.get("trabajador_id", 0)), fecha,
                                        leer_tipo_comida(request.form.get("tipo")))
@@ -833,9 +845,13 @@ def comedor_dia():
         columnas[tipo] = cols
     faltan = []
     if es_contabilidad():  # el comedor no ve quién falta ni ningún celular
-        marcaron = {c["trabajador_id"] for c in comieron}
-        faltan = [dict(t, whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha)))
-                  for t in store.trabajadores() if t["id"] not in marcaron]
+        # el que almorzó también puede faltar la cena: sale con lo que ya tiene
+        ya = {}
+        for c in comieron:
+            ya.setdefault(c["trabajador_id"], set()).add(c["tipo"])
+        faltan = [dict(t, ya=ya.get(t["id"], set()),
+                       whatsapp=link_whatsapp(t["celular"], _texto_sin_registrar(t, fecha)) if t["id"] not in ya else None)
+                  for t in store.trabajadores() if len(ya.get(t["id"], ())) < len(TIPOS_COMIDA)]
     return render_template("comedor_dia.html", fecha=fecha, por_tipo=por_tipo, columnas=columnas,
                            faltan=faltan, invitados=invitados, edita=es_contabilidad(),
                            total_invitados=sum(i["cantidad"] for i in invitados),

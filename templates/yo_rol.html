@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% block titulo %}Rol de pagos · {{ t.nombre }}{% endblock %}
 {% block clase_hoja %}angosta{% endblock %}
-{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block barra_derecha %}{% include "_barra_yo.html" %}{% endblock %}
 {% block contenido %}
 {% include "_pestanas_yo.html" %}
 {% include "_recibo_estilos.html" %}
 <style>
-  .meses{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 8px;padding-bottom:2px}
-  .meses::-webkit-scrollbar{display:none}
-  .meses a{flex:0 0 auto;padding:5px 12px;border-radius:12px;text-align:center;line-height:1.2;background:var(--papel);border:1px solid var(--borde);
-           text-decoration:none;color:var(--azul);font-weight:700;font-size:14px;white-space:nowrap}
+  /* Los meses en una grilla, sin scroll de costado (Tamara 14/10: «el scroll de los meses no funciona bien»). */
+  .meses{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 8px}
+  .meses a{padding:5px 4px;border-radius:10px;text-align:center;line-height:1.2;background:var(--papel);border:1px solid var(--borde);
+           text-decoration:none;color:var(--azul);font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden}
   .meses a.activo{background:#e8eef6;border-color:#9fb3cc}
-  .meses a small{display:block;font-size:11px;font-weight:600;color:var(--gris);font-variant-numeric:tabular-nums}
+  .meses a small{display:block;font-size:10.5px;letter-spacing:-.01em;font-weight:600;color:var(--gris);font-variant-numeric:tabular-nums}
   .meses .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rojo);margin-left:6px;vertical-align:2px}
 </style>
 

@@ -3,8 +3,7 @@
 {% block clase_hoja %}angosta comedor{% endblock %}
 {% block contenido %}
 <div class="kiosco">
-  <div class="kiosco-fecha">{{ hoy|fecha_larga }}</div>
-  <div class="kiosco-listo {{ 'ya' if ya_estaba }}">
+    <div class="kiosco-listo {{ 'ya' if ya_estaba }}">
     <div class="tilde">{{ '!' if ya_estaba else '✓' }}</div>
     <b>{{ t.nombre }}</b>
     <p>
@@ -31,13 +30,7 @@
 
   <div class="kiosco-botones" style="margin-top:12px">
     <form method="GET" action="{{ u('comedor') }}"><button class="btn kiosco-btn" type="submit" autofocus>Listo</button></form>
-    {% if recien %}
-    <form method="POST" action="{{ u('comedor_deshacer') }}">
-      <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
-      <button class="btn suave kiosco-btn" type="submit" style="font-size:18px">Me equivoqué, deshacer</button>
-    </form>
-    {% endif %}
   </div>
 </div>
-<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 25000);</script>
+<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, {{ 25000 if (t.puede_invitar and invitados < 3) else 4000 }});</script>
 {% endblock %}

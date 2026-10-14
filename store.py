@@ -368,7 +368,8 @@ ESQUEMA = """
 _ROL = """SELECT r.id, r.trabajador_id, r.anio, r.mes, r.codigo, r.nombre_rol, r.sueldo, r.dias,
                  r.horas_25, r.horas_50, r.horas_100, r.atrasos, r.otros, r.ingresos, r.descuentos,
                  r.total_ingresos, r.total_descuentos, r.liquido, r.cargado_por, r.cargado_en,
-                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma, t.nombre, t.cedula, t.area, t.celular
+                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma, t.nombre, t.cedula, t.area, t.celular,
+                 t.fecha_ingreso, t.fecha_salida
             FROM trabajadores.rol_pago r JOIN trabajadores.trabajador t ON t.id = r.trabajador_id
            WHERE r.borrado_en IS NULL"""
 
@@ -1023,6 +1024,19 @@ def marcar_comida(trabajador_id: int, fecha: date, tipo: str, marcado_por: str,
 
 def poner_puede_invitar(trabajador_id: int, puede: bool) -> None:
     _ejecutar("UPDATE trabajadores.trabajador SET puede_invitar=%s WHERE id=%s", (puede, trabajador_id))
+
+
+def cambiar_comida(trabajador_id: int, fecha: date, tipo: str, tipo_nuevo: str, turno: str,
+                   marcado_por: str) -> None:
+    """Contabilidad corrige una comida: otro horario, o almuerzo ↔ cena (Tamara 14/10/2026)."""
+    if tipo not in TIPOS_COMIDA or tipo_nuevo not in TIPOS_COMIDA:
+        raise ValueError("No sé qué comida es.")
+    if tipo != tipo_nuevo and _uno("SELECT 1 AS x FROM trabajadores.comida WHERE trabajador_id=%s AND fecha=%s AND tipo=%s",
+                                   (trabajador_id, fecha, tipo_nuevo)):
+        raise ValueError(f"Ya tiene {'el almuerzo' if tipo_nuevo == 'almuerzo' else 'la cena'} registrado ese día.")
+    _ejecutar("UPDATE trabajadores.comida SET tipo=%s, turno=%s, marcado_por=%s "
+              "WHERE trabajador_id=%s AND fecha=%s AND tipo=%s",
+              (tipo_nuevo, turno, marcado_por, trabajador_id, fecha, tipo))
 
 
 def desmarcar_comida(trabajador_id: int, fecha: date, tipo: str) -> None:

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Constancia de roles de pago · {{ t.nombre }}{% endblock %}
 {% block clase_hoja %}angosta{% endblock %}
-{% block barra_derecha %}<div class="quien">{{ t.nombre }} · <a href="{{ url_for('salir') }}">salir</a></div>{% endblock %}
+{% block barra_derecha %}{% include "_barra_yo.html" %}{% endblock %}
 {% block contenido %}
 {% include "_pestanas_yo.html" %}
 <style>

@@ -61,8 +61,8 @@ en UTC y desde las 19:00 el check de la comida caería en el día siguiente.
 (decisión 14/09/2026). La tablet entra por un link con clave y SIN sesión:
 `/comedor/t/<clave>`; la clave vive en `configuracion.clave_comedor` y se
 regenera desde /admin/usuarios («Generar uno nuevo»). Almuerzo o cena por la
-hora de Ecuador (`HORA_CENA`). El trabajador puede deshacer su marca durante
-`MINUTOS_PARA_DESHACER` y anotar hasta `MAX_INVITADOS` invitados por comida
+hora de Ecuador (`HORA_CENA`). La tablet NO deshace (Tamara 14/10/2026: se sacó el botón y la ruta;
+si alguien se equivocó, lo corrige contabilidad en Comensales). Puede anotar hasta `MAX_INVITADOS` invitados por comida
 (descripción, sin cédula; tabla `invitado`) SÓLO si `trabajador.puede_invitar`
 (se marca en la ficha, «Invitados al comedor»; no va por planilla). Toda comida
 lleva `comida.turno` (`TURNOS`: almuerzo 12:00/12:30/13:00/13:30, cena
@@ -83,8 +83,8 @@ más: sin «Sin registrar», sin celulares ni wa.me, sin botones de registrar o
 quitar, sin ir a días futuros. También ve **Comidas del mes** (el resumen por
 semana y por día, IGUAL que contabilidad — pedido de Tamara del mismo día), sin
 el formulario de registrar a mano, sin Feriados ni cuadro para pagar. Un POST
-suyo a /comedor/dia o /admin/comidas da 403. Registrar y quitar desde Comensales es de
-contabilidad (`es_contabilidad()`), y queda con su usuario a la vista («· conta»).
+suyo a /comedor/dia o /admin/comidas da 403. Registrar, cambiar (✎ horario o almuerzo↔cena, `store.cambiar_comida`) y quitar desde Comensales es de
+contabilidad (`es_contabilidad()`), en cualquier día pasado, y queda con su usuario a la vista («· conta»).
 La tablet registra por su propio link, no por este usuario.
 
 **La sesión se revalida en cada pedido** (`_cargar_usuario` relee
@@ -260,3 +260,16 @@ Castellano simple, una idea por línea. Ver la skill `textos-de-pantalla-intela`
 
 **Importar la app como la importa Waitress.** `scripts/_falso.py` reemplaza
 las funciones de `store` una por una, no el módulo entero.
+
+**Cambios del 14/10/2026 (Tamara):**
+- **El recibo es IGUAL al de papel de WinAfin** (`_recibo.html`, lo usan el celular,
+  contabilidad y la hoja impresa): cabecera «intela · ROL DE PAGOS» + nombre, fechas de
+  ingreso / salida / impresión, sueldo, período; Ingresos y Descuentos con COD
+  (`cod_rol`: el lugar en `roles.INGRESOS` / `DESCUENTOS`, como WinAfin) · DESCRIPCIÓN ·
+  VALOR; totales en recuadro; A RECIBIR; firmas «Dpto. de RR.HH.» y el trabajador.
+- **«Salir» siempre visible** en el celular del trabajador (`_barra_yo.html`).
+- **Los meses del rol en grilla de 4**, sin scroll de costado.
+- **La tablet es un toque**: cédula → nombre + un botón por horario (el de ahora en
+  verde) → registrado. Sin «¿Es usted?», sin desplegable, sin deshacer. «No soy yo» vuelve.
+- **Comensales (contabilidad)**: «Sin registrar» lista también al que tiene una sola
+  comida, con un desplegable de comida+horario (`leer_horario`, «cena|19:00»).

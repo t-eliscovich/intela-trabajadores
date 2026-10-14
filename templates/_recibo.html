@@ -1,24 +1,56 @@
-{# El recibo, igual para el trabajador y para contabilidad. Recibe `r`. Pensado
-   para que en un celular entre en una pantalla (Tamara, 13/10/2026). #}
-<div class="rp-cab">
-  <div class="rp-emp">{{ RAZON_SOCIAL }} · Rol de pagos</div>
-  <div>
-    <div class="rp-mes">{{ nombre_mes(r.anio, r.mes) }}</div>
-    <div class="rp-liq"><small>$</small>{{ r.liquido|dinero }}</div>
-    <div class="rp-frase">líquido a recibir</div>
+{# El recibo, IGUAL al de papel de WinAfin (Tamara 14/10/2026: «tiene que verse así»):
+   cabecera con nombre y período, fechas de ingreso / salida / impresión y sueldo,
+   Ingresos y Descuentos con COD · DESCRIPCIÓN · VALOR, los totales y A RECIBIR.
+   Lo usan el celular del trabajador, contabilidad y la hoja impresa.
+   Recibe `r`; `con_firmas` agrega abajo las líneas de firma (la hoja impresa). #}
+<div class="rec">
+  <div class="rec-cab">
+    <div class="rec-logo"><span class="rec-marca">intela</span><span class="rec-tit">Rol de pagos</span></div>
+    <div class="rec-nombre"><span>Nombre del empleado</span><b>{{ r.nombre }}</b></div>
   </div>
-  {% if r.firmado_en %}<span class="rp-estado ok">✓ Firmado<br>{{ r.firmado_en|fecha }}</span>
-  {% elif r.pide_firma is sameas false %}
-  {% else %}<span class="rp-estado falta">{{ 'Falta su firma' if de_trabajador else 'Sin firmar' }}</span>{% endif %}
+  <div class="rec-datos">
+    <div><span>Fecha / ingreso</span>{{ r.fecha_ingreso|fecha if r.fecha_ingreso else '/ /' }}</div>
+    <div><span>Fecha / salida</span>{{ r.fecha_salida|fecha if r.fecha_salida else '/ /' }}</div>
+    <div><span>Fecha / impresión</span>{{ hoy|fecha }}</div>
+    <div><span>Sueldo</span>{{ r.sueldo|dinero if r.sueldo else '—' }}</div>
+    <div class="rec-periodo"><span>Período de pago</span><b>{{ nombre_mes(r.anio, r.mes) }}</b></div>
+  </div>
+  <div class="rec-cols">
+    <div class="rec-col">
+      <div class="rec-gtit">Ingresos</div>
+      <table>
+        <thead><tr><th class="c">Cod</th><th>Descripción</th><th class="d">Valor</th></tr></thead>
+        <tbody>{% for x in r.ingresos %}<tr><td class="c">{{ cod_rol(x.concepto) }}</td><td class="rec-desc">{{ x.concepto }}{% if x.detalle %}<span class="rec-cant">{{ x.detalle }}</span>{% endif %}</td><td class="d">{{ x.valor|dinero }}</td></tr>{% endfor %}</tbody>
+      </table>
+      <div class="rec-total"><span>Total ingresos</span><b>{{ r.total_ingresos|dinero }}</b></div>
+    </div>
+    <div class="rec-col">
+      <div class="rec-gtit">Descuentos</div>
+      <table>
+        <thead><tr><th class="c">Cod</th><th>Descripción</th><th class="d">Valor</th></tr></thead>
+        <tbody>{% for x in r.descuentos %}<tr><td class="c">{{ cod_rol(x.concepto, true) }}</td><td class="rec-desc">{{ x.concepto }}</td><td class="d">{{ x.valor|dinero }}</td></tr>{% else %}<tr><td class="c"></td><td class="rec-nada">—</td><td></td></tr>{% endfor %}</tbody>
+      </table>
+      <div class="rec-total"><span>Total descuentos</span><b>{{ r.total_descuentos|dinero }}</b></div>
+    </div>
+  </div>
+  {% if r.atrasos or r.otros %}<div class="rec-extra">{% if r.atrasos %}Atrasos: {{ r.atrasos|num(2) }}{% endif %}{% if r.atrasos and r.otros %} · {% endif %}{% if r.otros %}Otros: {{ r.otros|num(2) }}{% endif %}</div>{% endif %}
+  <div class="rec-recibir">
+    {% if not con_firmas %}
+      {% if r.firmado_en %}<span class="rec-estado ok">✓ Firmado {{ r.firmado_en|fecha }}</span>
+      {% elif r.pide_firma is sameas false %}<span class="rec-estado ok">✓ Firmado en papel</span>
+      {% else %}<span class="rec-estado falta">{{ 'Falta su firma' if de_trabajador else 'Sin firmar' }}</span>{% endif %}
+    {% endif %}
+    <span class="rec-ar">A recibir</span><b>{{ r.liquido|dinero }}</b>
+  </div>
+  {% if con_firmas %}
+  <div class="rec-firmas">
+    <div class="rec-firma"><div class="trazo"></div><div class="linea">Dpto. de RR.HH.</div></div>
+    <div class="rec-firma">
+      {% if r.firmado_en %}<div class="trazo"><img src="{{ url_firma(r.id) }}" alt="Firma"></div>
+      {% elif r.pide_firma is sameas false %}<div class="trazo papel">✓ Firmado en papel</div>
+      {% else %}<div class="trazo"></div>{% endif %}
+      <div class="linea">{{ r.nombre }}</div>
+    </div>
+  </div>
+  {% endif %}
 </div>
-<div class="rp-quien">{{ r.nombre }} · C.I. {{ r.cedula }}{% if r.sueldo %} · Sueldo {{ r.sueldo|dinero }}{% endif %}{% if r.atrasos %} · Atrasos {{ r.atrasos|num(2) }}{% endif %}{% if r.otros %} · Otros {{ r.otros|num(2) }}{% endif %}</div>
-<div class="rp-grupo">
-  <h3><span>Ingresos</span><b>{{ r.total_ingresos|dinero }}</b></h3>
-  {% for x in r.ingresos %}<div class="rp-linea"><span>{{ x.concepto }}{% if x.detalle %} <small>{{ x.detalle }}</small>{% endif %}</span><b>{{ x.valor|dinero }}</b></div>{% endfor %}
-</div>
-{% if r.descuentos %}
-<div class="rp-grupo menos">
-  <h3><span>Descuentos</span><b>− {{ r.total_descuentos|dinero }}</b></h3>
-  {% for x in r.descuentos %}<div class="rp-linea"><span>{{ x.concepto }}</span><b>− {{ x.valor|dinero }}</b></div>{% endfor %}
-</div>
-{% endif %}

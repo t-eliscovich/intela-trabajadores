@@ -1,26 +1,63 @@
 <style>
-  .rp-emp{flex:1 0 100%;font-size:11px;font-weight:600;opacity:.6;margin-bottom:4px;letter-spacing:.01em;
-          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .rp-cab{flex-wrap:wrap}
-  .rp-cab{background:linear-gradient(160deg,#0f2942 0%,#1c4268 100%);color:#fff;padding:12px 16px;
-          display:flex;justify-content:space-between;align-items:center;gap:10px}
-  .rp-mes{font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;opacity:.75}
-  .rp-liq{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-top:2px;font-variant-numeric:tabular-nums}
-  .rp-liq small{font-size:18px;font-weight:700;opacity:.7;margin-right:2px}
-  .rp-frase{font-size:12px;opacity:.8}
-  .rp-estado{flex:0 0 auto;text-align:center;font-size:12px;font-weight:800;line-height:1.25;padding:6px 10px;border-radius:10px}
-  .rp-estado.falta{background:#fef3c7;color:#92400e}
-  .rp-estado.ok{background:#dcfce7;color:#166534}
-  .rp-quien{padding:7px 16px;border-bottom:1px solid var(--borde);background:#fafbfc;font-size:12px;color:var(--gris);line-height:1.35}
-  .rp-grupo{padding:2px 0 6px}
-  .rp-grupo + .rp-grupo{border-top:1px solid var(--borde)}
-  .rp-grupo h3{margin:0;padding:8px 16px 2px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--gris);
-               display:flex;justify-content:space-between}
-  .rp-grupo h3 b{color:var(--tinta);font-size:13px;letter-spacing:0;font-variant-numeric:tabular-nums}
-  .rp-linea{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:3px 16px;font-size:14px}
-  .rp-linea span small{font-size:12px;color:var(--gris-claro)}
-  .rp-linea b{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .rp-grupo.menos b{color:#b91c1c}
+  /* El recibo como el de papel de WinAfin (Tamara 14/10/2026). */
+  .rec{background:#fff;color:#0f172a;border:1.5px solid #0f172a;border-radius:4px;font-size:13px;margin:10px}
+  .rec .rec-marca{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:28px;line-height:1;color:#e0245e;text-transform:none;letter-spacing:.01em}
+  .rec .rec-cant{text-transform:none;font-size:11.5px;font-weight:600;color:#334155;letter-spacing:0}
+  .rec-cab{display:grid;grid-template-columns:auto 1fr;border-bottom:1.5px solid #0f172a}
+  .rec-logo{padding:6px 12px;border-right:1px solid #0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .rec-marca{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:26px;line-height:1;color:#e0245e;letter-spacing:.01em}
+  .rec-tit{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+  .rec-nombre{padding:6px 12px;display:flex;flex-direction:column;justify-content:center;text-align:center;min-width:0}
+  .rec-nombre b{font-size:14px;line-height:1.2}
+  .rec span,.rec th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;color:#0f172a}
+  .rec-datos{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1.5px solid #0f172a}
+  .rec-datos > div{padding:4px 6px;text-align:center;border-right:1px solid #0f172a;font-variant-numeric:tabular-nums;font-size:12.5px}
+  .rec-datos > div:last-child{border-right:0}
+  .rec-datos span{display:block;font-size:8.5px;letter-spacing:.03em;margin-bottom:1px}
+  .rec-periodo b,.rec-desc,.rec-firma .linea{text-transform:uppercase}
+  .rec-periodo b{font-size:12.5px}
+  .rec-cols{display:grid;grid-template-columns:1fr 1fr}
+  .rec-col{display:flex;flex-direction:column;min-width:0}
+  .rec-col + .rec-col{border-left:1.5px solid #0f172a}
+  .rec-gtit{text-align:center;font-weight:800;text-transform:uppercase;letter-spacing:.1em;font-size:12px;padding:4px;border-bottom:1px solid #0f172a}
+  .rec table{width:100%;border-collapse:collapse;margin:0 0 auto}
+  .rec th{background:none;padding:4px 6px;border-bottom:1px solid #0f172a;text-align:left}
+  .rec td{padding:3px 6px;font-size:12px;border:0;vertical-align:baseline}
+  .rec .c{width:34px;text-align:center}
+  .rec .d{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .rec td.d{font-weight:600}
+  .rec-cant{float:right;font-size:11.5px;font-weight:600;color:#334155;text-transform:none;letter-spacing:0;margin-left:8px}
+  .rec-nada{color:#94a3b8}
+  .rec-total{display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #0f172a;padding:5px 8px;margin-top:6px}
+  .rec-total span{font-size:11px}
+  .rec-total b{font-variant-numeric:tabular-nums;border:1px solid #0f172a;padding:1px 8px;font-size:13.5px}
+  .rec-extra{font-size:11px;color:#475569;padding:4px 10px;border-top:1px solid #0f172a}
+  .rec-recibir{display:flex;justify-content:flex-end;align-items:center;gap:12px;border-top:1.5px solid #0f172a;padding:7px 10px}
+  .rec-recibir .rec-ar{font-size:14px;letter-spacing:.06em}
+  .rec-recibir b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .rec-estado{margin-right:auto;font-size:11px;font-weight:800;padding:4px 8px;border-radius:8px;text-transform:none;letter-spacing:0}
+  .rec-estado.falta{background:#fef3c7;color:#92400e}
+  .rec-estado.ok{background:#dcfce7;color:#166534}
+  .rec-firmas{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding:6px 24px 10px}
+  .rec-firma{text-align:center;font-size:11px;font-weight:800}
+  .rec-firma .trazo{height:54px;display:flex;align-items:flex-end;justify-content:center}
+  .rec-firma .trazo img{max-height:54px;max-width:100%}
+  .rec-firma .trazo.papel{color:#15803d;font-size:12px}
+  .rec-firma .linea{border-top:1px solid #0f172a;padding-top:3px}
+  /* En el celular: Ingresos arriba de Descuentos, y las fechas en dos renglones. */
+  @media(max-width:600px){
+    .rec{margin:8px;font-size:12.5px}
+    .rec .rec-marca{font-size:24px}
+    .rec-datos{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .rec-datos > div:nth-child(4){border-right:0}
+    .rec-datos .rec-periodo{grid-column:1/-1;border-top:1px solid #0f172a;border-right:0;padding:3px}
+    .rec-datos > div{font-size:11.5px;padding:3px 3px}
+    .rec-datos span{font-size:7.5px;letter-spacing:0}
+    .rec-cols{grid-template-columns:1fr}
+    .rec-col + .rec-col{border-left:0;border-top:1.5px solid #0f172a}
+    .rec-firmas{grid-template-columns:1fr;gap:10px}
+  }
+  @media print{.rec{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .constancia{padding:10px 16px 12px}
   .constancia .trazo{display:flex;gap:12px;align-items:center}
   .constancia .trazo img{height:64px;max-width:55%;object-fit:contain;border-bottom:1px solid var(--tinta)}
