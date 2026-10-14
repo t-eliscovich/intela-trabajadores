@@ -13,6 +13,26 @@
 </div>
 
 <div class="bloque">
+  <div class="titulo"><h2>La contraseña de los trabajadores</h2>
+    <p>{% if pide_clave %}<b style="color:var(--verde)">Prendida:</b> entran con cédula y contraseña. La primera vez la crean con un código que les llega al correo.{% else %}<b style="color:var(--ambar)">Apagada:</b> entran sólo con la cédula.{% endif %}</p></div>
+  <div class="relleno" style="display:grid;gap:12px">
+    <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" autocomplete="off">
+      <input type="hidden" name="accion" value="correo_prueba">
+      <span style="font-weight:700;font-size:14px">1. Probar el correo</span>
+      <input name="email" type="email" required placeholder="su correo" style="height:36px;font-size:14px;max-width:260px">
+      <button class="btn suave chico" type="submit">Mandar un correo de prueba</button>
+    </form>
+    <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="hidden" name="accion" value="pedir_clave"><input type="hidden" name="prender" value="{{ '0' if pide_clave else '1' }}">
+      <span style="font-weight:700;font-size:14px">2. {{ 'Apagar' if pide_clave else 'Prender' }} la contraseña</span>
+      <button class="btn {{ 'suave' if pide_clave else 'verde' }} chico" type="submit"
+        onclick="return confirm('{{ '¿Apagar la contraseña? Van a entrar otra vez sólo con la cédula.' if pide_clave else '¿Prender la contraseña? Todos los trabajadores van a tener que crear la suya con su correo la próxima vez que entren.' }}')">{{ 'Apagar' if pide_clave else 'Pedir contraseña para entrar' }}</button>
+    </form>
+  </div>
+  <div class="nota">Primero mándese un correo de prueba y fíjese que le llegue. Recién ahí prenda la contraseña: si el correo no saliera, nadie podría entrar. La tablet del comedor sigue con la cédula sola.</div>
+</div>
+
+<div class="bloque">
   <div class="titulo"><h2>Crear uno</h2></div>
   <div class="relleno">
     <form method="POST" class="formulario" autocomplete="off">

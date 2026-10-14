@@ -103,16 +103,16 @@
   </div>
 
   <div class="bloque">
-    <div class="titulo"><h2>Contraseña del rol de pagos</h2></div>
+    <div class="titulo"><h2>Contraseña para entrar</h2></div>
     {% if t.clave_rol_hash %}
     <div class="relleno" style="font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span><span class="etiqueta ok">✓ Creada</span> el {{ t.clave_rol_en|fecha_hora }} · correo <b>{{ t.email }}</b></span>
       <form method="POST" class="enlinea" style="margin-left:auto"><input type="hidden" name="accion" value="borrar_clave_rol">
-        <button class="btn suave chico" type="submit" onclick="return confirm('¿Borrar la contraseña? La próxima vez que entre a su rol la vuelve a crear con su correo.')">Borrar contraseña</button></form>
+        <button class="btn suave chico" type="submit" onclick="return confirm('¿Borrar la contraseña? Lo sacamos de la app en su celular y la próxima vez que entre la vuelve a crear con su correo.')">Borrar contraseña</button></form>
     </div>
-    <div class="nota">Si cambió de correo o alguien la creó por él, bórrela: la vuelve a crear la próxima vez que entre a su rol.</div>
+    <div class="nota">Si cambió de correo, la olvidó sin acceso a su correo, o alguien la creó por él, bórrela: la vuelve a crear la próxima vez que entre.</div>
     {% else %}
-    <div class="nota" style="border-top:0">Todavía no la creó. Se la pide la primera vez que entra a «Rol de pagos»{% if t.email %} (último correo: {{ t.email }}){% endif %}.</div>
+    <div class="nota" style="border-top:0">Todavía no la creó. Se la pide la primera vez que entra con su cédula{% if t.email %} (último correo: {{ t.email }}){% endif %}.</div>
     {% endif %}
   </div>
 

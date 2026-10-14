@@ -386,21 +386,48 @@ def entrar():
         if not puede_entrar(t):
             flash("No encontramos esa cédula. Pregunte en contabilidad.", "error")
             return render_template("entrar.html")
-        # Sólo se reemplaza la sesión del trabajador: si contabilidad prueba una
-        # cédula en el mismo navegador, no se desloguea.
-        session["trabajador_id"] = t["id"]
-        session.permanent = True  # 30 días sin volver a poner la cédula
-        return redirect(url_for("yo"))
+        # La cédula sola ya NO abre la sesión (Tamara 14/10/2026: «la contraseña tiene que
+        # ser para todo»): pasa al paso de la contraseña, o a crearla la primera vez.
+        # Sólo se toca la sesión del trabajador: contabilidad no se desloguea.
+        import time
+        session.pop("trabajador_id", None)
+        if not pide_clave():
+            # el interruptor de Usuarios todavía apagado: entra con la cédula, como antes
+            session["trabajador_id"] = t["id"]
+            session.permanent = True
+            return redirect(url_for("yo"))
+        session["entrando"] = {"id": t["id"], "hasta": time.time() + 15 * 60}
+        return redirect(url_for("entrar_clave"))
     return render_template("entrar.html")
 
 
 def _mi_trabajador():
+    """El trabajador de la sesión, si entró con su contraseña. Si la cambió (o
+    contabilidad la borró), las sesiones viejas se caen al instante."""
     id_ = session.get("trabajador_id")
     t = store.trabajador(id_) if id_ else None
-    if not puede_entrar(t):
+    if not puede_entrar(t) or (pide_clave() and (not t.get("clave_rol_hash")
+                                                 or session.get("clave_en") != str(t.get("clave_rol_en")))):
         session.pop("trabajador_id", None)
+        session.pop("clave_en", None)
         return None
     return t
+
+
+def pide_clave() -> bool:
+    """El interruptor de Usuarios («Pedir contraseña para entrar»). Arranca apagado para
+    probar el correo antes: si el correo no saliera, nadie podría entrar."""
+    try:
+        return store.configuracion("entrar_con_clave") == "si"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _abrir_sesion_trabajador(t: dict) -> None:
+    session.pop("entrando", None)
+    session["trabajador_id"] = t["id"]
+    session["clave_en"] = str(t.get("clave_rol_en"))
+    session.permanent = True  # 30 días en su celular sin volver a escribirla
 
 
 @app.route("/yo")
@@ -597,6 +624,18 @@ def yo_perfil():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
+    if request.method == "POST" and request.form.get("accion") == "clave":
+        # cambiar la contraseña: este celular sigue adentro, los otros se cierran solos
+        try:
+            if not check_password_hash(t["clave_rol_hash"], request.form.get("actual") or ""):
+                raise ValueError("La contraseña actual no es correcta.")
+            clave = leer_clave_nueva(request.form.get("clave") or "", request.form.get("repetir") or "", t.get("cedula"))
+            store.guardar_clave_rol(t["id"], generate_password_hash(clave), t.get("email"))
+            _abrir_sesion_trabajador(store.trabajador(t["id"]))
+            flash("Listo: cambió su contraseña. En los otros celulares tiene que entrar de nuevo.", "ok")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("yo_perfil"))
     if request.method == "POST":
         try:
             cel = leer_celular(request.form.get("celular"))
@@ -612,6 +651,8 @@ def yo_perfil():
 @app.route("/salir")
 def salir():
     session.pop("trabajador_id", None)
+    session.pop("clave_en", None)
+    session.pop("entrando", None)
     return redirect(url_for("entrar"))
 
 
@@ -1062,7 +1103,7 @@ def _accion_trabajador(t: dict, accion: str) -> None:
         return
     if accion == "borrar_clave_rol":
         store.borrar_clave_rol(t["id"])
-        flash("Listo: se borró la contraseña del rol. La vuelve a crear la próxima vez que entre.", "ok")
+        flash("Listo: se borró la contraseña. La vuelve a crear la próxima vez que entre.", "ok")
         return
     if accion == "certificado":
         vid = int(f.get("id", 0) or 0)
@@ -1756,6 +1797,17 @@ def admin_usuarios():
                     raise ValueError("Sólo los usuarios de contabilidad revisan o firman roles.")
                 store.poner_permisos_roles(id_, f.get("revisa") == "1", f.get("firma") == "1")
                 flash(f"Listo: permisos del rol de pagos de {u['nombre']}.", "ok")
+            elif accion == "correo_prueba":
+                para = leer_email(f.get("email", ""))
+                ok, motivo = correo.mandar_codigo(para, g.usuario["nombre"].split()[0], "123456", store.MINUTOS_CODIGO, "crear")
+                if not ok:
+                    raise ValueError(f"No salió el correo: {motivo}. Avíseme antes de prender la contraseña.")
+                flash(f"Correo de prueba mandado a {para}. Fíjese que le haya llegado (y si cayó en Spam).", "ok")
+            elif accion == "pedir_clave":
+                prender = f.get("prender") == "1"
+                store.poner_configuracion("entrar_con_clave", "si" if prender else "no")
+                flash("Listo: desde ahora los trabajadores entran con cédula y contraseña." if prender else
+                      "Listo: los trabajadores vuelven a entrar sólo con la cédula.", "ok")
             elif accion == "nuevo_link":
                 import secrets
                 store.poner_configuracion("clave_comedor", secrets.token_urlsafe(9))
@@ -1769,7 +1821,7 @@ def admin_usuarios():
         except ValueError as exc:
             flash(str(exc), "error")
         return redirect(url_for("admin_usuarios"))
-    return render_template("admin_usuarios.html", usuarios=store.usuarios(),
+    return render_template("admin_usuarios.html", usuarios=store.usuarios(), pide_clave=pide_clave(),
                            link_comedor=url_for("comedor_t", token=clave_comedor(), _external=True,
                                                  _scheme="http" if request.host.startswith(("127.", "localhost")) else "https"))
 
@@ -2482,43 +2534,16 @@ def _parrafos_para_firmar(t: dict, banco: str, cuenta: str) -> list:
 
 def _falta_constancia(t: dict):
     """Si el trabajador todavía no firmó la constancia, la respuesta que lo manda a
-    firmarla; si ya la firmó, None. Va antes de TODO lo de roles (Tamara 13/10).
-    Y antes que la constancia, la contraseña del rol (Tamara 14/10)."""
-    if (falta := _falta_clave_rol(t)):
-        return falta
+    firmarla; si ya la firmó, None. Va antes de TODO lo de roles (Tamara 13/10)."""
     if store.constancia_de(t["id"]):
         return None
     return redirect(url_for("yo_constancia"))
 
 
-# ---- la contraseña del rol de pagos (Tamara 14/10/2026) -------------------
-# «Tenemos que poner contraseña para cuando el empleado va a ver su rol. Pone cédula e
-# email, le llega el código y luego registra contraseña.» Las vacaciones siguen
-# entrando sólo con la cédula; el rol (y la constancia, que tiene la cuenta del
-# banco) piden la contraseña. Una vez puesta, queda abierto HORAS_ROL_ABIERTO horas
-# en ese celular.
-HORAS_ROL_ABIERTO = 12
-
-
-def rol_abierto(t: dict) -> bool:
-    import time
-    a = session.get("rol_abierto") or {}
-    return (bool(t.get("clave_rol_hash")) and a.get("id") == t["id"] and a.get("hasta", 0) > time.time()
-            and a.get("clave_en") == str(t.get("clave_rol_en")))
-
-
-def _abrir_rol(t: dict) -> None:
-    import time
-    session["rol_abierto"] = {"id": t["id"], "hasta": time.time() + HORAS_ROL_ABIERTO * 3600,
-                              "clave_en": str(t.get("clave_rol_en"))}
-
-
-def _falta_clave_rol(t: dict):
-    if rol_abierto(t):
-        return None
-    return redirect(url_for("yo_rol_clave", next=request.path if request.method == "GET" else None))
-
-
+# ---- la contraseña para entrar (Tamara 14/10/2026) ------------------------
+# «La contraseña tiene que ser para todo, vacaciones y rol»: cédula → contraseña. La
+# primera vez: correo → código de 6 números → contraseña. «Todos deben tener mail.»
+# La tablet del comedor sigue con la cédula sola.
 def correo_tapado(email: str | None) -> str:
     """«juana.perez@gmail.com» → «ju•••z@gmail.com»: que sepa a cuál fue, sin mostrarlo entero."""
     if not email or "@" not in email:
@@ -2534,6 +2559,16 @@ def leer_email(texto: str) -> str:
     if not re.fullmatch(r"[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}", e) or len(e) > 120 or ".." in e:
         raise ValueError("Ese correo no parece un correo. Revíselo (por ejemplo: nombre@gmail.com).")
     return e
+
+
+def leer_clave_nueva(clave: str, repetir: str, cedula: str | None) -> str:
+    if len(clave) < 6:
+        raise ValueError("La contraseña tiene que tener al menos 6 letras o números.")
+    if clave != repetir:
+        raise ValueError("Las dos contraseñas no son iguales. Escríbalas de nuevo.")
+    if re.sub(r"\D", "", clave) == (cedula or "-") or (clave.isdigit() and len(set(clave)) == 1):
+        raise ValueError("Esa contraseña es muy fácil de adivinar. Elija otra.")
+    return clave
 
 
 def _mandar_codigo(t: dict, email: str, para_que: str) -> str | None:
@@ -2553,39 +2588,48 @@ def _mandar_codigo(t: dict, email: str, para_que: str) -> str | None:
     return None
 
 
-def _destino_rol(next_: str | None) -> str:
-    if next_ and next_.startswith("/yo/") and not next_.startswith("//"):
-        return next_
-    return url_for("yo_rol")
+def _quien_entra():
+    """El trabajador que puso la cédula y todavía no la contraseña (15 minutos)."""
+    import time
+    e = session.get("entrando") or {}
+    if not e.get("id") or e.get("hasta", 0) < time.time():
+        return None
+    t = store.trabajador(e["id"])
+    return t if puede_entrar(t) else None
 
 
-@app.route("/yo/rol/clave", methods=["GET", "POST"])
-def yo_rol_clave():
-    t = _mi_trabajador()
+@app.route("/yo/rol/clave")
+def yo_rol_clave_viejo():
+    """El link de antes (la contraseña era sólo del rol): ahora es la entrada."""
+    return redirect(url_for("entrar"))
+
+
+@app.route("/entrar/clave", methods=["GET", "POST"])
+def entrar_clave():
+    if _mi_trabajador():
+        return redirect(url_for("yo"))
+    t = _quien_entra()
     if not t:
         return redirect(url_for("entrar"))
-    destino = request.values.get("next") or None
-    if rol_abierto(t):
-        return redirect(_destino_rol(destino))
     tiene = bool(t.get("clave_rol_hash"))
-    vista = dict(t=t, next=destino, tapado=correo_tapado(t.get("email")), minutos=store.MINUTOS_CODIGO)
+    vista = dict(t=t, pila=nombre_de_pila(t["nombre"]).capitalize(), tapado=correo_tapado(t.get("email")),
+                 minutos=store.MINUTOS_CODIGO)
     if request.method == "GET":
-        if request.args.get("correo") == "1" and not tiene:
-            return render_template("yo_clave.html", modo="correo", email=t.get("email") or "", **vista)
-        return render_template("yo_clave.html", modo="entrar" if tiene else "correo", email=t.get("email") or "", **vista)
+        modo = "correo" if (request.args.get("correo") == "1" or not tiene) else "entrar"
+        return render_template("entrar_clave.html", modo=modo, email=t.get("email") or "", **vista)
 
     accion = request.form.get("accion", "")
     if accion == "entrar" and tiene:
         if store.clave_rol_trabada(t["id"]):
             flash(f"Por seguridad, espere {store.MINUTOS_TRABADO} minutos e intente de nuevo, o use «¿Olvidó su contraseña?».", "error")
-            return render_template("yo_clave.html", modo="entrar", **vista)
+            return render_template("entrar_clave.html", modo="entrar", **vista)
         if check_password_hash(t["clave_rol_hash"], request.form.get("clave") or ""):
             store.clave_rol_buena(t["id"])
-            _abrir_rol(t)
-            return redirect(_destino_rol(destino))
+            _abrir_sesion_trabajador(t)
+            return redirect(url_for("yo"))
         store.clave_rol_fallida(t["id"])
         flash("La contraseña no es correcta.", "error")
-        return render_template("yo_clave.html", modo="entrar", **vista)
+        return render_template("entrar_clave.html", modo="entrar", **vista)
 
     if accion in ("mandar", "olvide", "reenviar"):
         try:
@@ -2599,14 +2643,13 @@ def yo_rol_clave():
                     raise ValueError("No tenemos su correo. Pregunte en contabilidad.")
         except ValueError as exc:
             flash(str(exc), "error")
-            return render_template("yo_clave.html", modo="correo", email=request.form.get("email", ""), **vista)
+            return render_template("entrar_clave.html", modo="correo", email=request.form.get("email", ""), **vista)
         error = _mandar_codigo(t, email, "olvido" if tiene else "crear")
         if error:
             flash(error, "error")
             if not store.codigo_vivo(t["id"]):
-                return render_template("yo_clave.html", modo="entrar" if tiene else "correo", email=email, **vista)
-        return render_template("yo_clave.html", modo="codigo", email=email,
-                               **dict(vista, tapado=correo_tapado(email)))
+                return render_template("entrar_clave.html", modo="entrar" if tiene else "correo", email=email, **vista)
+        return render_template("entrar_clave.html", modo="codigo", email=email, **dict(vista, tapado=correo_tapado(email)))
 
     if accion == "crear":
         vivo = store.codigo_vivo(t["id"])
@@ -2617,32 +2660,19 @@ def yo_rol_clave():
             if vivo:
                 store.codigo_intento_malo(vivo["id"])
             flash("Ese código no sirve: puede estar mal escrito, vencido o ya usado. Pida otro.", "error")
-            return render_template("yo_clave.html", modo="codigo", email=email, **de_nuevo)
-        clave, repetir = request.form.get("clave") or "", request.form.get("repetir") or ""
-        problema = None
-        if len(clave) < 6:
-            problema = "La contraseña tiene que tener al menos 6 letras o números."
-        elif clave != repetir:
-            problema = "Las dos contraseñas no son iguales. Escríbalas de nuevo."
-        elif re.sub(r"\D", "", clave) == (t.get("cedula") or "-") or clave.isdigit() and len(set(clave)) == 1:
-            problema = "Esa contraseña es muy fácil de adivinar. Elija otra."
-        if problema:
-            flash(problema, "error")
-            return render_template("yo_clave.html", modo="codigo", email=email, codigo=seis, **de_nuevo)
+            return render_template("entrar_clave.html", modo="codigo", email=email, **de_nuevo)
+        try:
+            clave = leer_clave_nueva(request.form.get("clave") or "", request.form.get("repetir") or "", t.get("cedula"))
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return render_template("entrar_clave.html", modo="codigo", email=email, codigo=seis, **de_nuevo)
         store.codigo_usado(vivo["id"])
         store.guardar_clave_rol(t["id"], generate_password_hash(clave), email)
-        _abrir_rol(store.trabajador(t["id"]))
-        flash("Listo: su rol de pagos quedó protegido con su contraseña.", "ok")
-        return redirect(_destino_rol(destino))
+        _abrir_sesion_trabajador(store.trabajador(t["id"]))
+        flash("Listo: su cuenta quedó protegida con su contraseña.", "ok")
+        return redirect(url_for("yo"))
 
-    return redirect(url_for("yo_rol_clave"))
-
-
-@app.route("/yo/rol/salir", methods=["POST"])
-def yo_rol_salir():
-    """Cierra el rol de pagos en este celular (las vacaciones siguen abiertas)."""
-    session.pop("rol_abierto", None)
-    return redirect(url_for("yo_vacaciones"))
+    return redirect(url_for("entrar_clave"))
 
 
 @app.route("/yo/constancia", methods=["GET", "POST"])
@@ -2650,8 +2680,6 @@ def yo_constancia():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
-    if (falta := _falta_clave_rol(t)):
-        return falta
     c = store.constancia_de(t["id"])
     if request.method == "POST" and not c:
         banco, cuenta = request.form.get("banco", ""), request.form.get("cuenta", "")
@@ -2680,7 +2708,7 @@ def yo_constancia():
 @app.route("/yo/constancia/firma.png")
 def yo_constancia_firma():
     t = _mi_trabajador()
-    c = store.constancia_de(t["id"]) if t and rol_abierto(t) else None
+    c = store.constancia_de(t["id"]) if t else None
     if not c:
         abort(404)
     from io import BytesIO
@@ -2692,8 +2720,6 @@ def yo_constancia_imprimir():
     t = _mi_trabajador()
     if not t:
         return redirect(url_for("entrar"))
-    if (falta := _falta_clave_rol(t)):
-        return falta
     c = store.constancia_de(t["id"])
     if not c:
         return redirect(url_for("yo_constancia"))
@@ -2800,7 +2826,7 @@ def yo_rol_firmar():
 def yo_rol_firma_empresa(id_):
     """La firma de la empresa en SU recibo. Nunca la de otro."""
     t = _mi_trabajador()
-    r = store.rol_pago(id_) if t and rol_abierto(t) else None
+    r = store.rol_pago(id_) if t else None
     if not r or r["trabajador_id"] != t["id"] or not store.visible(r):
         abort(404)
     png = store.firma_empresa_del_rol(id_)
@@ -2814,7 +2840,7 @@ def yo_rol_firma_empresa(id_):
 def yo_rol_firma(id_):
     """La firma propia, para verla después de firmar. Nunca la de otro."""
     t = _mi_trabajador()
-    r = store.rol_pago(id_) if t and rol_abierto(t) else None
+    r = store.rol_pago(id_) if t else None
     if not r or r["trabajador_id"] != t["id"]:
         abort(404)
     png = store.firma_del_rol(id_)
@@ -2837,6 +2863,7 @@ def healthz():
     try:
         estado["trabajadores_activos"] = len(store.trabajadores())
         estado["hay_usuarios"] = store.hay_usuarios()
+        estado["entrar_con_clave"] = pide_clave()
         us = [u for u in store.usuarios() if u["activo"]]
         # sin nombres: cuántos revisan y firman roles, y si el que firma ya registró su firma
         estado["roles"] = {"revisan": sum(1 for u in us if u.get("revisa_roles")),
