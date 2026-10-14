@@ -2837,6 +2837,16 @@ def healthz():
     try:
         estado["trabajadores_activos"] = len(store.trabajadores())
         estado["hay_usuarios"] = store.hay_usuarios()
+        us = [u for u in store.usuarios() if u["activo"]]
+        # sin nombres: cuántos revisan y firman roles, y si el que firma ya registró su firma
+        estado["roles"] = {"revisan": sum(1 for u in us if u.get("revisa_roles")),
+                           "firman": sum(1 for u in us if u.get("firma_roles")),
+                           "firman_con_firma": sum(1 for u in us if u.get("firma_roles") and u.get("tiene_firma"))}
+        try:
+            import boto3  # noqa: F401
+            estado["correo"] = "listo" if os.environ.get("MAIL_ENVIAR", "1") != "0" else "apagado"
+        except Exception:  # noqa: BLE001
+            estado["correo"] = "falta boto3"
     except Exception as exc:  # noqa: BLE001
         estado.update(ok=False, base="error", error=str(exc))
         return estado, 503
