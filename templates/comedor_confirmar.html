@@ -3,21 +3,58 @@
 {% block clase_hoja %}angosta comedor{% endblock %}
 {% block contenido %}
 {# Simple (Tamara 14/10/2026: «hacelo más fácil, no me gusta tan complicado»):
-   el nombre grande y un botón por horario. Tocar el horario ya registra. #}
+   el nombre grande y un botón por horario. Tocar el horario ya registra.
+   El que puede traer invitados los elige DEBAJO del horario, en esta misma
+   pantalla («no hagamos otra pantalla»), y confirma con «Registrar». #}
 <div class="kiosco">
+  {% if error %}<div class="kiosco-error">{{ error }}</div>{% endif %}
   <div class="kiosco-quien">
     <b>{{ t.nombre }}</b>
     <span>{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }} · toque su horario</span>
   </div>
-  <form method="POST" action="{{ u('comedor_confirmar') }}" class="kiosco-horarios">
+  <form method="POST" action="{{ u('comedor_confirmar') }}" id="form-comida">
     <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
-    {% for x in TURNOS[tipo] %}
-    <button class="btn kiosco-hora {{ 'ahora' if x == turno }}" type="submit" name="turno" value="{{ x }}" {% if x == turno %}autofocus{% endif %}>{{ x }}</button>
-    {% endfor %}
+    {% if t.puede_invitar %}
+    <input type="hidden" name="turno" id="turno" value="{{ turno }}">
+    <div class="kiosco-horarios">
+      {% for x in TURNOS[tipo] %}
+      <button class="btn kiosco-hora {{ 'ahora' if x == turno }}" type="button" data-turno="{{ x }}">{{ x }}</button>
+      {% endfor %}
+    </div>
+    <div class="kiosco-inv">
+      <div class="kiosco-inv-tit">¿Trae invitados?</div>
+      <div class="kiosco-cant" id="cantidades">
+        {% for n in range(0, 4) %}<button class="btn suave {{ 'elegido' if n == (cantidad or 0) }}" type="button" data-n="{{ n }}">{{ 'No' if n == 0 else n }}</button>{% endfor %}
+      </div>
+      <input type="hidden" name="cantidad" id="cantidad" value="{{ cantidad or 0 }}">
+      <input name="descripcion" id="descripcion" maxlength="80" placeholder="Quiénes son: proveedor, familiar…" autocomplete="off"
+             style="height:56px;font-size:20px;margin-top:10px;{{ '' if cantidad else 'display:none' }}">
+    </div>
+    <button class="btn verde kiosco-btn" type="submit">Registrar</button>
+    {% else %}
+    <div class="kiosco-horarios">
+      {% for x in TURNOS[tipo] %}
+      <button class="btn kiosco-hora {{ 'ahora' if x == turno }}" type="submit" name="turno" value="{{ x }}" {% if x == turno %}autofocus{% endif %}>{{ x }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
   </form>
   <form method="GET" action="{{ u('comedor') }}">
-    <button class="btn suave kiosco-no" type="submit">No soy yo</button>
+    <button class="btn suave kiosco-no" type="submit" style="margin-top:12px">No soy yo</button>
   </form>
 </div>
-<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 30000);</script>
+{% if t.puede_invitar %}
+<script>
+  document.querySelectorAll('[data-turno]').forEach(function(b){ b.onclick=function(){
+    document.querySelectorAll('[data-turno]').forEach(function(x){ x.classList.remove('ahora'); });
+    b.classList.add('ahora'); document.getElementById('turno').value=b.dataset.turno; }; });
+  var desc=document.getElementById('descripcion');
+  document.querySelectorAll('[data-n]').forEach(function(b){ b.onclick=function(){
+    document.querySelectorAll('[data-n]').forEach(function(x){ x.classList.remove('elegido'); });
+    b.classList.add('elegido'); document.getElementById('cantidad').value=b.dataset.n;
+    var hay=b.dataset.n!=='0'; desc.style.display=hay?'':'none'; desc.required=hay; if(hay) desc.focus(); }; });
+  desc.required = document.getElementById('cantidad').value !== '0';
+</script>
+{% endif %}
+<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 60000);</script>
 {% endblock %}

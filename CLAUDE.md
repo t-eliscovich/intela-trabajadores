@@ -269,7 +269,7 @@ las funciones de `store` una por una, no el módulo entero.
   VALOR; totales en recuadro; A RECIBIR; firmas «Dpto. de RR.HH.» y el trabajador.
 - **«Salir» siempre visible** en el celular del trabajador (`_barra_yo.html`).
 - **Los meses del rol en grilla de 4**, sin scroll de costado.
-- **La tablet es un toque**: cédula → nombre + un botón por horario (el de ahora en
+- **La tablet es un toque** (el que puede invitar elige «¿Trae invitados? No·1·2·3» + quiénes DEBAJO del horario, misma pantalla, y toca Registrar): cédula → nombre + un botón por horario (el de ahora en
   verde) → registrado. Sin «¿Es usted?», sin desplegable, sin deshacer. «No soy yo» vuelve.
 - **Comensales (contabilidad)**: «Sin registrar» lista también al que tiene una sola
   comida, con un desplegable de comida+horario (`leer_horario`, «cena|19:00»).

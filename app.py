@@ -759,8 +759,21 @@ def comedor_confirmar():
         turno = leer_turno(request.form.get("turno"), tipo)
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
+    # los invitados se eligen en la MISMA pantalla, debajo del horario (Tamara 14/10/2026: «no hagamos otra pantalla»)
+    cantidad = int(request.form.get("cantidad") or 0) if (request.form.get("cantidad") or "0").isdigit() else 0
+    descripcion = (request.form.get("descripcion") or "").strip()[:80]
+    if cantidad:
+        if not t.get("puede_invitar"):
+            return _tablet("comedor.html", error=f"{t['nombre']} no tiene permiso para traer invitados. Pregunte en contabilidad.")
+        if not 1 <= cantidad <= MAX_INVITADOS or not descripcion:
+            return _tablet("comedor_confirmar.html", t=t, fecha=hoy(), turno=turno, cantidad=cantidad,
+                           error="Escriba quiénes son los invitados (por ejemplo: proveedor, familiar)."
+                           if descripcion == "" else f"Los invitados son de 1 a {MAX_INVITADOS}.")
     store.marcar_comida(t["id"], hoy(), tipo, _quien_marca(), turno)
-    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=0, turno=turno)
+    if cantidad:
+        store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca(), turno)
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=cantidad, turno=turno,
+                   invitados_anotados=cantidad, con_comida=True)
 
 
 @app.route("/comedor/invitados", methods=["POST"], endpoint="comedor_invitados")

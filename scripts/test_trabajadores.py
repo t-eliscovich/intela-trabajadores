@@ -190,6 +190,24 @@ check("la tablet ya no deshace: la ruta no existe y la comida sigue", r.status_c
 r = k.post(T, data={"cedula": "1712345678"})
 html = r.get_data(as_text=True)
 check("si vuelve, le dice que ya registró y le ofrece invitados", "Ya registró" in html and "¿Trae invitados?" in html)
+# invitados en la MISMA pantalla, debajo del horario (Tamara 14/10: «no hagamos otra pantalla»)
+base.poner_puede_invitar(maria, True)
+html = k.post(T, data={"cedula": "0912345678"}).get_data(as_text=True)
+check("con permiso, debajo del horario elige invitados y confirma con Registrar", "¿Trae invitados?" in html and 'name="cantidad"' in html and ">Registrar</button>" in html
+      and 'type="button" data-turno=' in html)
+_antes = sum(i["cantidad"] for i in base.invitados_del_dia(HOY))
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": TURNO, "cantidad": "2", "descripcion": ""})
+check("con invitados y sin decir quiénes, no registra nada y lo pide", "quiénes son" in r.get_data(as_text=True) and (maria, HOY, TIPO) not in base.alm)
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": TURNO, "cantidad": "2", "descripcion": "sus hijos"})
+html = r.get_data(as_text=True)
+check("registra la comida y los 2 invitados de una, con su horario", (maria, HOY, TIPO) in base.alm and "con 2 invitados" in html and "¿Trae invitados?" not in html
+      and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == _antes + 2
+      and [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria][0]["turno"] == TURNO)
+base.desmarcar_comida(maria, HOY, TIPO); base.poner_puede_invitar(maria, False)
+for _i in [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria]:
+    base.borrar_invitados(_i["id"])
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": TURNO, "cantidad": "1", "descripcion": "x"})
+check("sin permiso no pasan invitados ni la comida", "no tiene permiso" in r.get_data(as_text=True) and (maria, HOY, TIPO) not in base.alm)
 r = k.post(T + "/invitados", data={"cedula": "1712345678", "tipo": TIPO, "cantidad": "2", "descripcion": "proveedor"})
 check("anota 2 invitados con descripción, con su mismo horario", "2 invitados registrados" in r.get_data(as_text=True) and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == 2
       and base.invitados_del_dia(HOY)[0]["turno"] == TURNO)

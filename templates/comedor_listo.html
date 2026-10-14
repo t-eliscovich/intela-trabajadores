@@ -7,13 +7,14 @@
     <div class="tilde">{{ '!' if ya_estaba else '✓' }}</div>
     <b>{{ t.nombre }}</b>
     <p>
-      {% if invitados_anotados %}{{ invitados_anotados }} {{ 'invitado registrado' if invitados_anotados == 1 else 'invitados registrados' }}. ¡Buen provecho!
+      {% if con_comida %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado{% if invitados_anotados %}, con {{ invitados_anotados }} {{ 'invitado' if invitados_anotados == 1 else 'invitados' }}{% endif %}. ¡Buen provecho!
+      {% elif invitados_anotados %}{{ invitados_anotados }} {{ 'invitado registrado' if invitados_anotados == 1 else 'invitados registrados' }}. ¡Buen provecho!
       {% elif ya_estaba %}Ya registró {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
       {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado. ¡Buen provecho!{% endif %}
     </p>
   </div>
 
-  {% if t.puede_invitar and invitados < 3 %}
+  {% if t.puede_invitar and invitados < 3 and ya_estaba %}
   <div class="bloque" style="text-align:left">
     <div class="titulo"><h2>¿Trae invitados?</h2><p>Hasta 3 por comida{% if invitados %} · ya tiene {{ invitados }}{% endif %}.</p></div>
     <div class="relleno">
@@ -32,5 +33,5 @@
     <form method="GET" action="{{ u('comedor') }}"><button class="btn kiosco-btn" type="submit" autofocus>Listo</button></form>
   </div>
 </div>
-<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, {{ 25000 if (t.puede_invitar and invitados < 3) else 4000 }});</script>
+<script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, {{ 25000 if (t.puede_invitar and invitados < 3 and ya_estaba) else 4000 }});</script>
 {% endblock %}

@@ -112,6 +112,7 @@ guardar("yo_perfil", c.get("/yo/perfil").get_data(as_text=True))
 k = A.app.test_client()
 T = "/comedor/t/abc123"
 guardar("comedor", k.get(T).get_data(as_text=True))
+base.poner_puede_invitar(ids["Carlos Andrade"], True)
 guardar("comedor_confirmar", k.post(T, data={"cedula": "1103456784"}).get_data(as_text=True))
 guardar("comedor_listo", k.post(T + "/confirmar", data={"cedula": "1712345675", "tipo": "almuerzo"}).get_data(as_text=True))
 guardar("comedor_invitados", k.post(T + "/invitados", data={"cedula": "1712345675", "tipo": "almuerzo", "cantidad": "1", "descripcion": "proveedor de hilo"}).get_data(as_text=True))
