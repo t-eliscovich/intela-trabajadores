@@ -1182,6 +1182,12 @@ def crear_usuario(usuario: str, clave_hash: str, nombre: str, rol: str = "contab
     return fila["id"]
 
 
+def renombrar_usuario(id_: int, usuario: str, nombre: str) -> None:
+    """Cambia el usuario con el que entra y el nombre que se ve. Lo ya cargado
+    con el usuario viejo («cargado por …») queda como estaba."""
+    _ejecutar("UPDATE trabajadores.usuario SET usuario=%s, nombre=%s WHERE id=%s", (usuario, nombre, id_))
+
+
 def cambiar_clave(id_: int, clave_hash: str) -> None:
     _ejecutar("UPDATE trabajadores.usuario SET clave_hash=%s WHERE id=%s", (clave_hash, id_))
 

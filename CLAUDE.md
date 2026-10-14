@@ -293,3 +293,7 @@ las funciones de `store` una por una, no el módulo entero.
   antes pegar el padrón borraba el celular que el trabajador corrigió). Columna 9 = tipo.
 - **Áreas** (planilla de octubre): ADM Administración, AC Acabados, BO Bodega,
   MC Mantenimiento, TJ Tejeduría, TT Tintorería (`NOMBRES_AREA`; CC→AC, KK→TJ).
+- **Cambiar el nombre de usuario** (Tamara 14/10/2026): en Usuarios, usuario y nombre se
+  escriben encima y «Guardar» (`store.renombrar_usuario`; minúsculas, sin repetir). La clave
+  no cambia. Si es el propio, se actualiza la sesión. Lo ya cargado («cargado por …») queda
+  con el usuario viejo.

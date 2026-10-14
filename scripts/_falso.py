@@ -629,6 +629,9 @@ class BaseFalsa:
     def comida_marcada(self, trabajador_id, fecha, tipo):
         return (trabajador_id, fecha, tipo) in self.alm
 
+    def renombrar_usuario(self, id_, usuario, nombre):
+        self.usu[id_].update(usuario=usuario, nombre=nombre)
+
     def cambiar_clave(self, id_, clave_hash):
         self.usu[id_]["clave_hash"] = clave_hash
 

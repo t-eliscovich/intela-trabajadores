@@ -1135,6 +1135,20 @@ check("la lista de áreas nueva", A.AREAS == ("ADM", "AC", "BO", "MC", "TJ", "TT
 for x in (tmp, jub, sc["id"]):
     base.trab.pop(x)
 
+# --- 5c. cambiar el nombre de usuario (Tamara 14/10/2026) ---------------------
+print("Renombrar usuarios:")
+_ofi = next(u for u in base.usuarios() if u["usuario"] == "oficina")
+c.post("/admin/usuarios", data={"accion": "renombrar", "id": _ofi["id"], "usuario": "Mariana ", "nombre": "Mariana P."})
+check("se cambia usuario (en minúsculas) y nombre", base.usuario(_ofi["id"])["usuario"] == "mariana" and base.usuario(_ofi["id"])["nombre"] == "Mariana P.")
+r = A.app.test_client().post("/admin/entrar", data={"usuario": "mariana", "clave": "ofi12345"})
+check("entra con el usuario nuevo y la misma clave", r.status_code == 302)
+r = c.post("/admin/usuarios", data={"accion": "renombrar", "id": _ofi["id"], "usuario": "conta", "nombre": "x"}, follow_redirects=True)
+check("no deja repetir un usuario que ya existe", "ya existe" in r.get_data(as_text=True) and base.usuario(_ofi["id"])["usuario"] == "mariana")
+_yo = next(u for u in base.usuarios() if u["usuario"] == "conta")
+c.post("/admin/usuarios", data={"accion": "renombrar", "id": _yo["id"], "usuario": "conta", "nombre": "Contabilidad Intela"})
+check("el propio: la barra muestra el nombre nuevo sin volver a entrar", "Contabilidad Intela" in c.get("/admin").get_data(as_text=True))
+c.post("/admin/usuarios", data={"accion": "renombrar", "id": _ofi["id"], "usuario": "oficina", "nombre": _ofi["nombre"]})
+
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")
 for ruta in ("/admin/constancias", "/admin/roles", "/admin/roles/cargar", "/admin", "/admin?todos=1", f"/admin/trabajador/{juan}", "/admin/carga",

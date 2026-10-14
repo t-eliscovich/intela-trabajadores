@@ -1704,6 +1704,18 @@ def admin_usuarios():
                     raise ValueError("Falta decir si es de contabilidad o del comedor.")
                 store.crear_usuario(usuario, generate_password_hash(clave), nombre, rol)
                 flash(f"Usuario {usuario} creado.", "ok")
+            elif accion == "renombrar":
+                id_ = int(f.get("id", 0) or 0)
+                usuario = (f.get("usuario") or "").strip().lower()
+                if not re.fullmatch(r"[a-z0-9._-]{2,30}", usuario):
+                    raise ValueError("El usuario va en minúsculas, sin espacios (2 a 30 letras).")
+                if any(u["usuario"] == usuario and u["id"] != id_ for u in store.usuarios()):
+                    raise ValueError(f"El usuario «{usuario}» ya existe.")
+                nombre = (f.get("nombre") or "").strip()[:60] or usuario
+                store.renombrar_usuario(id_, usuario, nombre)
+                if id_ == g.usuario["id"]:  # el suyo: que la barra lo muestre ya
+                    session["usuario"] = dict(session["usuario"], usuario=usuario, nombre=nombre)
+                flash(f"Listo: ahora entra como «{usuario}».", "ok")
             elif accion == "clave":
                 clave = f.get("clave") or ""
                 if len(clave) < 6:
