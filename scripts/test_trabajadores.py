@@ -1243,6 +1243,52 @@ r = c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(AC2).decod
 check("al confirmar, corrige la cédula y carga", "Se corrigió la cédula" in r.get_data(as_text=True)
       and base.trabajador(_mal)["cedula"] == "1312288291" and base.roles_del_mes(2026, 5)[0]["trabajador_id"] == _mal)
 check("la lista marca las cédulas no válidas", "cédula no válida" in c.get("/admin?todos=1").get_data(as_text=True) or True)
+# --- EL CONTROL CON EL BANCO (Tamara 14/10/2026: «este es el archivo que controla, es lo que
+# mandan al banco, así que no tiene puntos») ---
+def _xlsx_banco(filas, ref="ROL_11_25"):
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active
+    for cent, cuenta, ced, nom, tipo_id in filas:
+        ws.append(["PA", "NOMINA", "USD", cent, "CTA", "AHO", cuenta, ref, tipo_id, ced, nom, None])
+    b = BytesIO(); wb.save(b); return b.getvalue()
+
+
+_base_r = base.roles_del_mes(2026, 9)[0]
+_ped = pedro["id"]
+_filas_nov = [dict({k: _base_r[k] for k in ("codigo", "nombre_rol", "sueldo", "dias", "horas_25", "horas_50", "horas_100", "atrasos",
+                                           "otros", "ingresos", "descuentos", "total_ingresos", "total_descuentos")},
+                   trabajador_id=t, codigo=900 + i, liquido=500.0 + i) for i, t in enumerate((rosa, juan, maria, _ped))]
+base.cargar_roles(2025, 11, _filas_nov, "conta", True)
+_sep = {x["trabajador_id"]: x for x in base.roles_del_mes(2025, 11)}
+_cons_rosa = base.constancia_de(rosa)["cuenta"]
+_banco = _xlsx_banco([
+    (int(round(_sep[rosa]["liquido"] * 100)), int(_cons_rosa), int(base.trabajador(rosa)["cedula"]), "ROSAS ANA", "C"),  # ok (cédula sin el 0 no importa)
+    (int(round(_sep[juan]["liquido"] * 100)) + 1000, 2200999999, base.trabajador(juan)["cedula"], "PEREZ JUAN", "C"),  # $10 más
+    (int(round(_sep[_ped]["liquido"] * 100)), 2200555555, "AB1234", " ".join(base.trabajador(_ped)["nombre"].split()[:2]), "P"),  # pasaporte → por nombre
+    (50000, 2200111111, "1799999999", "NADIE CONOCIDO", "C")])  # en el banco y no en el rol
+rb = R.leer_pago_banco(_banco)
+check("lee el archivo del banco: el monto en centavos, la cuenta, la cédula con su 0, y el mes del ROL_09_26",
+      len(rb[0]) == 4 and rb[0][0]["monto"] == round(_sep[rosa]["liquido"], 2) and rb[2] == (2025, 11) and rb[0][0]["identificacion"] == base.trabajador(rosa)["cedula"])
+check("un Excel cualquiera no pasa por archivo del banco", "no tiene filas de pago" in _mensaje_de(lambda: R.leer_pago_banco(_xlsx_banco([])))
+      or "no parece" in _mensaje_de(lambda: R.leer_pago_banco(_xlsx_banco([]))))
+check("la cuenta se compara sin los ceros de adelante", R.misma_cuenta("0220136474", "220136474") and not R.misma_cuenta("1", "2"))
+r = c.post("/admin/roles/banco", data={"mes": "2025-10", "archivo": (BytesIO(_banco), "Pago_Rol_11_25.xlsx")}, content_type="multipart/form-data", follow_redirects=True)
+check("el archivo de septiembre no se sube en agosto", "no de octubre" in r.get_data(as_text=True) and not base.control_banco(2025, 10))
+r = c.post("/admin/roles/banco", data={"mes": "2025-11", "archivo": (BytesIO(_banco), "Pago_Rol_11_25.xlsx")}, content_type="multipart/form-data", follow_redirects=True)
+html = r.get_data(as_text=True)
+check("subido en septiembre: el control con el banco con los totales", "4 pagos" in html and "Control con el banco" in html and base.control_banco(2025, 11)
+      and "Pago_Rol_11_25.xlsx" in html and "diferencia" in html)
+check("persona por persona: coincide, otro monto (+10), el pasaporte encontrado por nombre, y la que falta", "✓ Banco" in html
+      and "El banco paga" in html and "+10,00" in html and "No está en el archivo del banco" in html and "✗ 1 en el banco y no en el rol" in html
+      and "NADIE CONOCIDO" in html)
+_cmp = R.comparar_con_banco(base.roles_del_mes(2025, 11), base.control_banco(2025, 11)["filas"], {rosa: _cons_rosa})
+check("y las cuentas: si no es la de su constancia, avisa", _cmp["por_trabajador"][rosa]["estado"] == "ok"
+      and R.comparar_con_banco(base.roles_del_mes(2025, 11), base.control_banco(2025, 11)["filas"], {rosa: "999"})["por_trabajador"][rosa]["estado"] == "cuenta"
+      and _cmp["por_trabajador"][_ped]["estado"] == "ok" and _cmp["por_trabajador"][maria]["estado"] == "falta")
+html = cj.get("/admin/roles?mes=2025-11").get_data(as_text=True)
+check("Jessica tiene «Elegir los que coinciden con el banco» y el filtro de diferencias", "Elegir los que coinciden con el banco" in html
+      and "No coinciden con el banco" in html)
+check("el control no carga nada: el rol sigue igual", len(base.roles_del_mes(2025, 11)) == len(_sep))
 # --- «ya lo firmaron en papel» (Tamara 13/10: hasta septiembre todo firmado; en la app desde octubre) ---
 html = c.get("/admin/roles?mes=2026-09").get_data(as_text=True)
 check("el mes que pide firma ofrece «Marcar como firmado en papel»", "Marcar como firmado en papel" in html)

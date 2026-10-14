@@ -429,3 +429,94 @@ def cruzar_por_cedula(personas: list[dict], padron: list[dict]) -> None:
                               f"Al confirmar se corrige a {p['cedula']}")
             else:
                 p["aviso"] = f"en el padrón tiene otra cédula ({t['cedula']})"
+
+
+# --------------------------------------------------------------------------
+# El archivo que se manda al BANCO (Tamara 14/10/2026: «este es el archivo que
+# controla, es lo que mandan al banco, así que no tiene puntos»). Pago_Rol_MM_AA.xlsx,
+# sin títulos, una fila por persona:
+#   PA · NOMINA · USD · monto EN CENTAVOS · CTA · AHO/CTE · N.º de cuenta · ROL_MM_AA ·
+#   C (cédula) / P (pasaporte) · identificación · nombre corto · código del banco (vacío =
+#   el mismo banco)
+# Es el SEGUNDO control: el rol de WinAfin ya está cargado; esto no carga nada, se compara.
+# --------------------------------------------------------------------------
+def leer_pago_banco(datos: bytes, nombre: str = "pago.xlsx") -> tuple[list[dict], list[str], tuple | None]:
+    """Devuelve (filas, problemas, (anio, mes) del ROL_MM_AA o None)."""
+    from openpyxl import load_workbook
+    try:
+        hoja = load_workbook(BytesIO(datos), read_only=True, data_only=True).worksheets[0]
+        crudas = [list(r) for r in hoja.iter_rows(values_only=True)]
+    except Exception:  # noqa: BLE001
+        raise ValueError("No se pudo abrir el archivo. Tiene que ser el Excel que se manda al banco (Pago_Rol_MM_AA.xlsx).") from None
+    filas, problemas, refs = [], [], set()
+    for n, r in enumerate(crudas, start=1):
+        r = (r + [None] * 12)[:12]
+        if all(v in (None, "") for v in r):
+            continue
+        if str(r[0] or "").strip().upper() != "PA" or str(r[1] or "").strip().upper() != "NOMINA":
+            problemas.append(f"Fila {n}: no parece una fila de pago (empieza con «{r[0]}»).")
+            continue
+        try:
+            centavos = int(round(float(r[3])))
+        except (TypeError, ValueError):
+            problemas.append(f"Fila {n}: el monto «{r[3]}» no es un número.")
+            continue
+        tipo_id = str(r[8] or "").strip().upper()
+        ident = limpiar_cedula(r[9]) if tipo_id == "C" else str(r[9] or "").strip()
+        cuenta = re.sub(r"\D", "", str(int(r[6]) if isinstance(r[6], float) else (r[6] or "")))
+        refs.add(str(r[7] or "").strip().upper())
+        filas.append({"fila": n, "monto": centavos / 100, "tipo_cuenta": str(r[5] or "").strip().upper(),
+                      "cuenta": cuenta, "tipo_id": tipo_id, "identificacion": ident,
+                      "nombre": " ".join(str(r[10] or "").split()), "banco": r[11] if r[11] not in ("", None) else None})
+    if not filas:
+        raise ValueError("El archivo no tiene filas de pago. ¿Es el que se manda al banco?")
+    mes = None
+    m = re.fullmatch(r"ROL_(\d{1,2})_(\d{2})", refs.pop()) if len(refs) == 1 else None
+    if m and 1 <= int(m.group(1)) <= 12:
+        mes = (2000 + int(m.group(2)), int(m.group(1)))
+    elif len(refs) > 1:
+        problemas.append("El archivo mezcla referencias de varios meses: " + ", ".join(sorted(refs)) + ".")
+    return filas, problemas, mes
+
+
+def misma_cuenta(a: str | None, b: str | None) -> bool:
+    """El Excel del banco se come los ceros de adelante: 0220136474 = 220136474."""
+    a, b = re.sub(r"\D", "", a or "").lstrip("0"), re.sub(r"\D", "", b or "").lstrip("0")
+    return bool(a) and a == b
+
+
+def comparar_con_banco(recibos: list[dict], banco: list[dict], cuentas: dict[int, str]) -> dict:
+    """Recibo por recibo contra el archivo del banco. `cuentas`: trabajador_id → la cuenta
+    que firmó en su constancia. Por cédula; el pasaporte, por el nombre del banco dentro del
+    nombre del padrón (si es uno solo)."""
+    por_ced = {}
+    for b in banco:
+        por_ced.setdefault(b["identificacion"], []).append(b)
+    usados, por_trab = set(), {}
+    for r in recibos:
+        cands = por_ced.get(r.get("cedula") or "", [])
+        if not cands:
+            # pasaporte u otra identificación: por nombre, sólo si hay uno solo que encaje
+            pal = set(normalizar(r["nombre"]).split())
+            cands = [b for b in banco if b["tipo_id"] != "C" and set(normalizar(b["nombre"]).split()) <= pal]
+        if len(cands) != 1 or id(cands[0]) in usados:
+            por_trab[r["trabajador_id"]] = {"estado": "falta", "texto": "No está en el archivo del banco"}
+            continue
+        b = cands[0]
+        usados.add(id(b))
+        dif = round(b["monto"] - float(r["liquido"]), 2)
+        firmada = cuentas.get(r["trabajador_id"])
+        res = {"banco": b, "diferencia": dif}
+        if abs(dif) >= 0.005:
+            res.update(estado="monto", texto=f"El banco paga {b['monto']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                       + f" ({'+' if dif > 0 else ''}{dif:,.2f})".replace(",", "X").replace(".", ",").replace("X", "."))
+        elif firmada and not misma_cuenta(firmada, b["cuenta"]):
+            res.update(estado="cuenta", texto=f"La cuenta del banco ({b['cuenta']}) no es la de su constancia ({firmada})")
+        else:
+            res.update(estado="ok", texto="Coincide con el banco" + ("" if firmada else " (sin constancia para comparar la cuenta)"))
+        por_trab[r["trabajador_id"]] = res
+    sobran = [b for b in banco if id(b) not in usados]
+    cuenta = {k: sum(1 for x in por_trab.values() if x["estado"] == k) for k in ("ok", "monto", "cuenta", "falta")}
+    return {"por_trabajador": por_trab, "sobran": sobran, "cuenta": cuenta,
+            "total_banco": round(sum(b["monto"] for b in banco), 2),
+            "total_rol": round(sum(float(r["liquido"]) for r in recibos), 2)}

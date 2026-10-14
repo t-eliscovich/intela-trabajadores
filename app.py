@@ -1903,13 +1903,24 @@ def admin_roles():
             f"ya está en la aplicación de Intela. Por favor revíselo y fírmelo: https://trabajadores.intela.com.ec")
     totales = {k: sum(r[k] for r in filas) for k in ("total_ingresos", "total_descuentos", "liquido")}
     piden = [r for r in filas if r.get("pide_firma", True) and r["visible"]]
-    necesitan = [r for r in filas if r.get("necesita_aprobacion")]
+    necesitan = [r for r in filas if store.en_revision(r)]
+    for r in filas:
+        r["en_revision"] = store.en_revision(r)
+    control = store.control_banco(anio, mes)
+    banco = None
+    if control:
+        cuentas = {tid: c["cuenta"] for tid, c in store.constancias_vigentes().items()}
+        banco = roles.comparar_con_banco(filas, control["filas"], cuentas)
+        banco["control"] = control
+        for r in filas:
+            r["banco"] = banco["por_trabajador"].get(r["trabajador_id"])
     revision = {"necesitan": len(necesitan), "revisados": sum(1 for r in necesitan if r.get("revisado_en")),
                 "aprobados": sum(1 for r in necesitan if r.get("aprobado_en"))}
     recientes = sorted((r for r in filas if r["firmado_en"]), key=lambda r: r["firmado_en"], reverse=True)[:8]
     n_constancias, n_activos = len(store.constancias_vigentes()), len(store.trabajadores())
     return render_template("admin_roles.html", anio=anio, mes=mes, filas=filas, meses=meses, totales=totales,
                            recientes=recientes, n_constancias=n_constancias, n_activos=n_activos, revision=revision,
+                           banco=banco,
                            firmados=sum(1 for r in piden if r["firmado_en"]), piden=len(piden),
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
 
@@ -1938,6 +1949,31 @@ def admin_roles_revisar():
         flash(f"Listo: {n} {'recibo revisado' if n == 1 else 'recibos revisados'}." if n else
               "Esos recibos ya estaban revisados.", "ok" if n else "error")
     return redirect(url_for("admin_roles", mes=mes))
+
+
+@app.route("/admin/roles/banco", methods=["POST"])
+@requiere_admin
+def admin_roles_banco():
+    """El SEGUNDO control (Tamara 14/10/2026): el archivo que se manda al banco. No carga
+    nada: se guarda tal cual y la tabla del mes lo compara con cada recibo."""
+    mes_txt = request.form.get("mes") or None
+    try:
+        anio, mes = leer_mes(mes_txt)
+        archivo = request.files.get("archivo")
+        if not archivo or not archivo.filename:
+            raise ValueError("Elija el archivo del banco (Pago_Rol_MM_AA.xlsx).")
+        filas, problemas, del_archivo = roles.leer_pago_banco(archivo.read(), archivo.filename)
+        if del_archivo and del_archivo != (anio, mes):
+            raise ValueError(f"Ese archivo es del rol de {nombre_mes(*del_archivo).lower()}, no de {nombre_mes(anio, mes).lower()}. "
+                             "Súbalo en ese mes.")
+        if not store.roles_del_mes(anio, mes):
+            raise ValueError(f"Primero cargue el rol de {nombre_mes(anio, mes).lower()}: el archivo del banco se compara contra él.")
+        store.guardar_control_banco(anio, mes, archivo.filename, filas, g.usuario["usuario"])
+        flash(f"Listo: archivo del banco con {len(filas)} pagos. Abajo ve, persona por persona, si coincide con el rol."
+              + (" " + " ".join(problemas[:3]) if problemas else ""), "ok" if not problemas else "error")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("admin_roles", mes=mes_txt))
 
 
 @app.route("/admin/roles/firmar", methods=["POST"])

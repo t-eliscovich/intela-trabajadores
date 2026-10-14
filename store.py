@@ -450,6 +450,20 @@ ESQUEMA = """
         intentos       integer NOT NULL DEFAULT 0,
         usado_en       timestamptz
     );
+    -- EL CONTROL CON EL BANCO (Tamara 14/10/2026): el archivo que se manda al banco, guardado
+    -- tal como se leyó para comparar contra el rol del mes. Uno vivo por mes; nunca DELETE.
+    CREATE TABLE IF NOT EXISTS trabajadores.control_banco (
+        id            serial PRIMARY KEY,
+        anio          integer NOT NULL,
+        mes           integer NOT NULL,
+        archivo       text NOT NULL,
+        filas         jsonb NOT NULL,
+        total         numeric(14,2) NOT NULL,
+        cargado_por   text NOT NULL,
+        cargado_en    timestamptz NOT NULL DEFAULT now(),
+        borrado_en    timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS control_banco_mes_idx ON trabajadores.control_banco (anio, mes) WHERE borrado_en IS NULL;
     CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
 """
 
@@ -494,6 +508,13 @@ def roles_de(trabajador_id: int) -> list[dict]:
                                            (trabajador_id,))]
 
 
+def en_revision(r: dict) -> bool:
+    """¿Pasa por la revisión de contabilidad? Los meses que se firman en la app (el rol
+    del mes), también los ya publicados como septiembre, para practicar el proceso sin
+    esconderle nada al trabajador. El historial y lo firmado en papel, no."""
+    return bool(r.get("necesita_aprobacion") or r.get("pide_firma"))
+
+
 def visible(r: dict) -> bool:
     """¿Lo ve el trabajador? Lo cargado antes de la revisión, sí; lo nuevo, cuando
     la empresa lo firmó."""
@@ -504,9 +525,9 @@ def meses_con_rol() -> list[dict]:
     return [dict(r, total=float(r["total"])) for r in _todos(
         """SELECT anio, mes, count(*) AS cuantos, sum(liquido) AS total, max(cargado_en) AS cargado_en,
                   count(firmado_en) AS firmados, count(*) FILTER (WHERE pide_firma) AS piden_firma,
-                  count(*) FILTER (WHERE necesita_aprobacion) AS necesitan,
-                  count(*) FILTER (WHERE necesita_aprobacion AND revisado_en IS NOT NULL) AS revisados,
-                  count(*) FILTER (WHERE necesita_aprobacion AND aprobado_en IS NOT NULL) AS aprobados
+                  count(*) FILTER (WHERE necesita_aprobacion OR pide_firma) AS necesitan,
+                  count(*) FILTER (WHERE (necesita_aprobacion OR pide_firma) AND revisado_en IS NOT NULL) AS revisados,
+                  count(*) FILTER (WHERE (necesita_aprobacion OR pide_firma) AND aprobado_en IS NOT NULL) AS aprobados
              FROM trabajadores.rol_pago WHERE borrado_en IS NULL
             GROUP BY anio, mes ORDER BY anio DESC, mes DESC""")]
 
@@ -602,7 +623,7 @@ def revisar_roles(ids: list[int], usuario_id: int, nombre: str) -> int:
         try:
             cur.execute("""UPDATE trabajadores.rol_pago
                               SET revisado_por_id = %s, revisado_por = %s, revisado_en = now()
-                            WHERE id = ANY(%s) AND borrado_en IS NULL AND necesita_aprobacion
+                            WHERE id = ANY(%s) AND borrado_en IS NULL AND (necesita_aprobacion OR pide_firma)
                               AND revisado_en IS NULL AND aprobado_en IS NULL""",
                         (usuario_id, nombre, list(ids)))
             n = cur.rowcount
@@ -639,7 +660,7 @@ def aprobar_roles(ids: list[int], usuario_id: int, nombre: str, firma: bytes) ->
         try:
             cur.execute("""UPDATE trabajadores.rol_pago
                               SET aprobado_por_id = %s, aprobado_por = %s, aprobado_en = now(), firma_empresa = %s
-                            WHERE id = ANY(%s) AND borrado_en IS NULL AND necesita_aprobacion
+                            WHERE id = ANY(%s) AND borrado_en IS NULL AND (necesita_aprobacion OR pide_firma)
                               AND revisado_en IS NOT NULL AND aprobado_en IS NULL
                               AND revisado_por_id IS DISTINCT FROM %s""",
                         (usuario_id, nombre, psycopg2.Binary(firma), list(ids), usuario_id))
@@ -1446,3 +1467,26 @@ def codigo_intento_malo(id_: int) -> None:
 
 def codigo_usado(id_: int) -> None:
     _ejecutar("UPDATE trabajadores.codigo_correo SET usado_en = now() WHERE id = %s", (id_,))
+
+
+def guardar_control_banco(anio: int, mes: int, archivo: str, filas: list[dict], quien: str) -> None:
+    import json
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.control_banco SET borrado_en = now()
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL""", (anio, mes))
+            cur.execute("""INSERT INTO trabajadores.control_banco (anio, mes, archivo, filas, total, cargado_por)
+                           VALUES (%s, %s, %s, %s::jsonb, %s, %s)""",
+                        (anio, mes, archivo[:200], json.dumps(filas), round(sum(f["monto"] for f in filas), 2), quien))
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+
+
+def control_banco(anio: int, mes: int) -> dict | None:
+    r = _uno("""SELECT id, anio, mes, archivo, filas, total, cargado_por, cargado_en FROM trabajadores.control_banco
+                 WHERE anio = %s AND mes = %s AND borrado_en IS NULL ORDER BY cargado_en DESC LIMIT 1""", (anio, mes))
+    if r:
+        r["total"] = float(r["total"])
+    return r

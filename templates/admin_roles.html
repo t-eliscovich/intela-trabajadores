@@ -62,6 +62,35 @@
       <div class="paso {{ 'hecho' if revision.aprobados == rev }}"><b>2</b><span>Firmados por contabilidad<small>{{ revision.aprobados }} de {{ rev }}</small></span></div>
       <div class="paso {{ 'hecho' if piden and firmados == piden and revision.aprobados == rev }}"><b>3</b><span>Firmados por el trabajador<small>{{ firmados }} de {{ rev }}</small></span></div>
     </div>
+    <div class="control-banco">
+      {% if banco %}
+        {% set cb = banco.cuenta %}
+        <div class="cb-cab"><b>Control con el banco</b>
+          <span class="chico" style="display:inline">{{ banco.control.archivo }} · subido el {{ banco.control.cargado_en|fecha_hora }} por {{ banco.control.cargado_por }}</span></div>
+        <div class="cb-chips">
+          <span class="cb ok">✓ {{ cb.ok }} coinciden</span>
+          {% if cb.monto %}<span class="cb mal">✗ {{ cb.monto }} con otro monto</span>{% endif %}
+          {% if cb.cuenta %}<span class="cb mal">✗ {{ cb.cuenta }} con otra cuenta</span>{% endif %}
+          {% if cb.falta %}<span class="cb mal">✗ {{ cb.falta }} sin pago en el banco</span>{% endif %}
+          {% if banco.sobran %}<span class="cb mal">✗ {{ banco.sobran|length }} en el banco y no en el rol</span>{% endif %}
+        </div>
+        <div class="cb-totales">Banco <b>{{ banco.total_banco|dinero }}</b> · Rol <b>{{ banco.total_rol|dinero }}</b>
+          {% set dt = (banco.total_banco - banco.total_rol)|round(2) %}
+          {% if dt|abs >= 0.005 %}<span class="cb-dif">diferencia {{ dt|dinero }}</span>{% else %}<span class="cb-igual">✓ iguales</span>{% endif %}</div>
+        {% if banco.sobran %}
+        <details class="cb-sobran"><summary>En el banco y no en el rol ({{ banco.sobran|length }})</summary>
+          <table><tbody>{% for b in banco.sobran %}<tr><td><b>{{ b.nombre }}</b><span class="chico">{{ 'C.I.' if b.tipo_id == 'C' else 'Pasaporte' }} {{ b.identificacion }} · {{ b.tipo_cuenta }} {{ b.cuenta }}</span></td><td class="der"><b>{{ b.monto|dinero }}</b></td></tr>{% endfor %}</tbody></table>
+        </details>
+        {% endif %}
+      {% else %}
+        <div class="cb-cab"><b>Control con el banco</b><span class="chico" style="display:inline">el archivo que se manda al banco (Pago_Rol_MM_AA.xlsx). No carga nada: se compara con cada recibo.</span></div>
+      {% endif %}
+      <form method="POST" action="{{ url_for('admin_roles_banco') }}" enctype="multipart/form-data" class="cb-subir">
+        <input type="hidden" name="mes" value="{{ '%d-%02d'|format(anio, mes) }}">
+        <input type="file" name="archivo" accept=".xlsx" required>
+        <button class="btn {{ 'suave' if banco else '' }} chico" type="submit">{{ 'Subir otro' if banco else 'Subir el archivo del banco' }}</button>
+      </form>
+    </div>
     <p class="ayuda" style="margin:10px 0 0">El trabajador ve su recibo recién cuando contabilidad lo firma.
       {% if not yo.revisa_roles and not yo.firma_roles %}Su usuario no revisa ni firma: eso se da en <a href="{{ url_for('admin_usuarios') }}">Usuarios</a>.{% endif %}</p>
   </div>
@@ -73,6 +102,7 @@
   <select id="estado" onchange="filtrar()" style="width:auto;height:40px">
     <option value="">Todos</option>
     {% if rev %}<option value="revisar">Falta revisar</option><option value="aprobar">Falta firma de contabilidad</option>{% endif %}
+    {% if banco %}<option value="banco-mal">No coinciden con el banco</option>{% endif %}
     <option value="no">Sin firmar</option><option value="si">Firmados</option>
   </select>
 </div>
@@ -85,6 +115,7 @@
   {% if yo.revisa_roles %}
   <button class="btn chico" type="submit" formaction="{{ url_for('admin_roles_revisar') }}" name="accion" value="revisar" data-necesita="1">✓ Marcar revisados</button>
   <button class="btn suave chico" type="submit" formaction="{{ url_for('admin_roles_revisar') }}" name="accion" value="quitar" data-necesita="1">Quitar revisión</button>
+  {% if banco %}<button class="btn suave chico" type="button" id="elegir-banco">Elegir los que coinciden con el banco</button>{% endif %}
   {% endif %}
   {% if yo.firma_roles %}
     {% if yo.tiene_firma %}
@@ -101,19 +132,23 @@
 <div class="bloque">
   <div class="desliza">
   <table>
-    <thead><tr>{% if rev %}<th class="caja-sel no-imprime"><input type="checkbox" id="todos" title="Elegir todos los que se ven"></th>{% endif %}<th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th>{% if rev %}<th>Revisó</th><th>Firmó</th>{% endif %}<th>Firma</th><th class="oculta-chico"></th></tr></thead>
+    <thead><tr>{% if rev %}<th class="caja-sel no-imprime"><input type="checkbox" id="todos" title="Elegir todos los que se ven"></th>{% endif %}<th>Trabajador</th><th class="der oculta-chico">Ingresos</th><th class="der oculta-chico">Descuentos</th><th class="der">Líquido</th>{% if banco %}<th>Banco</th>{% endif %}{% if rev %}<th>Revisó</th><th>Firmó</th>{% endif %}<th>Firma</th><th class="oculta-chico"></th></tr></thead>
     <tbody>
     {% for r in filas %}
-      {% set paso = '' if not r.necesita_aprobacion else ('aprobado' if r.aprobado_en else ('aprobar' if r.revisado_en else 'revisar')) %}
-      <tr class="fila-rol" data-q="{{ (r.nombre ~ ' ' ~ r.cedula)|lower }}" data-firmado="{{ 'si' if r.firmado_en else ('no' if r.pide_firma else 'h') }}" data-paso="{{ paso }}">
+      {% set paso = '' if not r.en_revision else ('aprobado' if r.aprobado_en else ('aprobar' if r.revisado_en else 'revisar')) %}
+      <tr class="fila-rol" data-q="{{ (r.nombre ~ ' ' ~ r.cedula)|lower }}" data-firmado="{{ 'si' if r.firmado_en else ('no' if r.pide_firma else 'h') }}" data-paso="{{ paso }}" data-banco="{{ r.banco.estado if r.banco else '' }}">
         {% if rev %}<td class="caja-sel no-imprime">{% if paso in ('revisar', 'aprobar') %}<input type="checkbox" name="ids" value="{{ r.id }}" class="sel" aria-label="Elegir {{ r.nombre }}">{% endif %}</td>{% endif %}
         <td><a href="{{ url_rol(r) }}" style="color:inherit;text-decoration:none"><b>{{ r.nombre }}</b></a><span class="chico">{{ r.cedula }}{% if r.area %} · {{ r.area }}{% endif %}</span></td>
         <td class="der oculta-chico">{{ r.total_ingresos|dinero }}</td>
         <td class="der oculta-chico">{{ r.total_descuentos|dinero }}</td>
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
+        {% if banco %}
+        <td>{% set bx = r.banco %}{% if bx and bx.estado == 'ok' %}<span class="etiqueta ok" title="{{ bx.texto }}">✓ Banco</span>
+            {% elif bx %}<span class="etiqueta baja">✗ {{ {'monto': 'Monto', 'cuenta': 'Cuenta', 'falta': 'Falta'}[bx.estado] }}</span><span class="chico">{{ bx.texto }}</span>{% endif %}</td>
+        {% endif %}
         {% if rev %}
-        <td>{% if r.revisado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.revisado_por }}">✓ {{ r.revisado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.revisado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
-        <td>{% if r.aprobado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.aprobado_por }}">✓ {{ r.aprobado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.aprobado_en|fecha_hora }}</span>{% elif r.necesita_aprobacion %}<span class="tenue">—</span>{% endif %}</td>
+        <td>{% if r.revisado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.revisado_por }}">✓ {{ r.revisado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.revisado_en|fecha_hora }}</span>{% elif r.en_revision %}<span class="tenue">—</span>{% endif %}</td>
+        <td>{% if r.aprobado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.aprobado_por }}">✓ {{ r.aprobado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.aprobado_en|fecha_hora }}</span>{% elif r.en_revision %}<span class="tenue">—</span>{% endif %}</td>
         {% endif %}
         <td>{% if not r.visible %}<span class="tenue">Todavía no lo ve</span>
             {% elif not r.pide_firma %}<span class="etiqueta ok">✓ En papel</span><span class="chico">firmado fuera de la app</span>
@@ -140,6 +175,16 @@
   .barra-revision .cuantos{margin-right:auto;font-size:14px;color:var(--gris)}
   .barra-revision .mi-firma{display:flex;align-items:center;gap:6px;font-size:12px}
   .barra-revision .mi-firma img{height:30px;max-width:110px;object-fit:contain;border-bottom:1px solid var(--borde)}
+  .control-banco{margin-top:12px;padding:12px;border:1px solid var(--borde);border-radius:12px;background:#fbfcfe}
+  .cb-cab{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+  .cb-chips{display:flex;gap:6px;flex-wrap:wrap}
+  .cb{font-size:13px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .cb.ok{background:#e8f8ee;color:#15803d}.cb.mal{background:#fdeaea;color:#b91c1c}
+  .cb-totales{font-size:14px;margin-top:8px;font-variant-numeric:tabular-nums}
+  .cb-dif{color:var(--rojo);font-weight:700;margin-left:6px}.cb-igual{color:#15803d;font-weight:700;margin-left:6px}
+  .cb-sobran{margin-top:8px}.cb-sobran summary{border-top:0;padding-left:0}
+  .cb-subir{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .cb-subir input[type=file]{font-size:13px;width:auto;max-width:100%;height:auto;padding:6px;border:0;background:none}
   .caja-sel{width:34px;text-align:center}.caja-sel input{width:18px;height:18px}
   @media (max-width:640px){.pasos{grid-template-columns:1fr}}
 </style>
@@ -147,7 +192,8 @@
 function filtrar(){
   var q=document.getElementById('q').value.toLowerCase().trim(), e=document.getElementById('estado').value;
   document.querySelectorAll('.fila-rol').forEach(function(tr){
-    var pasa = !e || (e==='revisar'||e==='aprobar' ? tr.dataset.paso===e : tr.dataset.firmado===e);
+    var pasa = !e || (e==='banco-mal' ? (tr.dataset.banco && tr.dataset.banco!=='ok') :
+               (e==='revisar'||e==='aprobar' ? tr.dataset.paso===e : tr.dataset.firmado===e));
     tr.hidden=(q && tr.dataset.q.indexOf(q)<0) || !pasa;
   });
   contar();
@@ -164,6 +210,12 @@ if(todos) todos.onchange=function(){
   contar();
 };
 document.querySelectorAll('.sel').forEach(function(c){ c.onchange=contar; });
+var eb=document.getElementById('elegir-banco');
+if(eb) eb.onclick=function(){
+  document.querySelectorAll('.fila-rol').forEach(function(tr){ var c=tr.querySelector('.sel');
+    if(c) c.checked = tr.dataset.banco==='ok' && tr.dataset.paso==='revisar'; });
+  contar();
+};
 var fr=document.getElementById('form-revision');
 if(fr) fr.addEventListener('submit', function(ev){
   var b=ev.submitter;

@@ -59,6 +59,7 @@ class BaseFalsa:
         self.rol: dict[int, dict] = {}
         self.cons: dict[int, dict] = {}
         self.cod: dict[int, dict] = {}
+        self.cban: dict[int, dict] = {}
         self.avi: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
@@ -139,7 +140,7 @@ class BaseFalsa:
                                                            "firmados": 0, "piden_firma": 0,
                                                            "necesitan": 0, "revisados": 0, "aprobados": 0})
             m["cuantos"] += 1
-            if r.get("necesita_aprobacion"):
+            if r.get("necesita_aprobacion") or r.get("pide_firma"):
                 m["necesitan"] += 1
                 m["revisados"] += 1 if r.get("revisado_en") else 0
                 m["aprobados"] += 1 if r.get("aprobado_en") else 0
@@ -195,7 +196,7 @@ class BaseFalsa:
         n = 0
         for i in ids:
             r = self.rol.get(i)
-            if r and not r["borrado_en"] and r.get("necesita_aprobacion") and not r.get("revisado_en") and not r.get("aprobado_en"):
+            if r and not r["borrado_en"] and (r.get("necesita_aprobacion") or r.get("pide_firma")) and not r.get("revisado_en") and not r.get("aprobado_en"):
                 r.update(revisado_por_id=usuario_id, revisado_por=nombre, revisado_en=datetime.now())
                 n += 1
         return n
@@ -213,7 +214,7 @@ class BaseFalsa:
         n = 0
         for i in ids:
             r = self.rol.get(i)
-            if (r and not r["borrado_en"] and r.get("necesita_aprobacion") and r.get("revisado_en")
+            if (r and not r["borrado_en"] and (r.get("necesita_aprobacion") or r.get("pide_firma")) and r.get("revisado_en")
                     and not r.get("aprobado_en") and r.get("revisado_por_id") != usuario_id):
                 r.update(aprobado_por_id=usuario_id, aprobado_por=nombre, aprobado_en=datetime.now(), firma_empresa=firma)
                 n += 1
@@ -222,6 +223,19 @@ class BaseFalsa:
     def firma_empresa_del_rol(self, id_):
         r = self.rol.get(id_)
         return r.get("firma_empresa") if r and not r["borrado_en"] else None
+
+    def guardar_control_banco(self, anio, mes, archivo, filas, quien):
+        for c in self.cban.values():
+            if c["anio"] == anio and c["mes"] == mes:
+                c["borrado_en"] = datetime.now()
+        id_ = self._id()
+        self.cban[id_] = {"id": id_, "anio": anio, "mes": mes, "archivo": archivo, "filas": filas,
+                          "total": round(sum(f["monto"] for f in filas), 2), "cargado_por": quien,
+                          "cargado_en": datetime.now(), "borrado_en": None}
+
+    def control_banco(self, anio, mes):
+        vivos = [c for c in self.cban.values() if c["anio"] == anio and c["mes"] == mes and not c["borrado_en"]]
+        return dict(max(vivos, key=lambda c: c["id"])) if vivos else None
 
     def firmado_en_papel(self, anio, mes):
         n = 0
