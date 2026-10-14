@@ -62,6 +62,13 @@
     .rec-firma .trazo{height:44px}
     .rec-firma .trazo img{max-height:44px}
   }
+  /* Si el recibo queda angosto (la pantalla del trabajador en la compu, la de contabilidad),
+     también va Ingresos arriba de Descuentos: depende del ancho del recibo, no de la pantalla. */
+  .rec{container-type:inline-size}
+  @container (max-width:620px){
+    .rec-cols{grid-template-columns:1fr}
+    .rec-col + .rec-col{border-left:0;border-top:1.5px solid #0f172a}
+  }
   @media print{.rec{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .constancia{padding:10px 16px 12px}
   .constancia .trazo{display:flex;gap:12px;align-items:center}
