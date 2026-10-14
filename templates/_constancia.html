@@ -14,6 +14,7 @@
         <dt>Cuándo</dt><dd>{{ r.firmado_en|fecha_hora }} (hora de Ecuador)</dd>
         <dt>Desde</dt><dd>{{ equipo }}</dd>
         <dt>Documento</dt><dd>Rol de pagos de {{ nombre_mes(r.anio, r.mes).lower() }} · líquido $ {{ r.liquido|dinero }}</dd>
+        {% if r.aprobado_en %}<dt>Contabilidad</dt><dd>Revisado por {{ r.revisado_por }} · firmado por {{ r.aprobado_por }} el {{ r.aprobado_en|fecha_hora }}, antes de la firma del trabajador</dd>{% endif %}
         <dt>Empleador</dt><dd>{{ RAZON_SOCIAL }}{% if RUC %} · RUC {{ RUC }}{% endif %}</dd>
         {% if r.firma_huella %}<dt>Huella</dt><dd class="huella">{{ r.firma_huella }}</dd>{% endif %}
       </dl>

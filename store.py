@@ -386,6 +386,71 @@ ESQUEMA = """
         resuelto_por   text
     );
     CREATE INDEX IF NOT EXISTS aviso_abierto_idx ON trabajadores.aviso (resuelto_en, creado_en DESC);
+
+    -- REVISIÓN Y FIRMA DEL ROL (Tamara 14/10/2026): «primero Jessica hace un check en la
+    -- tabla y luego Ángel tiene que poder hacer check también y firmar masivamente».
+    -- Recibo por recibo: revisado (Jessica) → firmado por la empresa (Ángel, con su firma
+    -- guardada) → recién ahí lo ve el trabajador. Lo cargado antes de esto (septiembre y
+    -- el historial) queda con necesita_aprobacion = false: ya estaba publicado.
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS necesita_aprobacion boolean NOT NULL DEFAULT false;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS revisado_por_id integer;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS revisado_por text;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS revisado_en timestamptz;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS aprobado_por_id integer;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS aprobado_por text;
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS aprobado_en timestamptz;
+    -- Una COPIA de la firma de quien aprobó: si después cambia su firma, los recibos
+    -- ya firmados siguen mostrando la que tenían.
+    ALTER TABLE trabajadores.rol_pago ADD COLUMN IF NOT EXISTS firma_empresa bytea;
+    -- La firma guardada de cada usuario (la dibuja o la sube una vez) y quién puede hacer qué.
+    ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS firma bytea;
+    ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS firma_en timestamptz;
+    ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS revisa_roles boolean NOT NULL DEFAULT false;
+    ALTER TABLE trabajadores.usuario ADD COLUMN IF NOT EXISTS firma_roles boolean NOT NULL DEFAULT false;
+    -- Los permisos de arranque (Tamara 14/10: «si Ángel y Jessica ya lo tienen, dales el
+    -- acceso directo»). Sólo si hay UNA usuaria/UN usuario activo que se llame así, y una
+    -- sola vez: si después se le saca el permiso desde Usuarios, no vuelve solo.
+    UPDATE trabajadores.usuario SET revisa_roles = true
+     WHERE id = (SELECT min(id) FROM trabajadores.usuario
+                  WHERE activo AND rol = 'contabilidad' AND (lower(nombre) LIKE '%jessica%' OR lower(usuario) LIKE '%jessica%')
+                 HAVING count(*) = 1)
+       AND NOT EXISTS (SELECT 1 FROM trabajadores.configuracion WHERE clave = 'permiso_revisa_roles_inicial');
+    INSERT INTO trabajadores.configuracion (clave, valor)
+         SELECT 'permiso_revisa_roles_inicial', 'hecho'
+          WHERE EXISTS (SELECT 1 FROM trabajadores.usuario WHERE revisa_roles)
+    ON CONFLICT (clave) DO NOTHING;
+    UPDATE trabajadores.usuario SET firma_roles = true
+     WHERE id = (SELECT min(id) FROM trabajadores.usuario
+                  WHERE activo AND rol = 'contabilidad'
+                    AND (lower(nombre) LIKE '%angel%' OR lower(nombre) LIKE '%ángel%'
+                         OR lower(usuario) LIKE '%angel%' OR lower(usuario) LIKE '%ángel%')
+                 HAVING count(*) = 1)
+       AND NOT EXISTS (SELECT 1 FROM trabajadores.configuracion WHERE clave = 'permiso_firma_roles_inicial');
+    INSERT INTO trabajadores.configuracion (clave, valor)
+         SELECT 'permiso_firma_roles_inicial', 'hecho'
+          WHERE EXISTS (SELECT 1 FROM trabajadores.usuario WHERE firma_roles)
+    ON CONFLICT (clave) DO NOTHING;
+
+    -- CONTRASEÑA DEL ROL DE PAGOS (Tamara 14/10/2026): para ver el rol, el trabajador
+    -- pone cédula y correo, le llega un código y registra su contraseña. Las vacaciones
+    -- siguen entrando sólo con la cédula.
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS email text;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS clave_rol_hash text;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS clave_rol_en timestamptz;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS clave_rol_fallidos integer NOT NULL DEFAULT 0;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS clave_rol_trabado_hasta timestamptz;
+    -- Los códigos de 6 números que llegan por correo. Van CIFRADOS, como una clave.
+    CREATE TABLE IF NOT EXISTS trabajadores.codigo_correo (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        email          text NOT NULL,
+        codigo_hash    text NOT NULL,
+        creado_en      timestamptz NOT NULL DEFAULT now(),
+        vence_en       timestamptz NOT NULL,
+        intentos       integer NOT NULL DEFAULT 0,
+        usado_en       timestamptz
+    );
+    CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
 """
 
 TIPOS_TRABAJADOR = {"planta": "Planta", "temporal": "Temporal", "jubilado": "Jubilado"}
@@ -397,7 +462,9 @@ TIPOS_TRABAJADOR = {"planta": "Planta", "temporal": "Temporal", "jubilado": "Jub
 _ROL = """SELECT r.id, r.trabajador_id, r.anio, r.mes, r.codigo, r.nombre_rol, r.sueldo, r.dias,
                  r.horas_25, r.horas_50, r.horas_100, r.atrasos, r.otros, r.ingresos, r.descuentos,
                  r.total_ingresos, r.total_descuentos, r.liquido, r.cargado_por, r.cargado_en,
-                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma, t.nombre, t.cedula, t.area, t.celular,
+                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma,
+                 r.necesita_aprobacion, r.revisado_por_id, r.revisado_por, r.revisado_en,
+                 r.aprobado_por_id, r.aprobado_por, r.aprobado_en, t.nombre, t.cedula, t.area, t.celular,
                  t.fecha_ingreso, t.fecha_salida
             FROM trabajadores.rol_pago r JOIN trabajadores.trabajador t ON t.id = r.trabajador_id
            WHERE r.borrado_en IS NULL"""
@@ -427,10 +494,19 @@ def roles_de(trabajador_id: int) -> list[dict]:
                                            (trabajador_id,))]
 
 
+def visible(r: dict) -> bool:
+    """¿Lo ve el trabajador? Lo cargado antes de la revisión, sí; lo nuevo, cuando
+    la empresa lo firmó."""
+    return not r.get("necesita_aprobacion") or r.get("aprobado_en") is not None
+
+
 def meses_con_rol() -> list[dict]:
     return [dict(r, total=float(r["total"])) for r in _todos(
         """SELECT anio, mes, count(*) AS cuantos, sum(liquido) AS total, max(cargado_en) AS cargado_en,
-                  count(firmado_en) AS firmados, count(*) FILTER (WHERE pide_firma) AS piden_firma
+                  count(firmado_en) AS firmados, count(*) FILTER (WHERE pide_firma) AS piden_firma,
+                  count(*) FILTER (WHERE necesita_aprobacion) AS necesitan,
+                  count(*) FILTER (WHERE necesita_aprobacion AND revisado_en IS NOT NULL) AS revisados,
+                  count(*) FILTER (WHERE necesita_aprobacion AND aprobado_en IS NOT NULL) AS aprobados
              FROM trabajadores.rol_pago WHERE borrado_en IS NULL
             GROUP BY anio, mes ORDER BY anio DESC, mes DESC""")]
 
@@ -445,11 +521,14 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str, pide_firma:
             # Si el recibo de alguien que ya firmó vuelve IGUAL, la firma se queda;
             # si cambió algo, tiene que volver a firmar.
             cur.execute("""SELECT trabajador_id, ingresos, descuentos, liquido, firma, firmado_en, firmado_desde,
-                                  firma_huella, sueldo, dias, atrasos, otros
+                                  firma_huella, sueldo, dias, atrasos, otros, necesita_aprobacion,
+                                  revisado_por_id, revisado_por, revisado_en, aprobado_por_id, aprobado_por,
+                                  aprobado_en, firma_empresa
                              FROM trabajadores.rol_pago
-                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL AND firmado_en IS NOT NULL""",
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL""",
                         (anio, mes))
-            firmados = {r[0]: r for r in cur.fetchall()}
+            previos = {r[0]: r for r in cur.fetchall()}
+            firmados = {k: r for k, r in previos.items() if r[5] is not None}
             cur.execute("""UPDATE trabajadores.rol_pago SET borrado_en = now(), borrado_por = %s
                             WHERE anio = %s AND mes = %s AND borrado_en IS NULL""", (quien, anio, mes))
             reemplazados = cur.rowcount
@@ -459,21 +538,29 @@ def cargar_roles(anio: int, mes: int, filas: list[dict], quien: str, pide_firma:
                     """INSERT INTO trabajadores.rol_pago
                          (trabajador_id, anio, mes, codigo, nombre_rol, sueldo, dias, horas_25, horas_50,
                           horas_100, atrasos, otros, ingresos, descuentos, total_ingresos, total_descuentos,
-                          liquido, cargado_por, pide_firma)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s)""",
+                          liquido, cargado_por, pide_firma, necesita_aprobacion)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s)""",
                     (f["trabajador_id"], anio, mes, f["codigo"], f["nombre_rol"], f["sueldo"], f["dias"],
                      f["horas_25"], f["horas_50"], f["horas_100"], f["atrasos"], f["otros"],
                      json.dumps(f["ingresos"]), json.dumps(f["descuentos"]),
-                     f["total_ingresos"], f["total_descuentos"], f["liquido"], quien, pide_firma))
-                antes = firmados.get(f["trabajador_id"])
+                     f["total_ingresos"], f["total_descuentos"], f["liquido"], quien, pide_firma, pide_firma))
+                antes = previos.get(f["trabajador_id"])
                 if antes and mismo_recibo({"ingresos": antes[1], "descuentos": antes[2], "liquido": antes[3],
                                            "sueldo": antes[8], "dias": antes[9], "atrasos": antes[10],
                                            "otros": antes[11]}, f):
+                    # El recibo volvió IGUAL: se queda todo lo que ya tenía (la firma del
+                    # trabajador, la revisión y la firma de la empresa, y si ya estaba publicado).
                     cur.execute("""UPDATE trabajadores.rol_pago
-                                      SET firma = %s, firmado_en = %s, firmado_desde = %s, firma_huella = %s
+                                      SET firma = %s, firmado_en = %s, firmado_desde = %s, firma_huella = %s,
+                                          necesita_aprobacion = %s, revisado_por_id = %s, revisado_por = %s,
+                                          revisado_en = %s, aprobado_por_id = %s, aprobado_por = %s,
+                                          aprobado_en = %s, firma_empresa = %s
                                     WHERE trabajador_id = %s AND anio = %s AND mes = %s AND borrado_en IS NULL""",
-                                (antes[4], antes[5], antes[6], antes[7], f["trabajador_id"], anio, mes))
-                    firmas_que_quedan += 1
+                                (antes[4], antes[5], antes[6], antes[7], antes[12] and pide_firma, antes[13],
+                                 antes[14], antes[15], antes[16], antes[17], antes[18], antes[19],
+                                 f["trabajador_id"], anio, mes))
+                    if antes[5] is not None:
+                        firmas_que_quedan += 1
                 cur.execute("""UPDATE trabajadores.trabajador SET codigo_rol = NULL
                                 WHERE codigo_rol = %s AND id <> %s""", (f["codigo"], f["trabajador_id"]))
                 cur.execute("UPDATE trabajadores.trabajador SET codigo_rol = %s, nombre_rol = %s WHERE id = %s",
@@ -507,12 +594,75 @@ def firmar_rol(id_: int, trabajador_id: int, png: bytes, desde: str, huella: str
     return fila is not None
 
 
+def revisar_roles(ids: list[int], usuario_id: int, nombre: str) -> int:
+    """Jessica marca ✓ los recibos que revisó. Sólo los que todavía no estaban."""
+    if not ids:
+        return 0
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.rol_pago
+                              SET revisado_por_id = %s, revisado_por = %s, revisado_en = now()
+                            WHERE id = ANY(%s) AND borrado_en IS NULL AND necesita_aprobacion
+                              AND revisado_en IS NULL AND aprobado_en IS NULL""",
+                        (usuario_id, nombre, list(ids)))
+            n = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return n
+
+
+def quitar_revision(ids: list[int]) -> int:
+    """Se saca el ✓ de revisado, mientras la empresa no lo haya firmado."""
+    if not ids:
+        return 0
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.rol_pago
+                              SET revisado_por_id = NULL, revisado_por = NULL, revisado_en = NULL
+                            WHERE id = ANY(%s) AND borrado_en IS NULL AND aprobado_en IS NULL""", (list(ids),))
+            n = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return n
+
+
+def aprobar_roles(ids: list[int], usuario_id: int, nombre: str, firma: bytes) -> int:
+    """Ángel firma de una vez los recibos elegidos con su firma guardada. Sólo los que
+    ya están revisados, y nunca los que revisó él mismo (son dos personas)."""
+    if not ids:
+        return 0
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""UPDATE trabajadores.rol_pago
+                              SET aprobado_por_id = %s, aprobado_por = %s, aprobado_en = now(), firma_empresa = %s
+                            WHERE id = ANY(%s) AND borrado_en IS NULL AND necesita_aprobacion
+                              AND revisado_en IS NOT NULL AND aprobado_en IS NULL
+                              AND revisado_por_id IS DISTINCT FROM %s""",
+                        (usuario_id, nombre, psycopg2.Binary(firma), list(ids), usuario_id))
+            n = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return n
+
+
+def firma_empresa_del_rol(id_: int) -> bytes | None:
+    r = _uno("SELECT firma_empresa FROM trabajadores.rol_pago WHERE id = %s AND borrado_en IS NULL", (id_,))
+    return bytes(r["firma_empresa"]) if r and r["firma_empresa"] else None
+
+
 def firmado_en_papel(anio: int, mes: int) -> int:
     """Contabilidad avisa que el mes ya se firmó en papel: deja de pedir firma en
     la app a los que no firmaron (las firmas hechas en la app se quedan)."""
     with _conn() as con, con.cursor() as cur:
         try:
-            cur.execute("""UPDATE trabajadores.rol_pago SET pide_firma = false
+            # firmado en papel = también lo firmó la empresa en papel: se publica.
+            cur.execute("""UPDATE trabajadores.rol_pago SET pide_firma = false, necesita_aprobacion = false
                             WHERE anio = %s AND mes = %s AND borrado_en IS NULL
                               AND pide_firma AND firmado_en IS NULL""", (anio, mes))
             n = cur.rowcount
@@ -526,7 +676,9 @@ def firmado_en_papel(anio: int, mes: int) -> int:
 def sin_firmar_ultimo_mes() -> int:
     """Para el globito del menú de contabilidad: cuántos del último mes cargado
     todavía no firmaron."""
-    r = _uno("""SELECT count(*) FILTER (WHERE firmado_en IS NULL AND pide_firma) AS n FROM trabajadores.rol_pago
+    r = _uno("""SELECT count(*) FILTER (WHERE firmado_en IS NULL AND pide_firma
+                                        AND (NOT necesita_aprobacion OR aprobado_en IS NOT NULL)) AS n
+                  FROM trabajadores.rol_pago
                  WHERE borrado_en IS NULL AND (anio, mes) = (
                        SELECT anio, mes FROM trabajadores.rol_pago WHERE borrado_en IS NULL
                         ORDER BY anio DESC, mes DESC LIMIT 1)""")
@@ -1153,14 +1305,30 @@ def desmarcar_comida(trabajador_id: int, fecha: date, tipo: str) -> None:
 # --------------------------------------------------------------------------
 # Usuarios de contabilidad
 # --------------------------------------------------------------------------
+_USU = ("id, usuario, nombre, activo, rol, creado_en, revisa_roles, firma_roles, firma_en, "
+        "(firma IS NOT NULL) AS tiene_firma")
+
+
 def usuarios() -> list[dict]:
-    return _todos("SELECT id, usuario, nombre, activo, rol, creado_en FROM trabajadores.usuario "
-                  "ORDER BY usuario")
+    return _todos(f"SELECT {_USU} FROM trabajadores.usuario ORDER BY usuario")
 
 
 def usuario(id_: int) -> dict | None:
     """Un usuario por id, esté activo o no (la sesión se revalida con esto)."""
-    return _uno("SELECT id, usuario, nombre, activo, rol FROM trabajadores.usuario WHERE id=%s", (id_,))
+    return _uno(f"SELECT {_USU} FROM trabajadores.usuario WHERE id=%s", (id_,))
+
+
+def poner_permisos_roles(id_: int, revisa: bool, firma: bool) -> None:
+    _ejecutar("UPDATE trabajadores.usuario SET revisa_roles=%s, firma_roles=%s WHERE id=%s", (revisa, firma, id_))
+
+
+def guardar_firma_usuario(id_: int, png: bytes) -> None:
+    _ejecutar("UPDATE trabajadores.usuario SET firma=%s, firma_en=now() WHERE id=%s", (psycopg2.Binary(png), id_))
+
+
+def firma_de_usuario(id_: int) -> bytes | None:
+    r = _uno("SELECT firma FROM trabajadores.usuario WHERE id=%s", (id_,))
+    return bytes(r["firma"]) if r and r["firma"] else None
 
 
 def usuario_por_nombre(usuario: str) -> dict | None:

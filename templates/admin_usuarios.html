@@ -28,6 +28,27 @@
 </div>
 
 <div class="bloque">
+  <div class="titulo"><h2>Rol de pagos: quién revisa y quién firma</h2><p>Primero lo revisa uno; después lo firma otro con su firma guardada. Recién ahí el trabajador lo ve.</p></div>
+  <div class="desliza">
+  <table>
+    <thead><tr><th>Usuario</th><th>Revisa</th><th>Firma</th><th>Su firma</th><th></th></tr></thead>
+    <tbody>
+    {% for u in usuarios if u.rol == 'contabilidad' and u.activo %}
+      <tr>
+        <td><b>{{ u.nombre }}</b><span class="chico">{{ u.usuario }}</span></td>
+        <td><input form="per{{ u.id }}" type="checkbox" name="revisa" value="1" {{ 'checked' if u.revisa_roles }} style="width:18px;height:18px" aria-label="Revisa roles"></td>
+        <td><input form="per{{ u.id }}" type="checkbox" name="firma" value="1" {{ 'checked' if u.firma_roles }} style="width:18px;height:18px" aria-label="Firma roles"></td>
+        <td class="tenue">{% if u.tiene_firma %}registrada {{ u.firma_en|fecha }}{% elif u.firma_roles %}<span style="color:var(--ambar)">falta registrarla</span>{% else %}—{% endif %}</td>
+        <td class="der"><form method="POST" id="per{{ u.id }}" class="enlinea"><input type="hidden" name="accion" value="permisos_roles"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn suave chico" type="submit">Guardar</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="nota">La firma la registra cada uno con su usuario, en Roles de pago → «Registrar mi firma». Nadie puede registrar ni usar la firma de otro.</div>
+</div>
+
+<div class="bloque">
   <div class="titulo"><h2>Los que entran</h2><p>Para cambiar el usuario o el nombre, escríbalo encima y toque «Guardar». La clave no cambia.</p></div>
   <div class="desliza">
   <table>

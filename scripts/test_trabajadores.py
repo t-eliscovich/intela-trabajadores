@@ -203,6 +203,30 @@ html = r.get_data(as_text=True)
 check("registra la comida y los 2 invitados de una, con su horario", (maria, HOY, TIPO) in base.alm and "con 2 invitados" in html and "¿Trae invitados?" not in html
       and sum(i["cantidad"] for i in base.invitados_del_dia(HOY)) == _antes + 2
       and [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria][0]["turno"] == TURNO)
+base.desmarcar_comida(maria, HOY, TIPO)
+for _i in [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria]:
+    base.borrar_invitados(_i["id"])
+# invitados ANTES de que él coma (Tamara 14/10/2026: «quizás los registran antes o después de comer»)
+_otro = [x for x in A.TURNOS[TIPO] if x != TURNO][0]
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": _otro, "cantidad": "2",
+                                    "descripcion": "proveedores", "solo_invitados": "1"})
+html = r.get_data(as_text=True)
+_inv_m = [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria]
+check("«Sólo los invitados»: registra los invitados SIN su comida, en el horario elegido",
+      (maria, HOY, TIPO) not in base.alm and sum(i["cantidad"] for i in _inv_m) == 2 and _inv_m[0]["turno"] == _otro
+      and "2 invitados registrados" in html and "Cuando usted venga a comer" in html)
+html = k.post(T, data={"cedula": "0912345678"}).get_data(as_text=True)
+check("cuando vuelve a comer: le pide su horario y le dice que ya registró 2 (le ofrece 1 más, no 3)",
+      "toque su horario" in html and "ya registró 2" in html and 'data-n="1"' in html and 'data-n="2"' not in html)
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": TURNO, "cantidad": "2", "descripcion": "otros"})
+check("no deja pasar de 3 contando los que ya registró", "máximo es 3" in r.get_data(as_text=True) and (maria, HOY, TIPO) not in base.alm)
+r = k.post(T + "/confirmar", data={"cedula": "0912345678", "tipo": TIPO, "turno": TURNO, "cantidad": "0", "descripcion": ""})
+check("y registra su comida sin tocar los invitados", (maria, HOY, TIPO) in base.alm
+      and sum(i["cantidad"] for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria) == 2)
+# invitados DESPUÉS: ya comió, vuelve y los registra en otro horario
+r = k.post(T + "/invitados", data={"cedula": "0912345678", "tipo": TIPO, "cantidad": "1", "descripcion": "visita", "turno": _otro})
+check("después de comer: registra el invitado en el horario que eligió", "1 invitado registrado" in r.get_data(as_text=True)
+      and [i for i in base.invitados_del_dia(HOY) if i["descripcion"] == "visita"][0]["turno"] == _otro)
 base.desmarcar_comida(maria, HOY, TIPO); base.poner_puede_invitar(maria, False)
 for _i in [i for i in base.invitados_del_dia(HOY) if i["trabajador_id"] == maria]:
     base.borrar_invitados(_i["id"])
@@ -791,9 +815,87 @@ html = r.get_data(as_text=True)
 roles_sep = base.roles_del_mes(2026, 9)
 check("confirmado: carga Juan, María, Rosa y el elegido a mano", r.status_code == 200 and "cargado para 4" in html and len(roles_sep) == 4)
 check("al elegido a mano le queda el código de WinAfin", base.trabajador(pedro["id"])["codigo_rol"] == 4)
-check("la lista del mes muestra totales y firmas, e «Imprimir el mes»", "0 de 4" in html and "Sin firmar" in html and "Imprimir el mes" in html)
+# REVISIÓN Y FIRMA DE CONTABILIDAD (Tamara 14/10/2026): Jessica revisa, Ángel firma de una vez;
+# recién ahí el trabajador lo ve.
+check("recién cargado: nadie lo ve todavía, ni avisa por WhatsApp ni cuenta en el menú",
+      all(not store.visible(x) for x in roles_sep) and "Todavía no lo ve" in html and "wa.me/593990001111" not in html
+      and "sin firmar en el último mes" not in html and "Revisados" in html and "0 de 4" in html)
+from werkzeug.security import generate_password_hash as _gph  # noqa: E402
+
+
+def _png_firma():
+    from PIL import ImageDraw
+    img = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(img).line([(40, 150), (200, 60), (380, 140), (540, 50)], fill=(15, 23, 42, 255), width=4)
+    b = BytesIO(); img.save(b, "PNG")
+    return "data:image/png;base64," + _b64.b64encode(b.getvalue()).decode()
+
+
+
+_jes = base.crear_usuario("jessica", _gph("clave-jes"), "Jessica Andrade")
+_ang = base.crear_usuario("angel", _gph("clave-ang"), "Ángel Torres")
+base.poner_permisos_roles(_jes, True, False); base.poner_permisos_roles(_ang, False, True)
+cj, ca = A.app.test_client(), A.app.test_client()
+cj.post("/admin/entrar", data={"usuario": "jessica", "clave": "clave-jes"})
+ca.post("/admin/entrar", data={"usuario": "angel", "clave": "clave-ang"})
+_ids4 = [x["id"] for x in roles_sep]
+html = c.get("/admin/roles?mes=2026-09").get_data(as_text=True)
+check("el usuario sin permisos no ve los botones de revisar ni firmar", "Marcar revisados" not in html and "Firmar los seleccionados" not in html
+      and "Su usuario no revisa ni firma" in html)
+r = c.post("/admin/roles/revisar", data={"mes": "2026-09", "ids": _ids4}, follow_redirects=True)
+check("y si lo intenta igual, no revisa", "no revisa roles" in r.get_data(as_text=True) and not base.rol_pago(_ids4[0])["revisado_en"])
+html = cj.get("/admin/roles?mes=2026-09").get_data(as_text=True)
+check("Jessica ve los casilleros y «Marcar revisados», no «Firmar»", 'name="ids"' in html and "Marcar revisados" in html and "Firmar los seleccionados" not in html)
+r = ca.post("/admin/roles/firmar", data={"mes": "2026-09", "ids": _ids4, "clave": "clave-ang"}, follow_redirects=True)
+check("Ángel no firma sin firma registrada", "registre su firma" in r.get_data(as_text=True) and not base.rol_pago(_ids4[0])["aprobado_en"])
+r = cj.post("/admin/roles/revisar", data={"mes": "2026-09", "ids": _ids4[:3]}, follow_redirects=True)
+check("Jessica revisa 3 de una vez", "3 recibos revisados" in r.get_data(as_text=True)
+      and [bool(base.rol_pago(i)["revisado_en"]) for i in _ids4] == [True, True, True, False]
+      and base.rol_pago(_ids4[0])["revisado_por"] == "Jessica Andrade")
+cj.post("/admin/roles/revisar", data={"mes": "2026-09", "ids": [_ids4[2]], "accion": "quitar"})
+check("y le puede sacar la revisión a uno", not base.rol_pago(_ids4[2])["revisado_en"])
+cj.post("/admin/roles/revisar", data={"mes": "2026-09", "ids": _ids4[2:]})
+html = ca.get("/admin/roles?mes=2026-09").get_data(as_text=True)
+check("Ángel ve los 4 revisados y «Registrar mi firma para firmar»", "Revisados" in html and "4 de 4" in html and "Registrar mi firma" in html)
+html = ca.get("/admin/mi-firma").get_data(as_text=True)
+check("la pantalla de su firma: dibujarla o subir una foto, y la clave", "Dibujarla" in html and "Subir una foto" in html and 'name="clave"' in html)
+r = ca.post("/admin/mi-firma", data={"firma": _png_firma(), "clave": "mala"}, follow_redirects=True)
+check("sin la clave buena no guarda la firma", "no es correcta" in r.get_data(as_text=True) and not base.firma_de_usuario(_ang))
+r = ca.post("/admin/mi-firma", data={"firma": _png_firma(), "clave": "clave-ang", "volver": "https://otro.sitio/x"})
+check("guarda su firma dibujada (y nunca vuelve a otro sitio)", base.firma_de_usuario(_ang) and r.headers["Location"].endswith("/admin/roles"))
+_foto = Image.new("RGB", (800, 400), (250, 250, 248)); from PIL import ImageDraw as _ID  # noqa: E402
+_ID.Draw(_foto).line([(60, 300), (300, 100), (520, 280), (740, 90)], fill=(20, 30, 60), width=9)
+_fb = BytesIO(); _foto.save(_fb, "JPEG")
+_png_foto = A.leer_foto_firma(_fb.getvalue())
+_pf = Image.open(BytesIO(_png_foto))
+check("una foto de la firma en papel queda con el fondo transparente", _pf.mode == "RGBA" and _pf.getpixel((0, 0))[3] == 0
+      and _pf.getchannel("A").getextrema()[1] == 255)
+check("una foto en blanco no sirve de firma", "No se ve la firma" in _mensaje_de(lambda: A.leer_foto_firma(
+      (lambda b: (Image.new("RGB", (400, 200), (255, 255, 255)).save(b, "PNG"), b.getvalue())[1])(BytesIO()))))
+r = ca.post("/admin/roles/firmar", data={"mes": "2026-09", "ids": _ids4, "clave": "mala"}, follow_redirects=True)
+check("firmar con la clave mala no firma nada", "No se firmó nada" in r.get_data(as_text=True) and not any(base.rol_pago(i)["aprobado_en"] for i in _ids4))
+base.poner_permisos_roles(_jes, True, True); base.guardar_firma_usuario(_jes, base.firma_de_usuario(_ang))
+r = cj.post("/admin/roles/firmar", data={"mes": "2026-09", "ids": _ids4, "clave": "clave-jes"}, follow_redirects=True)
+check("quien revisó no puede firmar lo mismo: son dos personas", "No se firmó ninguno" in r.get_data(as_text=True)
+      and not any(base.rol_pago(i)["aprobado_en"] for i in _ids4))
+base.poner_permisos_roles(_jes, True, False)
+r = ca.post("/admin/roles/firmar", data={"mes": "2026-09", "ids": _ids4, "clave": "clave-ang"}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("Ángel firma los 4 de una vez con su firma guardada", "firmó 4 recibos" in html and all(base.rol_pago(i)["aprobado_en"] for i in _ids4)
+      and base.rol_pago(_ids4[0])["aprobado_por"] == "Ángel Torres" and base.firma_empresa_del_rol(_ids4[0]) == base.firma_de_usuario(_ang))
+check("ahora sí lo ven: la lista muestra totales y firmas, e «Imprimir el mes»", all(store.visible(base.rol_pago(i)) for i in _ids4)
+      and "Sin firmar" in html and "Imprimir el mes" in html and "Todavía no lo ve" not in html)
 check("el menú de contabilidad avisa cuántos faltan firmar", "4 sin firmar en el último mes" in html)
 check("con celular, ofrece avisarle por WhatsApp", "wa.me/593990001111" in html)
+r = ca.post("/admin/roles/firmar", data={"mes": "2026-09", "ids": _ids4, "clave": "clave-ang"}, follow_redirects=True)
+check("no se firma dos veces", "No se firmó ninguno" in r.get_data(as_text=True))
+check("la firma de contabilidad no la ve nadie sin sesión", A.app.test_client().get(f"/admin/roles/{_ids4[0]}/firma-empresa.png").status_code == 302
+      and c.get(f"/admin/roles/{_ids4[0]}/firma-empresa.png").mimetype == "image/png")
+html = c.get("/admin/usuarios").get_data(as_text=True)
+check("en Usuarios: quién revisa y quién firma, y si registró la firma", "quién revisa y quién firma" in html and "registrada" in html)
+c.post("/admin/usuarios", data={"accion": "permisos_roles", "id": _jes, "revisa": "1", "firma": "1"})
+check("y se cambian desde ahí", base.usuario(_jes)["firma_roles"] is True)
+base.poner_permisos_roles(_jes, True, False)
 rid_rosa = next(x["id"] for x in roles_sep if x["trabajador_id"] == rosa)
 _r_rosa = base.rol_pago(rid_rosa)
 _url_rosa = f"/admin/roles/{_r_rosa['anio']}-{_r_rosa['mes']:02d}/" + A.slug_nombre(_r_rosa["nombre"])
@@ -928,7 +1030,21 @@ check("en enero, rol12 es diciembre del año anterior", (lambda: (setattr(A, "ho
 A.hoy = _hoy_real
 ROL8 = _xlsx([_fila_rol(3, "ROSAS VERA ANA MARIA", {"campr1": 600}, {"campr12": 56.7})])
 c.post("/admin/roles/cargar", data=dict(datos, archivo_b64=_b64.b64encode(ROL8).decode(), mes="8", mes_revisado="8"))
+check("el recibo que cambió perdió la revisión y la firma de contabilidad: no lo ve hasta que se vuelva a firmar",
+      not store.visible(base.roles_del_mes(2026, 9)[0]) and "Septiembre" not in rw.get("/yo/rol").get_data(as_text=True))
+
+
+def _publicar(anio, mes):
+    ids = [x["id"] for x in base.roles_del_mes(anio, mes)]
+    cj.post("/admin/roles/revisar", data={"mes": f"{anio}-{mes:02d}", "ids": ids})
+    ca.post("/admin/roles/firmar", data={"mes": f"{anio}-{mes:02d}", "ids": ids, "clave": "clave-ang"})
+
+
+_publicar(2026, 9); _publicar(2026, 8)
 html = rw.get("/yo/rol").get_data(as_text=True)
+check("el trabajador ve la firma de contabilidad en su recibo, y sólo la suya", "Firmado por contabilidad · Ángel Torres" in html
+      and rw.get(f"/yo/rol/{base.roles_del_mes(2026, 9)[0]['id']}/firma-empresa.png").mimetype == "image/png"
+      and rw.get(f"/yo/rol/{rid_juan}/firma-empresa.png").status_code == 404)
 check("el trabajador ve los meses (ago, sep) con el monto y abre el último", 'class="meses"' in html and ">Ago<" in html.replace('<span class="punto" title="Sin firmar"></span>', "<") .replace("<<", "<") and "$ 543,30" in html and "Septiembre 2026" in html)
 html = rw.get("/yo/rol?mes=2026-08").get_data(as_text=True)
 check("y toca agosto y ve agosto", "Agosto 2026" in html and "543,30" in html)

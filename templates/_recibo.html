@@ -42,9 +42,17 @@
     {% endif %}
     <span class="rec-ar">A recibir</span><b>{{ r.liquido|dinero }}</b>
   </div>
+  {% if not con_firmas and r.aprobado_en %}
+  {# la firma de contabilidad (Ángel), aplicada desde su firma guardada #}
+  <div class="rec-empresa"><img src="{{ url_firma_empresa(r) }}" alt="Firma de contabilidad"><span>Firmado por contabilidad · {{ r.aprobado_por }} · {{ r.aprobado_en|fecha }}</span></div>
+  {% endif %}
   {% if con_firmas %}
   <div class="rec-firmas">
-    <div class="rec-firma"><div class="trazo"></div><div class="linea">Contabilidad</div></div>
+    <div class="rec-firma">
+      <div class="trazo">{% if r.aprobado_en %}<img src="{{ url_firma_empresa(r) }}" alt="Firma de contabilidad">{% endif %}</div>
+      <div class="linea">Contabilidad</div>
+      {% if r.aprobado_en %}<div class="ci">{{ r.aprobado_por }} · {{ r.aprobado_en|fecha }}</div>{% endif %}
+    </div>
     <div class="rec-firma">
       {% if r.firmado_en %}<div class="trazo"><img src="{{ url_firma(r.id) }}" alt="Firma"></div>
       {% elif r.pide_firma is sameas false %}<div class="trazo papel">✓ Firmado en papel</div>

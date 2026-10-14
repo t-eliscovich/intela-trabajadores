@@ -8,7 +8,7 @@
     <b>{{ t.nombre }}</b>
     <p>
       {% if con_comida %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado{% if invitados_anotados %}, con {{ invitados_anotados }} {{ 'invitado' if invitados_anotados == 1 else 'invitados' }}{% endif %}. ¡Buen provecho!
-      {% elif invitados_anotados %}{{ invitados_anotados }} {{ 'invitado registrado' if invitados_anotados == 1 else 'invitados registrados' }}. ¡Buen provecho!
+      {% elif invitados_anotados %}{{ invitados_anotados }} {{ 'invitado registrado' if invitados_anotados == 1 else 'invitados registrados' }}{% if turno %} para las {{ nombre_turno(turno) }}{% endif %}.{% if solo_invitados %} Cuando usted venga a comer, escriba su cédula para registrar lo suyo.{% else %} ¡Buen provecho!{% endif %}
       {% elif ya_estaba %}Ya registró {{ 'el almuerzo' if tipo == 'almuerzo' else 'la cena' }} de hoy.
       {% else %}{{ 'Almuerzo' if tipo == 'almuerzo' else 'Cena' }}{% if turno %} de {{ nombre_turno(turno) }}{% endif %} registrado. ¡Buen provecho!{% endif %}
     </p>
@@ -20,6 +20,11 @@
     <div class="relleno">
       <form method="POST" action="{{ u('comedor_invitados') }}" class="formulario">
         <input type="hidden" name="cedula" value="{{ t.cedula }}"><input type="hidden" name="tipo" value="{{ tipo }}">
+        <input type="hidden" name="turno" id="turno-inv" value="{{ turno or '' }}">
+        <div class="ancho"><label class="campo">A qué hora comen</label>
+          <div class="kiosco-horarios" style="margin:0">
+            {% for x in TURNOS[tipo] %}<button class="btn kiosco-hora {{ 'ahora' if x == turno }}" type="button" data-turno-inv="{{ x }}">{{ x }}</button>{% endfor %}
+          </div></div>
         <div class="ancho"><label class="campo">Quiénes son</label><input name="descripcion" maxlength="80" placeholder="proveedor, familiar…" required style="height:52px;font-size:20px"></div>
         <div class="ancho kiosco-cant">
           {% for n in range(1, 4 - invitados) %}<button class="btn suave" type="submit" name="cantidad" value="{{ n }}">{{ n }}</button>{% endfor %}
@@ -33,5 +38,10 @@
     <form method="GET" action="{{ u('comedor') }}"><button class="btn kiosco-btn" type="submit" autofocus>Listo</button></form>
   </div>
 </div>
+<script>
+  document.querySelectorAll('[data-turno-inv]').forEach(function(b){ b.onclick=function(){
+    document.querySelectorAll('[data-turno-inv]').forEach(function(x){ x.classList.remove('ahora'); });
+    b.classList.add('ahora'); document.getElementById('turno-inv').value=b.dataset.turnoInv; }; });
+</script>
 <script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, {{ 25000 if (t.puede_invitar and invitados < 3 and ya_estaba) else 4000 }});</script>
 {% endblock %}

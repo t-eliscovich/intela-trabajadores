@@ -39,6 +39,10 @@ def store_mismo_recibo(antes, f):
     return all(abs(float(antes[k] or 0) - float(f[k] or 0)) < 0.005 for k in ("liquido", "sueldo", "dias", "atrasos", "otros"))
 
 
+ROL_SIN_REVISAR = {"revisado_por_id": None, "revisado_por": None, "revisado_en": None, "aprobado_por_id": None,
+                   "aprobado_por": None, "aprobado_en": None, "firma_empresa": None}
+
+
 class BaseFalsa:
     def __init__(self):
         self.trab: dict[int, dict] = {}
@@ -108,6 +112,7 @@ class BaseFalsa:
         r = dict(r, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"),
                  fecha_ingreso=t.get("fecha_ingreso"), fecha_salida=t.get("fecha_salida"))
         r.pop("firma", None)
+        r.pop("firma_empresa", None)
         return r
 
     def roles_del_mes(self, anio, mes):
@@ -130,8 +135,13 @@ class BaseFalsa:
                 continue
             m = meses.setdefault((r["anio"], r["mes"]), {"anio": r["anio"], "mes": r["mes"], "cuantos": 0,
                                                            "total": 0.0, "cargado_en": r["cargado_en"],
-                                                           "firmados": 0, "piden_firma": 0})
+                                                           "firmados": 0, "piden_firma": 0,
+                                                           "necesitan": 0, "revisados": 0, "aprobados": 0})
             m["cuantos"] += 1
+            if r.get("necesita_aprobacion"):
+                m["necesitan"] += 1
+                m["revisados"] += 1 if r.get("revisado_en") else 0
+                m["aprobados"] += 1 if r.get("aprobado_en") else 0
             m["firmados"] += 1 if r["firmado_en"] else 0
             m["piden_firma"] += 1 if r["pide_firma"] else 0
             m["total"] += r["liquido"]
@@ -139,8 +149,9 @@ class BaseFalsa:
 
     def cargar_roles(self, anio, mes, filas, quien, pide_firma=True):
         reemplazados = 0
-        firmados = {r["trabajador_id"]: r for r in self.rol.values()
-                    if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes and r["firmado_en"]}
+        previos = {r["trabajador_id"]: r for r in self.rol.values()
+                   if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes}
+        firmados = {k: r for k, r in previos.items() if r["firmado_en"]}
         quedan = 0
         for r in self.rol.values():
             if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes:
@@ -154,12 +165,14 @@ class BaseFalsa:
             self.rol[id_] = {"id": id_, "anio": anio, "mes": mes, **campos, "cargado_por": quien,
                              "cargado_en": datetime.now(), "borrado_en": None, "borrado_por": None,
                              "firma": None, "firmado_en": None, "firmado_desde": None, "firma_huella": None,
-                             "pide_firma": pide_firma}
-            antes = firmados.get(f["trabajador_id"])
+                             "pide_firma": pide_firma, **ROL_SIN_REVISAR, "necesita_aprobacion": pide_firma}
+            antes = previos.get(f["trabajador_id"])
             if antes and store_mismo_recibo(antes, f):
                 self.rol[id_].update(firma=antes["firma"], firmado_en=antes["firmado_en"],
-                                     firmado_desde=antes["firmado_desde"], firma_huella=antes["firma_huella"])
-                quedan += 1
+                                     firmado_desde=antes["firmado_desde"], firma_huella=antes["firma_huella"],
+                                     **{k: antes.get(k) for k in ROL_SIN_REVISAR},
+                                     necesita_aprobacion=bool(antes.get("necesita_aprobacion")) and pide_firma)
+                quedan += 1 if antes["firmado_en"] else 0
             for t in self.trab.values():
                 if t.get("codigo_rol") == f["codigo"] and t["id"] != f["trabajador_id"]:
                     t["codigo_rol"] = None
@@ -177,11 +190,44 @@ class BaseFalsa:
         r.update(firma=png, firmado_en=datetime.now(), firmado_desde=desde[:200], firma_huella=huella)
         return True
 
+    def revisar_roles(self, ids, usuario_id, nombre):
+        n = 0
+        for i in ids:
+            r = self.rol.get(i)
+            if r and not r["borrado_en"] and r.get("necesita_aprobacion") and not r.get("revisado_en") and not r.get("aprobado_en"):
+                r.update(revisado_por_id=usuario_id, revisado_por=nombre, revisado_en=datetime.now())
+                n += 1
+        return n
+
+    def quitar_revision(self, ids):
+        n = 0
+        for i in ids:
+            r = self.rol.get(i)
+            if r and not r["borrado_en"] and not r.get("aprobado_en"):
+                r.update(revisado_por_id=None, revisado_por=None, revisado_en=None)
+                n += 1
+        return n
+
+    def aprobar_roles(self, ids, usuario_id, nombre, firma):
+        n = 0
+        for i in ids:
+            r = self.rol.get(i)
+            if (r and not r["borrado_en"] and r.get("necesita_aprobacion") and r.get("revisado_en")
+                    and not r.get("aprobado_en") and r.get("revisado_por_id") != usuario_id):
+                r.update(aprobado_por_id=usuario_id, aprobado_por=nombre, aprobado_en=datetime.now(), firma_empresa=firma)
+                n += 1
+        return n
+
+    def firma_empresa_del_rol(self, id_):
+        r = self.rol.get(id_)
+        return r.get("firma_empresa") if r and not r["borrado_en"] else None
+
     def firmado_en_papel(self, anio, mes):
         n = 0
         for r in self.rol.values():
             if not r["borrado_en"] and r["anio"] == anio and r["mes"] == mes and r["pide_firma"] and not r["firmado_en"]:
                 r["pide_firma"] = False
+                r["necesita_aprobacion"] = False
                 n += 1
         return n
 
@@ -189,7 +235,8 @@ class BaseFalsa:
         meses = self.meses_con_rol()
         if not meses:
             return 0
-        return sum(1 for r in self.roles_del_mes(meses[0]["anio"], meses[0]["mes"]) if r["pide_firma"] and not r["firmado_en"])
+        return sum(1 for r in self.roles_del_mes(meses[0]["anio"], meses[0]["mes"]) if r["pide_firma"] and not r["firmado_en"]
+                   and (not r.get("necesita_aprobacion") or r.get("aprobado_en")))
 
     def firma_del_rol(self, id_):
         r = self.rol.get(id_)
@@ -600,12 +647,28 @@ class BaseFalsa:
         self.alm.discard((trabajador_id, fecha, tipo))
 
     # --- usuarios ---
+    @staticmethod
+    def _usu_vista(u):
+        v = {k: x for k, x in u.items() if k not in ("firma", "clave_hash")}
+        v["tiene_firma"] = u.get("firma") is not None
+        return v
+
     def usuarios(self):
-        return sorted((dict(u) for u in self.usu.values()), key=lambda u: u["usuario"])
+        return sorted((self._usu_vista(u) for u in self.usu.values()), key=lambda u: u["usuario"])
 
     def usuario(self, id_):
         u = self.usu.get(id_)
-        return dict(u) if u else None
+        return self._usu_vista(u) if u else None
+
+    def poner_permisos_roles(self, id_, revisa, firma):
+        self.usu[id_].update(revisa_roles=revisa, firma_roles=firma)
+
+    def guardar_firma_usuario(self, id_, png):
+        self.usu[id_].update(firma=png, firma_en=datetime.now())
+
+    def firma_de_usuario(self, id_):
+        u = self.usu.get(id_)
+        return u.get("firma") if u else None
 
     def usuario_por_nombre(self, usuario):
         for u in self.usu.values():
@@ -623,7 +686,8 @@ class BaseFalsa:
             raise ValueError(f"No sé qué rol es «{rol}».")
         id_ = self._id()
         self.usu[id_] = {"id": id_, "usuario": usuario, "clave_hash": clave_hash, "nombre": nombre,
-                         "activo": True, "rol": rol, "creado_en": datetime.now()}
+                         "activo": True, "rol": rol, "creado_en": datetime.now(), "revisa_roles": False,
+                         "firma_roles": False, "firma": None, "firma_en": None}
         return id_
 
     def comida_marcada(self, trabajador_id, fecha, tipo):

@@ -21,16 +21,28 @@
       <button class="btn kiosco-hora {{ 'ahora' if x == turno }}" type="button" data-turno="{{ x }}">{{ x }}</button>
       {% endfor %}
     </div>
+    {% set ya = ya_invitados or 0 %}
+    {% if ya < 3 %}
     <div class="kiosco-inv">
-      <div class="kiosco-inv-tit">¿Trae invitados?</div>
+      <div class="kiosco-inv-tit">¿Trae invitados?{% if ya %} <small class="tenue">· ya registró {{ ya }}</small>{% endif %}</div>
       <div class="kiosco-cant" id="cantidades">
-        {% for n in range(0, 4) %}<button class="btn suave {{ 'elegido' if n == (cantidad or 0) }}" type="button" data-n="{{ n }}">{{ 'No' if n == 0 else n }}</button>{% endfor %}
+        {% for n in range(0, 4 - ya) %}<button class="btn suave {{ 'elegido' if n == (cantidad or 0) }}" type="button" data-n="{{ n }}">{{ 'No' if n == 0 else n }}</button>{% endfor %}
       </div>
       <input type="hidden" name="cantidad" id="cantidad" value="{{ cantidad or 0 }}">
       <input name="descripcion" id="descripcion" maxlength="80" placeholder="Quiénes son: proveedor, familiar…" autocomplete="off"
              style="height:56px;font-size:20px;margin-top:10px;{{ '' if cantidad else 'display:none' }}">
     </div>
+    {% else %}
+    <div class="kiosco-inv"><div class="kiosco-inv-tit">Ya registró sus {{ ya }} invitados.</div></div>
+    <input type="hidden" name="cantidad" id="cantidad" value="0">
+    {% endif %}
     <button class="btn verde kiosco-btn" type="submit">Registrar</button>
+    {% if ya < 3 %}
+    {# Los invitados llegan antes, o él no come (Tamara 14/10/2026): registra SÓLO a los invitados.
+       Cuando él venga a comer, pone la cédula y registra lo suyo. #}
+    <button class="btn suave kiosco-btn" type="submit" name="solo_invitados" value="1" id="solo-inv"
+            style="margin-top:10px;{{ '' if cantidad else 'display:none' }}">Sólo los invitados · yo como más tarde</button>
+    {% endif %}
     {% else %}
     <div class="kiosco-horarios">
       {% for x in TURNOS[tipo] %}
@@ -52,8 +64,9 @@
   document.querySelectorAll('[data-n]').forEach(function(b){ b.onclick=function(){
     document.querySelectorAll('[data-n]').forEach(function(x){ x.classList.remove('elegido'); });
     b.classList.add('elegido'); document.getElementById('cantidad').value=b.dataset.n;
-    var hay=b.dataset.n!=='0'; desc.style.display=hay?'':'none'; desc.required=hay; if(hay) desc.focus(); }; });
-  desc.required = document.getElementById('cantidad').value !== '0';
+    var hay=b.dataset.n!=='0'; desc.style.display=hay?'':'none'; desc.required=hay; if(hay) desc.focus();
+    var solo=document.getElementById('solo-inv'); if(solo) solo.style.display=hay?'':'none'; }; });
+  if(desc) desc.required = document.getElementById('cantidad').value !== '0';
 </script>
 {% endif %}
 <script>setTimeout(function(){ location.href = "{{ u('comedor') }}"; }, 60000);</script>

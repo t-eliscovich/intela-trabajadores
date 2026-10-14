@@ -143,7 +143,9 @@ def _cargar_usuario():
     if not vivo or not vivo["activo"] or vivo["rol"] != u["rol"]:
         session.pop("usuario", None)
         return
-    g.usuario = u
+    # los permisos del rol de pagos salen de la base, nunca de la cookie
+    g.usuario = dict(u, revisa_roles=bool(vivo.get("revisa_roles")), firma_roles=bool(vivo.get("firma_roles")),
+                     tiene_firma=bool(vivo.get("tiene_firma")))
 
 
 # --------------------------------------------------------------------------
@@ -757,8 +759,10 @@ def comedor():
         if not puede_entrar(t):
             return _tablet("comedor.html", error="No encontramos esa cédula. Pregunte en contabilidad.", cedula=cedula)
         if store.comida_marcada(t["id"], h, tipo):
-            return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo))
-        return _tablet("comedor_confirmar.html", t=t, fecha=h, turno=turno_de_ahora(tipo))
+            return _tablet("comedor_listo.html", t=t, ya_estaba=True, invitados=_invitados_de(t, h, tipo),
+                           turno=store.turno_marcado(t["id"], h, tipo) or turno_de_ahora(tipo))
+        return _tablet("comedor_confirmar.html", t=t, fecha=h, turno=turno_de_ahora(tipo),
+                       ya_invitados=_invitados_de(t, h, tipo) if t.get("puede_invitar") else 0)
     return _tablet("comedor.html")
 
 
@@ -787,18 +791,30 @@ def comedor_confirmar():
     # los invitados se eligen en la MISMA pantalla, debajo del horario (Tamara 14/10/2026: «no hagamos otra pantalla»)
     cantidad = int(request.form.get("cantidad") or 0) if (request.form.get("cantidad") or "0").isdigit() else 0
     descripcion = (request.form.get("descripcion") or "").strip()[:80]
-    if cantidad:
+    # «Sólo los invitados» (Tamara 14/10/2026): los invitados pueden comer antes que él, o él no come.
+    # Se registran los invitados SIN su comida; cuando él venga, pone la cédula y registra la suya.
+    solo_invitados = request.form.get("solo_invitados") == "1"
+    ya = _invitados_de(t, hoy(), tipo) if t.get("puede_invitar") else 0
+    if cantidad or solo_invitados:
         if not t.get("puede_invitar"):
             return _tablet("comedor.html", error=f"{t['nombre']} no tiene permiso para traer invitados. Pregunte en contabilidad.")
-        if not 1 <= cantidad <= MAX_INVITADOS or not descripcion:
+        error = None
+        if not descripcion:
+            error = "Escriba quiénes son los invitados (por ejemplo: proveedor, familiar)."
+        elif not 1 <= cantidad <= MAX_INVITADOS:
+            error = f"Los invitados son de 1 a {MAX_INVITADOS}."
+        elif ya + cantidad > MAX_INVITADOS:
+            error = (f"Ya registró {ya} {'invitado' if ya == 1 else 'invitados'}; "
+                     f"el máximo es {MAX_INVITADOS} por comida.")
+        if error:
             return _tablet("comedor_confirmar.html", t=t, fecha=hoy(), turno=turno, cantidad=cantidad,
-                           error="Escriba quiénes son los invitados (por ejemplo: proveedor, familiar)."
-                           if descripcion == "" else f"Los invitados son de 1 a {MAX_INVITADOS}.")
-    store.marcar_comida(t["id"], hoy(), tipo, _quien_marca(), turno)
+                           ya_invitados=ya, error=error)
+    if not solo_invitados:
+        store.marcar_comida(t["id"], hoy(), tipo, _quien_marca(), turno)
     if cantidad:
         store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca(), turno)
-    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=cantidad, turno=turno,
-                   invitados_anotados=cantidad, con_comida=True)
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, recien=True, invitados=ya + cantidad, turno=turno,
+                   invitados_anotados=cantidad, con_comida=not solo_invitados, solo_invitados=solo_invitados)
 
 
 @app.route("/comedor/invitados", methods=["POST"], endpoint="comedor_invitados")
@@ -820,9 +836,15 @@ def comedor_invitados():
             raise ValueError(f"Ya tiene {ya} {'invitado' if ya == 1 else 'invitados'} en {'este almuerzo' if tipo == 'almuerzo' else 'esta cena'}; el máximo es {MAX_INVITADOS}.")
     except ValueError as exc:
         return _tablet("comedor.html", error=str(exc))
-    turno = store.turno_marcado(t["id"], hoy(), tipo) or leer_turno(None, tipo)
+    # los invitados pueden comer en otro horario que el suyo (llegan antes o después): se elige en la tablet
+    try:
+        turno = leer_turno(request.form.get("turno"), tipo) if request.form.get("turno") else None
+    except ValueError:
+        turno = None
+    turno = turno or store.turno_marcado(t["id"], hoy(), tipo) or leer_turno(None, tipo)
     store.agregar_invitados(t["id"], hoy(), tipo, cantidad, descripcion, _quien_marca(), turno)
-    return _tablet("comedor_listo.html", t=t, tipo=tipo, invitados_anotados=cantidad, invitados=ya + cantidad)
+    return _tablet("comedor_listo.html", t=t, tipo=tipo, invitados_anotados=cantidad, invitados=ya + cantidad,
+                   turno=turno, con_comida=False)
 
 
 @app.route("/comedor/dia", methods=["GET", "POST"])
@@ -1722,6 +1744,13 @@ def admin_usuarios():
                     raise ValueError("La clave tiene que tener al menos 6 caracteres.")
                 store.cambiar_clave(int(f.get("id", 0)), generate_password_hash(clave))
                 flash("Clave cambiada.", "ok")
+            elif accion == "permisos_roles":
+                id_ = int(f.get("id", 0) or 0)
+                u = store.usuario(id_)
+                if not u or u["rol"] != "contabilidad":
+                    raise ValueError("Sólo los usuarios de contabilidad revisan o firman roles.")
+                store.poner_permisos_roles(id_, f.get("revisa") == "1", f.get("firma") == "1")
+                flash(f"Listo: permisos del rol de pagos de {u['nombre']}.", "ok")
             elif accion == "nuevo_link":
                 import secrets
                 store.poner_configuracion("clave_comedor", secrets.token_urlsafe(9))
@@ -1811,17 +1840,169 @@ def admin_roles():
         anio, mes = _mes_por_defecto("")
     filas = store.roles_del_mes(anio, mes)
     for r in filas:
-        r["wa"] = None if r["firmado_en"] or not r.get("pide_firma", True) else link_whatsapp(
+        r["visible"] = store.visible(r)
+        r["wa"] = None if r["firmado_en"] or not r.get("pide_firma", True) or not r["visible"] else link_whatsapp(
             r.get("celular"), f"Hola {nombre_de_pila(r['nombre'])}, su rol de pagos de {nombre_mes(anio, mes).lower()} "
             f"ya está en la aplicación de Intela. Por favor revíselo y fírmelo: https://trabajadores.intela.com.ec")
     totales = {k: sum(r[k] for r in filas) for k in ("total_ingresos", "total_descuentos", "liquido")}
-    piden = [r for r in filas if r.get("pide_firma", True)]
+    piden = [r for r in filas if r.get("pide_firma", True) and r["visible"]]
+    necesitan = [r for r in filas if r.get("necesita_aprobacion")]
+    revision = {"necesitan": len(necesitan), "revisados": sum(1 for r in necesitan if r.get("revisado_en")),
+                "aprobados": sum(1 for r in necesitan if r.get("aprobado_en"))}
     recientes = sorted((r for r in filas if r["firmado_en"]), key=lambda r: r["firmado_en"], reverse=True)[:8]
     n_constancias, n_activos = len(store.constancias_vigentes()), len(store.trabajadores())
     return render_template("admin_roles.html", anio=anio, mes=mes, filas=filas, meses=meses, totales=totales,
-                           recientes=recientes, n_constancias=n_constancias, n_activos=n_activos,
+                           recientes=recientes, n_constancias=n_constancias, n_activos=n_activos, revision=revision,
                            firmados=sum(1 for r in piden if r["firmado_en"]), piden=len(piden),
                            anterior=mes_anterior(anio, mes), siguiente=mes_siguiente(anio, mes))
+
+
+def _ids_del_form() -> list[int]:
+    return sorted({int(x) for x in request.form.getlist("ids") if x.isdigit()})
+
+
+@app.route("/admin/roles/revisar", methods=["POST"])
+@requiere_admin
+def admin_roles_revisar():
+    """Jessica (o quien tenga «Revisa roles») marca ✓ los recibos que revisó, de a uno
+    o varios. «Quitar» saca el ✓ mientras la empresa no lo firmó."""
+    mes = request.form.get("mes") or None
+    if not g.usuario.get("revisa_roles"):
+        flash("Su usuario no revisa roles de pago. Se da en Usuarios.", "error")
+        return redirect(url_for("admin_roles", mes=mes))
+    ids = _ids_del_form()
+    if not ids:
+        flash("Marque al menos un trabajador.", "error")
+    elif request.form.get("accion") == "quitar":
+        n = store.quitar_revision(ids)
+        flash(f"Se sacó la revisión de {n} {'recibo' if n == 1 else 'recibos'}.", "ok")
+    else:
+        n = store.revisar_roles(ids, g.usuario["id"], g.usuario["nombre"])
+        flash(f"Listo: {n} {'recibo revisado' if n == 1 else 'recibos revisados'}." if n else
+              "Esos recibos ya estaban revisados.", "ok" if n else "error")
+    return redirect(url_for("admin_roles", mes=mes))
+
+
+@app.route("/admin/roles/firmar", methods=["POST"])
+@requiere_admin
+def admin_roles_firmar():
+    """Ángel firma de una vez los recibos elegidos con su firma guardada. Escribe su
+    clave: una sesión abierta en otra computadora no puede firmar por él."""
+    mes = request.form.get("mes") or None
+    u = g.usuario
+    try:
+        if not u.get("firma_roles"):
+            raise ValueError("Su usuario no firma roles de pago. Se da en Usuarios.")
+        firma = store.firma_de_usuario(u["id"])
+        if not firma:
+            raise ValueError("Primero registre su firma (botón «Mi firma»).")
+        completo = store.usuario_por_nombre(u["usuario"])
+        if not completo or not check_password_hash(completo["clave_hash"], request.form.get("clave") or ""):
+            raise ValueError("La clave no es correcta. No se firmó nada.")
+        ids = _ids_del_form()
+        if not ids:
+            raise ValueError("Marque los recibos que va a firmar.")
+        n = store.aprobar_roles(ids, u["id"], u["nombre"], firma)
+        if not n:
+            raise ValueError("No se firmó ninguno: tienen que estar revisados, y no por usted.")
+        sobran = len(ids) - n
+        flash(f"Listo: firmó {n} {'recibo' if n == 1 else 'recibos'}. Los trabajadores ya los ven en su celular."
+              + (f" {sobran} no se firmaron (sin revisar, ya firmados o revisados por usted)." if sobran else ""), "ok")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("admin_roles", mes=mes))
+
+
+@app.route("/admin/mi-firma", methods=["GET", "POST"])
+@requiere_admin
+def admin_mi_firma():
+    """La firma guardada del usuario: se dibuja (o se sube la foto de la de papel) UNA
+    vez, y después se aplica a los recibos con «Firmar los seleccionados»."""
+    if request.method == "POST":
+        try:
+            if request.files.get("foto") and request.files["foto"].filename:
+                png = leer_foto_firma(request.files["foto"].read())
+            else:
+                png = leer_firma(request.form.get("firma", ""))
+            completo = store.usuario_por_nombre(g.usuario["usuario"])
+            if not completo or not check_password_hash(completo["clave_hash"], request.form.get("clave") or ""):
+                raise ValueError("La clave no es correcta. La firma no se guardó.")
+            store.guardar_firma_usuario(g.usuario["id"], png)
+            flash("Listo: su firma quedó guardada.", "ok")
+            return redirect(_volver_seguro(request.form.get("volver")))
+        except ValueError as exc:
+            flash(str(exc), "error")
+    return render_template("admin_mi_firma.html", volver=_volver_seguro(request.values.get("volver")))
+
+
+def _volver_seguro(destino: str | None) -> str:
+    """Sólo una ruta de esta misma app (nunca otro sitio)."""
+    if destino and destino.startswith("/") and not destino.startswith("//") and "\\" not in destino:
+        return destino
+    return url_for("admin_roles")
+
+
+@app.route("/admin/mi-firma.png")
+@requiere_admin
+def admin_mi_firma_png():
+    png = store.firma_de_usuario(g.usuario["id"])
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png", max_age=0)
+
+
+def leer_foto_firma(datos: bytes) -> bytes:
+    """La foto de la firma en papel → PNG con el fondo transparente (así se ve sobre
+    la línea del recibo como si la hubiera firmado ahí)."""
+    from io import BytesIO
+    from PIL import Image, ImageOps
+    if len(datos) > 8 * 1024 * 1024:
+        raise ValueError("La foto pesa demasiado (máximo 8 MB).")
+    try:
+        img = Image.open(BytesIO(datos))
+        if img.width * img.height > 40_000_000:
+            raise ValueError("demasiado grande")
+        img = ImageOps.exif_transpose(img)
+        img.load()
+    except Exception:  # noqa: BLE001
+        raise ValueError("No se pudo leer la foto. Suba una foto JPG o PNG de la firma.") from None
+    gris = ImageOps.autocontrast(img.convert("L"), cutoff=2)
+    # lo oscuro es tinta; lo claro (el papel) se vuelve transparente
+    alfa = gris.point(lambda v: 0 if v > 170 else min(255, (190 - v) * 3))
+    caja = alfa.getbbox()
+    if not caja:
+        raise ValueError("No se ve la firma en la foto. Saque la foto sobre papel blanco, con buena luz.")
+    tinta = Image.new("RGBA", gris.size, (15, 23, 42, 0))
+    tinta.putalpha(alfa)
+    tinta = tinta.crop(caja)
+    tinta.thumbnail((900, 360))
+    salida = BytesIO()
+    tinta.save(salida, "PNG", optimize=True)
+    return salida.getvalue()
+
+
+@app.route("/admin/roles/<int:id_>/firma-empresa.png")
+@requiere_admin
+def admin_rol_firma_empresa(id_):
+    png = store.firma_empresa_del_rol(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png")
+
+
+def url_firma_empresa(r: dict) -> str | None:
+    """La firma de la empresa en el recibo: contabilidad la ve por su ruta, el
+    trabajador por la suya (y sólo la de sus recibos)."""
+    if not r.get("aprobado_en"):
+        return None
+    if g.get("usuario") and es_contabilidad():
+        return url_for("admin_rol_firma_empresa", id_=r["id"])
+    return url_for("yo_rol_firma_empresa", id_=r["id"])
+
+
+app.jinja_env.globals["url_firma_empresa"] = url_firma_empresa
 
 
 @app.route("/admin/roles/papel", methods=["POST"])
@@ -2218,7 +2399,7 @@ def yo_rol_imprimir(id_):
     if (falta := _falta_constancia(t)):
         return falta
     r = store.rol_pago(id_)
-    if not r or r["trabajador_id"] != t["id"]:
+    if not r or r["trabajador_id"] != t["id"] or not store.visible(r):
         abort(404)
     return render_template("rol_imprimir.html", recibos=_para_imprimir([r]), anio=r["anio"], mes=r["mes"], t=t,
                            url_firma=lambda i: url_for("yo_rol_firma", id_=i), auto=request.args.get("auto") == "1",
@@ -2409,7 +2590,7 @@ def yo_rol():
         return redirect(url_for("entrar"))
     if (falta := _falta_constancia(t)):
         return falta
-    todos = store.roles_de(t["id"])
+    todos = [x for x in store.roles_de(t["id"]) if store.visible(x)]
     r = None
     if request.args.get("mes"):
         anio, mes = leer_mes(request.args.get("mes"))
@@ -2433,7 +2614,7 @@ def yo_rol_firmar():
     try:
         id_ = int(id_txt)
         r = store.rol_pago(id_)
-        if not r or r["trabajador_id"] != t["id"]:
+        if not r or r["trabajador_id"] != t["id"] or not store.visible(r):
             abort(404)
         if r["firmado_en"]:
             raise ValueError("Este rol ya está firmado.")
@@ -2447,6 +2628,20 @@ def yo_rol_firmar():
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("yo_rol", mes=request.form.get("mes") or None))
+
+
+@app.route("/yo/rol/<int:id_>/firma-empresa.png")
+def yo_rol_firma_empresa(id_):
+    """La firma de la empresa en SU recibo. Nunca la de otro."""
+    t = _mi_trabajador()
+    r = store.rol_pago(id_) if t else None
+    if not r or r["trabajador_id"] != t["id"] or not store.visible(r):
+        abort(404)
+    png = store.firma_empresa_del_rol(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png")
 
 
 @app.route("/yo/rol/<int:id_>/firma.png")

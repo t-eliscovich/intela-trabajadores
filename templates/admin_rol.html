@@ -13,12 +13,19 @@
   <a class="btn suave chico" href="{{ url_for('admin_trabajador', id_=r.trabajador_id) }}">Ficha del trabajador</a>
   <a class="btn chico" href="{{ url_rol(r, imprimir=True, auto=1) }}">Imprimir o guardar PDF</a>
 </div>
+{% if r.necesita_aprobacion and not r.aprobado_en %}
+<div class="bloque"><div class="relleno" style="text-align:center;font-size:14px">
+  {% if r.revisado_en %}✓ Revisado por {{ r.revisado_por }} el {{ r.revisado_en|fecha_hora }} · falta la firma de contabilidad.
+  {% else %}Falta revisarlo.{% endif %}
+  <span class="tenue">El trabajador todavía no lo ve.</span>
+</div></div>
+{% endif %}
 <div class="bloque">{% include "_recibo.html" %}</div>
 {% if r.firmado_en %}
   {% with url_firma = url_for('admin_rol_firma', id_=r.id) %}{% include "_constancia.html" %}{% endwith %}
 {% elif r.pide_firma is sameas false %}
 <div class="bloque"><div class="relleno tenue" style="text-align:center">✓ Firmado en papel: este mes no se firma en la app.</div></div>
-{% else %}
+{% elif not r.necesita_aprobacion or r.aprobado_en %}
 <div class="bloque"><div class="relleno tenue" style="text-align:center">Todavía no lo firmó. Lo ve en su celular, en la pestaña «Rol de pagos».</div></div>
 {% endif %}
 <p class="tenue" style="font-size:12px;text-align:center">Cargado el {{ r.cargado_en|fecha_hora }} por {{ r.cargado_por }}.</p>

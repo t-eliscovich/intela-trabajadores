@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block titulo %}Mi firma{% endblock %}
+{% block clase_hoja %}angosta{% endblock %}
+{% block contenido %}
+{# La firma guardada de quien firma los roles (Tamara 14/10/2026: «que pueda registrar su
+   firma y aplicarla para que así aparezca firmada para los empleados»). Se registra UNA vez;
+   después se aplica a muchos recibos con «Firmar los seleccionados». #}
+{% include "_recibo_estilos.html" %}
+<style>
+  .firma-actual{display:flex;gap:16px;align-items:center;padding:14px 16px}
+  .firma-actual img{height:72px;max-width:60%;object-fit:contain;border-bottom:1px solid var(--tinta)}
+  .pestanas-firma{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 10px}
+  .pestanas-firma button{height:40px;border-radius:10px;border:1px solid var(--borde);background:var(--papel);font-weight:700;color:var(--gris);cursor:pointer}
+  .pestanas-firma button.activa{background:#e8eef6;border-color:#9fb3cc;color:var(--azul)}
+  .subir{display:block;border:2px dashed var(--borde);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:var(--papel)}
+  .subir b{display:block;font-size:16px;margin-bottom:4px}
+  .subir input{display:none}
+  #vista-foto{display:none;max-height:120px;max-width:100%;margin:10px auto 0}
+</style>
+
+<h1>Mi firma <small>{{ g.usuario.nombre }}</small></h1>
+
+{% if g.usuario.tiene_firma %}
+<div class="bloque">
+  <div class="firma-actual">
+    <img src="{{ url_for('admin_mi_firma_png') }}" alt="Su firma guardada">
+    <p class="tenue" style="margin:0;font-size:14px">Esta es la firma que va en los recibos que usted firma. Si la cambia, los recibos ya firmados conservan la anterior.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="bloque">
+  <div class="titulo"><h2>{{ 'Cambiar mi firma' if g.usuario.tiene_firma else 'Registrar mi firma' }}</h2>
+    <p>Va en la línea «Contabilidad» de cada recibo que firme. Sólo usted la puede usar.</p></div>
+  <div class="relleno">
+    <div class="pestanas-firma" role="tablist">
+      <button type="button" class="activa" data-ver="dibujar">Dibujarla</button>
+      <button type="button" data-ver="foto">Subir una foto</button>
+    </div>
+
+    <form method="POST" id="form-firma" data-panel="dibujar" autocomplete="off">
+      <input type="hidden" name="firma" id="firma">
+      <input type="hidden" name="volver" value="{{ volver }}">
+      <div class="pad" id="pad"><canvas id="lienzo"></canvas><div class="linea"></div><div class="x">✕</div><div class="guia">Firme aquí con el dedo o el mouse</div></div>
+      <label class="campo" style="margin-top:10px">Su clave</label>
+      <input type="password" name="clave" required placeholder="La misma con la que entra">
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:10px">
+        <button class="btn suave" type="button" id="borrar">Borrar</button>
+        <button class="btn verde" type="submit" id="firmar" disabled>Guardar mi firma</button>
+      </div>
+    </form>
+
+    <form method="POST" enctype="multipart/form-data" data-panel="foto" hidden autocomplete="off">
+      <input type="hidden" name="volver" value="{{ volver }}">
+      <label class="subir">
+        <b>Elegir la foto de su firma</b>
+        <span class="tenue" style="font-size:13px">Firme en un papel blanco con bolígrafo oscuro y sáquele una foto de cerca, con buena luz. El fondo blanco se quita solo.</span>
+        <input type="file" name="foto" accept="image/*" required id="foto">
+        <img id="vista-foto" alt="">
+      </label>
+      <label class="campo" style="margin-top:10px">Su clave</label>
+      <input type="password" name="clave" required placeholder="La misma con la que entra">
+      <button class="btn verde" type="submit" style="width:100%;margin-top:10px">Guardar mi firma</button>
+    </form>
+  </div>
+</div>
+<p style="text-align:center"><a href="{{ volver }}">‹ Volver</a></p>
+
+<script src="{{ url_for('static', filename='firma.js') }}"></script>
+<script>
+  document.querySelectorAll('[data-ver]').forEach(function(b){ b.onclick=function(){
+    document.querySelectorAll('[data-ver]').forEach(function(x){ x.classList.toggle('activa', x===b); });
+    document.querySelectorAll('[data-panel]').forEach(function(p){ p.hidden = p.dataset.panel !== b.dataset.ver; });
+    if(b.dataset.ver==='dibujar') window.dispatchEvent(new Event('resize'));
+  }; });
+  document.getElementById('foto').onchange=function(){
+    var f=this.files[0], img=document.getElementById('vista-foto'); if(!f) return;
+    img.src=URL.createObjectURL(f); img.style.display='block';
+  };
+</script>
+{% endblock %}
