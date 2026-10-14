@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block titulo %}Comensales · {{ fecha|fecha }}<style>
   .turno-nombre > span{flex:1;min-width:0}
+  .mas-inv{font-size:12px;font-weight:600;color:var(--gris);white-space:nowrap}
+  .cifras.cifras-3 .cifra{flex:1 1 0 !important;border-bottom:0 !important}
+  .cifras.cifras-3 .cifra small{letter-spacing:.02em}
   .editar-comida{display:inline-block;position:relative}
   .editar-comida > summary{list-style:none;cursor:pointer;background:none;border:0;padding:0 4px;color:var(--gris)}
   .editar-comida > summary::-webkit-details-marker{display:none}
@@ -15,7 +18,7 @@
   <span style="margin-left:auto" class="mes-nav"><a href="{{ url_for('comedor_dia', fecha=ayer) }}">‹</a><b>{{ fecha|fecha_larga }}{% if feriado %} · <span class="tenue">{{ feriado }}</span>{% endif %}</b>{% if manana %}<a href="{{ url_for('comedor_dia', fecha=manana) }}">›</a>{% else %}<a class="tenue" style="pointer-events:none">›</a>{% endif %}</span>
 </h1>
 
-<div class="cifras">
+<div class="cifras cifras-3">
   <div class="cifra"><b class="grande">{{ por_tipo.almuerzo|length }}</b><small>Almuerzos</small></div>
   <div class="cifra"><b class="grande">{{ por_tipo.cena|length }}</b><small>Cenas</small></div>
   <div class="cifra"><b>{{ total_invitados }}</b><small>Invitados</small></div>
@@ -27,7 +30,7 @@
   <div class="turnos" style="grid-template-columns:repeat({{ columnas[tipo]|length }},minmax(0,1fr))">
     {% for turno, gente, inv in columnas[tipo] %}
     <div class="turno">
-      {% set ninv = inv|sum(attribute='cantidad') %}<h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ gente|length }}{% if ninv %} <small class="chico">+{{ ninv }}</small>{% endif %}</b></h3>
+      {% set ninv = inv|sum(attribute='cantidad') %}<h3>{{ nombre_turno(turno) or 'Sin horario' }} <b>{{ gente|length }}{% if ninv %}<small class="mas-inv"> + {{ ninv }} inv.</small>{% endif %}</b></h3>
       {% for c in gente %}
       <div class="turno-nombre"><span>{{ c.nombre }}{% if edita and c.marcado_por and c.marcado_por != 'tablet' %} <small class="chico" title="Lo registró {{ c.marcado_por }}">· {{ c.marcado_por }}</small>{% endif %}</span>
         {% if edita %}<details class="editar-comida"><summary class="borrar-fila" title="Cambiar horario o comida">✎</summary>
@@ -67,6 +70,9 @@
 {% endif %}
 <style>
   .turno-nombre > span{flex:1;min-width:0}
+  .mas-inv{font-size:12px;font-weight:600;color:var(--gris);white-space:nowrap}
+  .cifras.cifras-3 .cifra{flex:1 1 0 !important;border-bottom:0 !important}
+  .cifras.cifras-3 .cifra small{letter-spacing:.02em}
   .editar-comida{display:inline-block;position:relative}
   .editar-comida > summary{list-style:none;cursor:pointer;background:none;border:0;padding:0 4px;color:var(--gris)}
   .editar-comida > summary::-webkit-details-marker{display:none}
