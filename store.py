@@ -464,6 +464,9 @@ ESQUEMA = """
         borrado_en    timestamptz
     );
     CREATE INDEX IF NOT EXISTS control_banco_mes_idx ON trabajadores.control_banco (anio, mes) WHERE borrado_en IS NULL;
+    -- El trabajador DE PRUEBA (Tamara 15/10/2026: «de vuelta usé ese trabajador para probar,
+    -- reinicialo»): se marca en la ficha y sólo a ése se le puede «Reiniciar para probar».
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS es_prueba boolean NOT NULL DEFAULT false;
     CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
 """
 
@@ -1490,3 +1493,40 @@ def control_banco(anio: int, mes: int) -> dict | None:
     if r:
         r["total"] = float(r["total"])
     return r
+
+
+def marcar_prueba(trabajador_id: int, es: bool) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET es_prueba = %s WHERE id = %s", (es, trabajador_id))
+
+
+def reiniciar_prueba(trabajador_id: int, quien: str) -> dict:
+    """Deja al trabajador DE PRUEBA como si nunca hubiera entrado a la app: sin contraseña
+    ni correo, sin constancia (se anula, queda en el historial) y sin sus firmas de rol.
+    Los recibos, las vacaciones y las comidas no se tocan. Sólo si está marcado de prueba."""
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("SELECT es_prueba FROM trabajadores.trabajador WHERE id = %s FOR UPDATE", (trabajador_id,))
+            fila = cur.fetchone()
+            if not fila or not fila[0]:
+                con.rollback()
+                raise ValueError("Sólo se reinicia un trabajador marcado como de prueba.")
+            cur.execute("""UPDATE trabajadores.trabajador
+                              SET clave_rol_hash = NULL, clave_rol_en = NULL, email = NULL,
+                                  clave_rol_fallidos = 0, clave_rol_trabado_hasta = NULL
+                            WHERE id = %s""", (trabajador_id,))
+            cur.execute("""UPDATE trabajadores.codigo_correo SET usado_en = now()
+                            WHERE trabajador_id = %s AND usado_en IS NULL""", (trabajador_id,))
+            cur.execute("""UPDATE trabajadores.constancia_roles
+                              SET anulada_en = now(), anulada_por = %s, motivo_anulada = 'reinicio de prueba'
+                            WHERE trabajador_id = %s AND anulada_en IS NULL""", (quien, trabajador_id))
+            constancias = cur.rowcount
+            cur.execute("""UPDATE trabajadores.rol_pago
+                              SET firma = NULL, firmado_en = NULL, firmado_desde = NULL, firma_huella = NULL
+                            WHERE trabajador_id = %s AND borrado_en IS NULL AND firmado_en IS NOT NULL""",
+                        (trabajador_id,))
+            firmas = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return {"constancias": constancias, "firmas": firmas}

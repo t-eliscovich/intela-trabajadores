@@ -1243,6 +1243,32 @@ r = c.post("/admin/roles/cargar", data={"archivo_b64": _b64.b64encode(AC2).decod
 check("al confirmar, corrige la cédula y carga", "Se corrigió la cédula" in r.get_data(as_text=True)
       and base.trabajador(_mal)["cedula"] == "1312288291" and base.roles_del_mes(2026, 5)[0]["trabajador_id"] == _mal)
 check("la lista marca las cédulas no válidas", "cédula no válida" in c.get("/admin?todos=1").get_data(as_text=True) or True)
+# --- el trabajador de prueba (Tamara 15/10/2026: «de vuelta usé ese trabajador para probar, reinicialo») ---
+html = c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True)
+check("la ficha no ofrece reiniciar a un trabajador real", "Reiniciar para probar" not in html and "Lo uso para probar la app" in html)
+r = c.post(f"/admin/trabajador/{rosa}", data={"accion": "reiniciar_prueba"}, follow_redirects=True)
+check("y aunque lo intenten, no lo reinicia", "Sólo se reinicia" in r.get_data(as_text=True) and base.trabajador(rosa)["clave_rol_hash"]
+      and base.constancia_de(rosa))
+if not any(x["firmado_en"] for x in base.roles_de(rosa)):  # que tenga al menos un rol firmado para probar
+    _r0 = next(x for x in base.roles_de(rosa) if x["pide_firma"])
+    base.rol[_r0["id"]].update(firma=b"png", firmado_en=datetime.now(), firmado_desde="iPhone", firma_huella="h")
+_firmados_rosa = [x["id"] for x in base.roles_de(rosa) if x["firmado_en"]]
+_recibos_rosa = len(base.roles_de(rosa))
+c.post(f"/admin/trabajador/{rosa}", data={"accion": "prueba", "es_prueba": "1"})
+html = c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True)
+check("marcado de prueba, aparece «Reiniciar para probar»", base.trabajador(rosa)["es_prueba"] and "Reiniciar para probar" in html)
+r = c.post(f"/admin/trabajador/{rosa}", data={"accion": "reiniciar_prueba"}, follow_redirects=True)
+_tr = base.trabajador(rosa)
+check("reiniciar: sin contraseña ni correo, sin constancia, roles sin firmar; los recibos siguen",
+      "quedó como nuevo" in r.get_data(as_text=True) and not _tr["clave_rol_hash"] and not _tr["email"] and base.constancia_de(rosa) is None
+      and _firmados_rosa and not any(base.rol_pago(i)["firmado_en"] for i in _firmados_rosa) and len(base.roles_de(rosa)) == _recibos_rosa)
+_cr2 = A.app.test_client(); _cr2.post("/", data={"cedula": "1700000001"})
+check("y al entrar le pide crear la contraseña desde cero", "cree su contraseña" in _cr2.get("/entrar/clave").get_data(as_text=True)
+      and rw.get("/yo/vacaciones").status_code == 302)
+entrar_trab(rw, "1700000001")
+rw.post("/yo/constancia", data={"banco": "Banco Pichincha", "cuenta": "2200123456", "cuenta2": "2200123456", "firma": _png_firma()})
+c.post(f"/admin/trabajador/{rosa}", data={"accion": "prueba"})
+check("se le puede sacar la marca de prueba", not base.trabajador(rosa)["es_prueba"])
 # --- EL CONTROL CON EL BANCO (Tamara 14/10/2026: «este es el archivo que controla, es lo que
 # mandan al banco, así que no tiene puntos») ---
 def _xlsx_banco(filas, ref="ROL_11_25"):

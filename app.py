@@ -1101,6 +1101,17 @@ def _accion_trabajador(t: dict, accion: str) -> None:
     if accion == "invitados":
         store.poner_puede_invitar(t["id"], f.get("puede_invitar") == "1")
         return
+    if accion == "prueba":
+        store.marcar_prueba(t["id"], f.get("es_prueba") == "1")
+        flash("Listo: marcado como trabajador de prueba." if f.get("es_prueba") == "1" else "Ya no es de prueba.", "ok")
+        return
+    if accion == "reiniciar_prueba":
+        n = store.reiniciar_prueba(t["id"], quien)
+        flash(f"Listo: {t['nombre']} quedó como nuevo. Sin contraseña ni correo"
+              + (", sin constancia" if n["constancias"] else "")
+              + (f", y {n['firmas']} {'rol sin firmar' if n['firmas'] == 1 else 'roles sin firmar'}" if n["firmas"] else "")
+              + ". Sus recibos, vacaciones y comidas siguen igual.", "ok")
+        return
     if accion == "borrar_clave_rol":
         store.borrar_clave_rol(t["id"])
         flash("Listo: se borró la contraseña. La vuelve a crear la próxima vez que entre.", "ok")

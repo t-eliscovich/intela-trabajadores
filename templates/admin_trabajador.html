@@ -182,6 +182,23 @@
         </form>
       </div>
     </details>
+    <details {% if t.es_prueba %}open{% endif %}>
+      <summary>Trabajador de prueba{% if t.es_prueba %} <span class="etiqueta pendiente">de prueba</span>{% endif %}</summary>
+      <div class="relleno" style="display:grid;gap:12px">
+        <form method="POST" class="formulario">
+          <input type="hidden" name="accion" value="prueba">
+          <div class="ancho"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="es_prueba" value="1" style="width:auto;height:auto" {% if t.es_prueba %}checked{% endif %}> Lo uso para probar la app</label></div>
+          <div><button class="btn suave" type="submit">Guardar</button></div>
+        </form>
+        {% if t.es_prueba %}
+        <form method="POST" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="hidden" name="accion" value="reiniciar_prueba">
+          <button class="btn rojo" type="submit" onclick="return confirm('¿Reiniciar a {{ t.nombre }}? Le saca la contraseña y el correo, anula la constancia y le borra las firmas de los roles. Los recibos, vacaciones y comidas no se tocan.')">Reiniciar para probar</button>
+          <span class="ayuda" style="margin:0;flex:1;min-width:220px">Queda como si nunca hubiera entrado: sin contraseña ni correo, sin constancia y con los roles sin firmar. Recibos, vacaciones y comidas siguen igual.</span>
+        </form>
+        {% endif %}
+      </div>
+    </details>
     <details>
       <summary>Editar los datos</summary>
       <div class="relleno">

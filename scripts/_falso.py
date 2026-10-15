@@ -773,6 +773,30 @@ class _ClaveRol:
         self.cod[id_]["usado_en"] = datetime.now()
 
 
+    def marcar_prueba(self, trabajador_id, es):
+        self.trab[trabajador_id]["es_prueba"] = es
+
+    def reiniciar_prueba(self, trabajador_id, quien):
+        t = self.trab.get(trabajador_id)
+        if not t or not t.get("es_prueba"):
+            raise ValueError("Sólo se reinicia un trabajador marcado como de prueba.")
+        t.update(clave_rol_hash=None, clave_rol_en=None, email=None, clave_rol_fallidos=0, clave_rol_trabado_hasta=None)
+        for c in self.cod.values():
+            if c["trabajador_id"] == trabajador_id and not c["usado_en"]:
+                c["usado_en"] = datetime.now()
+        n_c = 0
+        for c in self.cons.values():
+            if c["trabajador_id"] == trabajador_id and not c.get("anulada_en"):
+                c.update(anulada_en=datetime.now(), anulada_por=quien, motivo_anulada="reinicio de prueba")
+                n_c += 1
+        n_f = 0
+        for r in self.rol.values():
+            if r["trabajador_id"] == trabajador_id and not r["borrado_en"] and r["firmado_en"]:
+                r.update(firma=None, firmado_en=None, firmado_desde=None, firma_huella=None)
+                n_f += 1
+        return {"constancias": n_c, "firmas": n_f}
+
+
 for _n in dir(_ClaveRol):
     if not _n.startswith("_"):
         setattr(BaseFalsa, _n, getattr(_ClaveRol, _n))
