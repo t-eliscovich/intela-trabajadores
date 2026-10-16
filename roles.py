@@ -394,6 +394,103 @@ def leer_acumulado(datos: bytes, nombre: str = "acumulado.xlsx") -> tuple[list[d
     return buenas, malas
 
 
+# --------------------------------------------------------------------------
+# El ROL DEL MES con cédula («Rol_09_2026.xlsx», Tamara 16/10/2026: «este es el
+# archivo que van a subir mes a mes»). Una fila por trabajador, títulos con nombre
+# (Dep, Código, Cédula, Nombre, Sueldo, Horas 25, V. Horas 25…, Saldo), sin año ni
+# mes adentro: salen del nombre del archivo o de la pantalla. Verificado con
+# septiembre 2026: 114 recibos, $ 91.476,26 = rol9.xls al centavo.
+# --------------------------------------------------------------------------
+_CABEZA_MENSUAL = ("dep", "codigo", "cedula", "nombre", "sueldo")
+# (título, lugar en INGRESOS, título de las horas)
+_ING_MENSUAL = (("sueldo", 0, None), ("v horas 50", 1, "horas 50"), ("v horas 100", 2, "horas 100"),
+                ("v horas 25", 3, "horas 25"), ("fondo de reserva", 4, None), ("14to sueldo", 5, None),
+                ("13er sueldo", 6, None), ("comisiones", 7, None), ("bonificacion", 8, None), ("transporte", 9, None))
+_DES_MENSUAL = ("iess", "anticipo", "prestamo iess", "dano tela", "caja ahorros", "prestamo oficina",
+                "retencion judicial", "impuesto a la renta")  # mismo orden que DESCUENTOS
+# Columnas de reserva de WinAfin: hoy vienen vacías. Si un mes traen algo, es un
+# concepto nuevo que el programa no conoce y la fila no entra.
+_SIN_USO_MENSUAL = tuple(f"campo {i}" for i in range(11, 16)) + tuple(f"desc {i}" for i in range(9, 16))
+_NECESARIAS_MENSUAL = _CABEZA_MENSUAL + tuple(t for t, _, _ in _ING_MENSUAL) \
+    + tuple(h for _, _, h in _ING_MENSUAL if h) + _DES_MENSUAL + ("saldo",)
+
+
+def es_rol_mensual(datos: bytes, nombre: str = "") -> bool:
+    try:
+        titulos = _primera_fila(datos, nombre)
+    except Exception:  # noqa: BLE001
+        return False
+    return tuple(_titulo(t) for t in titulos[:5]) == _CABEZA_MENSUAL
+
+
+def anio_del_nombre(nombre: str) -> int | None:
+    """«Rol_09_2026.xlsx» → 2026."""
+    m = re.search(r"(?<!\d)(20\d\d)(?!\d)", nombre or "")
+    return int(m.group(1)) if m else None
+
+
+def leer_rol_mensual(datos: bytes, nombre: str, anio: int, mes: int) -> tuple[list[dict], list[dict]]:
+    """Devuelve (buenas, malas) con la misma forma que `leer_acumulado`. Una fila
+    cuyo líquido no cierra (ingresos − descuentos ≠ Saldo) NO entra."""
+    if nombre.lower().endswith(".xlsx") or datos[:2] == b"PK":
+        from openpyxl import load_workbook
+        hoja = load_workbook(BytesIO(datos), read_only=True, data_only=True).worksheets[0]
+        filas = [list(r) for r in hoja.iter_rows(values_only=True)]
+    else:
+        import xlrd
+        h = xlrd.open_workbook(file_contents=datos).sheet_by_index(0)
+        filas = [h.row_values(i) for i in range(h.nrows)]
+    if not filas:
+        raise NoEsElRol("El archivo está vacío.")
+    titulos = [_titulo(t) for t in filas[0]]
+    faltan = [c for c in _NECESARIAS_MENSUAL if c not in titulos]
+    if faltan:
+        raise NoEsElRol("A este archivo del rol le faltan las columnas " + ", ".join(f"«{c}»" for c in faltan[:6])
+                        + ("…" if len(faltan) > 6 else "") + ".")
+    ix = {t: i for i, t in enumerate(titulos)}
+    buenas, malas = [], []
+    for n, f in enumerate(filas[1:], start=2):
+        f = list(f) + [None] * (len(titulos) - len(f))
+        g = lambda t: _num(f[ix[t]])  # noqa: E731
+        nombre_rol = " ".join(str(f[ix["nombre"]] or "").split())
+        if not nombre_rol and f[ix["cedula"]] in (None, ""):
+            continue  # la fila de totales del final
+        try:
+            if not nombre_rol:
+                raise ValueError("Fila sin nombre.")
+            cedula = limpiar_cedula(f[ix["cedula"]])
+            if len(cedula) != 10:
+                raise ValueError("Sin cédula, o la cédula no tiene 10 dígitos.")
+            raras = [c for c in _SIN_USO_MENSUAL if c in ix and g(c)]
+            if raras:
+                raise ValueError("Trae valores en columnas que el programa no conoce ("
+                                 + ", ".join(raras) + "). Avise a sistemas.")
+            ingresos = []
+            for t, i, th in _ING_MENSUAL:
+                if g(t):
+                    ingresos.append({"concepto": INGRESOS[i][1], "detalle": _horas(g(th)) if th and g(th) else "",
+                                     "valor": g(t)})
+            descuentos = [{"concepto": DESCUENTOS[i][1], "detalle": "", "valor": g(t)}
+                          for i, t in enumerate(_DES_MENSUAL) if g(t)]
+            if not ingresos:
+                raise ValueError("No tiene ingresos.")
+            ti = round(sum(x["valor"] for x in ingresos), 2)
+            td = round(sum(x["valor"] for x in descuentos), 2)
+            liquido = g("saldo")
+            if abs(ti - td - liquido) > 0.015:
+                raise ValueError(f"Ingresos menos descuentos da {ti - td:.2f} y el saldo dice {liquido:.2f}.")
+            buenas.append({
+                "fila": n, "anio": anio, "mes": mes, "codigo": int(g("codigo")), "cedula": cedula,
+                "nombre_rol": nombre_rol, "sueldo": g("sueldo"), "dias": 0, "horas_25": g("horas 25"),
+                "horas_50": g("horas 50"), "horas_100": g("horas 100"), "atrasos": 0, "otros": 0,
+                "ingresos": ingresos, "descuentos": descuentos,
+                "total_ingresos": ti, "total_descuentos": td, "liquido": round(liquido, 2),
+            })
+        except (ValueError, TypeError) as exc:
+            malas.append({"fila": n, "nombre_rol": nombre_rol, "motivo": str(exc)})
+    return buenas, malas
+
+
 def cruzar_por_cedula(personas: list[dict], padron: list[dict]) -> None:
     """Como `cruzar`, pero la llave es la CÉDULA. Entra solo quien tiene la
     misma cédula en el padrón y un nombre compatible. Todo lo demás (misma

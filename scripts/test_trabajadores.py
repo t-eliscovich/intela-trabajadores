@@ -1510,6 +1510,59 @@ c.post("/admin/usuarios", data={"accion": "renombrar", "id": _yo["id"], "usuario
 check("el propio: la barra muestra el nombre nuevo sin volver a entrar", "Contabilidad Intela" in c.get("/admin").get_data(as_text=True))
 c.post("/admin/usuarios", data={"accion": "renombrar", "id": _ofi["id"], "usuario": "oficina", "nombre": _ofi["nombre"]})
 
+# --- el rol del mes CON CÉDULA (Rol_09_2026.xlsx, Tamara 16/10/2026) -------------
+print("Rol del mes con cédula:")
+import roles as _R  # noqa: E402
+_TIT_M = ["Dep", "Código", "Cédula", "Nombre", "Sueldo", "Horas 25", "V. Horas 25", "Horas 50", "V. Horas 50", "Horas 100",
+          "V. Horas 100", "Fondo de Reserva", "14to Sueldo", "13er Sueldo", "Comisiones", "Bonificacion", "Transporte",
+          "Campo 11", "Campo 12", "Campo 13", "Campo 14", "Campo 15", "IESS", "Anticipo", "Prestamo Iess", "Daño Tela",
+          "Caja Ahorros", "Prestamo Oficina", "Retencion Judicial", "Impuesto a la renta", "Desc 9", "Desc 10", "Desc 11",
+          "Desc 12", "Desc 13", "Desc 14", "Desc 15", "Saldo"]
+def _fila_m(cod, ced, nombre, sueldo, h50=0, v50=0, iess=0, anticipo=0, saldo=None, campo11=None):
+    f = [1, cod, ced, nombre, sueldo, None, None, h50 or None, v50 or None, None, None, None, None, None, None, None, None,
+         campo11, None, None, None, None, iess, anticipo or None] + [None] * 13 + [None]
+    f[-1] = round(sueldo + v50 - iess - anticipo, 2) if saldo is None else saldo
+    return f
+def _xlsx_m(filas):
+    wb = _WB(); ws = wb.active; ws.append(_TIT_M)
+    for fl in filas:
+        ws.append(fl)
+    ws.append([None, None, None, None, 9999, None] + [None] * 31 + [9999])  # la fila de totales
+    b = BytesIO(); wb.save(b); return b.getvalue()
+_ced_juan = base.trabajador(juan)["cedula"]
+RM = _xlsx_m([
+    _fila_m(501, int(_ced_rosa), "Rosas Vera Ana Maria", 600, 10, 37.5, 60.24, 150),
+    _fila_m(502, int(_ced_juan), "Perez Juan", 490, iess=46.31),
+    _fila_m(503, 1700000019, "Nadie Del Padron", 490, iess=46.31),
+    _fila_m(504, int(_ced_juan[:-1] + "0"), "Saldo Mal", 490, iess=46.31, saldo=1.0),
+    _fila_m(505, 1100000002, "Concepto Nuevo", 490, iess=46.31, campo11=20),
+])
+check("reconoce el formato (y no lo confunde con el acumulado)", _R.es_rol_mensual(RM, "Rol_09_2026.xlsx") and not _R.es_acumulado(RM, "Rol_09_2026.xlsx"))
+check("mes y año salen del nombre", _R.mes_del_nombre("Rol_09_2026_PruebaFinal.xlsx") == 9 and _R.anio_del_nombre("Rol_09_2026_PruebaFinal.xlsx") == 2026)
+_b, _m = _R.leer_rol_mensual(RM, "Rol_09_2026.xlsx", 2026, 9)
+check("lee las filas buenas y salta la de totales", len(_b) == 3 and len(_m) == 2)
+check("un saldo que no cierra NO entra", any("saldo dice 1.00" in x["motivo"] for x in _m))
+check("un valor en «Campo 11» (concepto que no conoce) NO entra", any("campo 11" in x["motivo"] for x in _m))
+_rosa_m = next(x for x in _b if x["codigo"] == 501)
+check("conceptos y horas como en el recibo", [i["concepto"] for i in _rosa_m["ingresos"]] == ["Sueldo", "Horas extra 50%"]
+      and _rosa_m["ingresos"][1]["detalle"] == "10 h" and [d["concepto"] for d in _rosa_m["descuentos"]] == ["Aporte personal IESS", "Anticipo"]
+      and _rosa_m["liquido"] == 427.26 and _rosa_m["cedula"] == _ced_rosa)
+_cm = A.app.test_client(); _cm.post("/admin/entrar", data={"usuario": "conta", "clave": "secreto1"})
+r = _cm.post("/admin/roles/cargar", data={"archivo": (BytesIO(RM), "Rol_09_2026.xlsx"), "mes": "10", "anio": "2026"},
+             content_type="multipart/form-data")
+html = r.get_data(as_text=True)
+check("la pantalla lo abre como «el rol del mes, con cédula»", r.status_code == 200 and "el rol del mes, con cédula" in html)
+check("el mes es el del nombre (septiembre), no el elegido de antemano en la pantalla", "Septiembre 2026" in html
+      and 'name="mes" value="9"' in html and "Octubre 2026" not in html)
+check("cruza por cédula: Rosa y Juan entran solos, el que no está se ofrece crear", "Nadie Del Padron" in html and "m_2026-09" in html)
+_ya = {x["trabajador_id"] for x in base.roles_del_mes(2026, 9)}
+r = _cm.post("/admin/roles/cargar", data={"archivo_b64": __import__("base64").b64encode(RM).decode(), "archivo_nombre": "Rol_09_2026.xlsx",
+                                          "anio": "2026", "mes": "9", "m_2026-09": "1", "meses_revisados": "2026-09", "confirmar": "1"},
+             follow_redirects=True)
+_sep = {x["trabajador_id"]: x for x in base.roles_del_mes(2026, 9)}
+check("al cargar, cada recibo le llega a la persona de esa cédula", juan in _sep and rosa in _sep and _sep[rosa]["liquido"] == 427.26
+      and len(_sep) == 2)
+
 # --- discapacidad y cargas familiares (Tamara 16/10/2026) ----------------------
 print("Familia:")
 import roles as _R  # noqa: E402

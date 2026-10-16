@@ -24,17 +24,18 @@
   .barra-cargar .resumen b{color:var(--tinta)}
 </style>
 
-<h1>Cargar roles de pago <small>el rol acumulado de WinAfin: uno o varios meses</small>
+<h1>Cargar roles de pago <small>{% if mensual %}el rol del mes, con cédula{% else %}el rol acumulado de WinAfin: uno o varios meses{% endif %}</small>
   <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_roles_cargar') }}">Elegir otro archivo</a></span>
 </h1>
 
 <form method="POST" id="form-hist">
   <input type="hidden" name="archivo_b64" value="{{ archivo_b64 }}">
   <input type="hidden" name="archivo_nombre" value="{{ archivo_nombre }}">
+  {% if mensual %}<input type="hidden" name="anio" value="{{ mensual[0] }}"><input type="hidden" name="mes" value="{{ mensual[1] }}">{% endif %}
   <input type="hidden" name="meses_revisados" value="{{ elegidos|map(attribute='clave')|join(',') }}">
 
   <div class="bloque">
-    <div class="titulo"><h2>1. Elija los meses</h2><p>{{ archivo_nombre }} · {{ personas|length }} personas · {{ meses|length }} meses</p></div>
+    <div class="titulo"><h2>1. {{ 'El mes' if mensual else 'Elija los meses' }}</h2><p>{{ archivo_nombre }} · {{ personas|length }} personas{% if not mensual %} · {{ meses|length }} {{ 'mes' if meses|length == 1 else 'meses' }}{% endif %}</p></div>
     <div class="meses-grid">
       {% for m in meses %}
       <label class="mes-card{{ ' vacio-mes' if not m.entran }}">
@@ -51,9 +52,13 @@
       {% endfor %}
     </div>
     <div class="nota">
+      {% if mensual %}El mes sale del nombre del archivo. <b>Si ya estaba cargado</b>, márquelo para reemplazarlo.
+      Desde <b>{{ nombre_mes(*FIRMA_DESDE).lower() }}</b> el trabajador <b>firma en la app</b>.
+      {% else %}
       Se marcan solos los meses nuevos y cerrados. <b>El mes en curso</b> no conviene cargarlo: todavía no está cerrado.
       <b>Un mes ya cargado</b> se reemplaza si lo marca (por ejemplo, septiembre ya está cargado desde el rol del mes).
       Desde <b>{{ nombre_mes(*FIRMA_DESDE).lower() }}</b> el trabajador <b>firma en la app</b>; los meses anteriores quedan como firmados en papel.
+    {% endif %}
     </div>
   </div>
 

@@ -318,3 +318,16 @@ gastos personales del SRI. Lo cargan **el trabajador** (Perfil, `/yo/familia`, m
 tomados, hoja para imprimir) · Rol de pagos (la app | los meses) · Familia · Más («Dar de
 baja» aparte, en rojo). Después de un POST vuelve a la misma pestaña (`PESTANA_DE_ACCION`,
 redirect con `#`). El globo de Rol de pagos cuenta sólo los publicados sin firmar.
+
+**El rol del mes CON CÉDULA (Tamara 16/10/2026: «este es el archivo que van a subir mes a mes»).**
+`Rol_MM_AAAA.xlsx`: una fila por trabajador, títulos con nombre (Dep, Código, Cédula, Nombre,
+Sueldo, Horas 25/50/100 + V. Horas…, Fondo de Reserva, 14to, 13er, Comisiones, Bonificacion,
+Transporte, Campo 11–15, IESS, Anticipo, Prestamo Iess, Daño Tela, Caja Ahorros, Prestamo
+Oficina, Retencion Judicial, Impuesto a la renta, Desc 9–15, Saldo = líquido) y una fila de
+totales al final. `roles.es_rol_mensual` / `leer_rol_mensual` lo leen y entra por la MISMA
+revisión que el acumulado (`_cargar_historial(..., mensual=(anio, mes))`): **cruce por
+cédula**. **El mes y el año salen del nombre del archivo** y mandan sobre el mes elegido de
+antemano en la pantalla. Una fila cuyo Saldo no cierra, o con valor en Campo 11–15 / Desc 9–15
+(concepto que el programa no conoce), NO entra. Verificado con septiembre 2026: 114 filas,
+$ 91.476,26 = rol9.xls al centavo; horas (sueldo/240 × h × 0,25/1,5/2), IESS 9,45 %, 13.º, 14.º
+y fondo de reserva cuadran en las 114. El archivo real NO va al repo (cédulas).

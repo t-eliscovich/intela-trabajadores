@@ -2053,6 +2053,9 @@ def _mes_por_defecto(nombre_archivo: str) -> tuple[int, int]:
     mes = roles.mes_del_nombre(nombre_archivo)
     if mes is None:
         return (h.year - 1, 12) if h.month == 1 else (h.year, h.month - 1)
+    anio = roles.anio_del_nombre(nombre_archivo)  # «Rol_09_2026.xlsx» trae el año
+    if anio and h.year - 2 <= anio <= h.year:
+        return anio, mes
     return (h.year - 1, mes) if mes > h.month else (h.year, mes)
 
 
@@ -2436,6 +2439,13 @@ def admin_roles_cargar():
             raise ValueError("Elija el archivo del rol.")
         if roles.es_acumulado(datos, nombre):
             return _cargar_historial(datos, nombre, f)
+        if roles.es_rol_mensual(datos, nombre):  # el rol del mes con cédula (Rol_09_2026.xlsx)
+            # El nombre del archivo trae mes y año: manda sobre el mes que viene
+            # elegido de antemano en la pantalla (si no, «Rol_09» subido en noviembre
+            # se cargaría como octubre).
+            if roles.mes_del_nombre(nombre) and roles.anio_del_nombre(nombre) and not f.get("archivo_b64"):
+                anio, mes = _leer_anio_mes({"anio": roles.anio_del_nombre(nombre), "mes": roles.mes_del_nombre(nombre)})
+            return _cargar_historial(datos, nombre, f, mensual=(anio, mes))
         buenas, malas = roles.leer_rol(datos, nombre)
         if not buenas:
             raise ValueError("El archivo no trae ningún trabajador que se pueda cargar.")
@@ -2518,13 +2528,14 @@ def admin_roles_cargar():
         total=sum(b["liquido"] for b in entran), COMO=roles.COMO)
 
 
-def _cargar_historial(datos: bytes, nombre: str, f) -> str:
+def _cargar_historial(datos: bytes, nombre: str, f, mensual: tuple[int, int] | None = None) -> str:
     """El ROL ACUMULADO de WinAfin: muchos meses de una vez, con cédula. Se
     revisa igual que un mes (nada se guarda sin «Cargar»), se eligen los meses,
     y se cruza POR CÉDULA. Los meses del historial no piden firma."""
     import base64
     from collections import defaultdict
-    buenas, malas = roles.leer_acumulado(datos, nombre)
+    buenas, malas = (roles.leer_rol_mensual(datos, nombre, *mensual) if mensual
+                     else roles.leer_acumulado(datos, nombre))
     if not buenas:
         raise ValueError("El archivo no trae ningún recibo que se pueda cargar.")
     # Una persona = una cédula; el cruce se hace una vez por persona y vale para todos sus meses.
@@ -2573,7 +2584,7 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
         hay = any((personas[b["cedula"]]["trabajador_id"] or personas[b["cedula"]]["como"] == "nuevo")
                   and personas[b["cedula"]]["confirmado"] for b in del_mes)
         marcado = (bool(f.get(f"m_{clave}")) if revisando
-                   else hay and not en_curso and (anio, mes) not in ya)
+                   else hay and (mensual or not en_curso) and (anio, mes) not in ya)
         entran = [b for b in del_mes if (personas[b["cedula"]]["trabajador_id"] or personas[b["cedula"]]["como"] == "nuevo")
                   and personas[b["cedula"]]["confirmado"]]
         meses.append({"anio": anio, "mes": mes, "clave": clave, "filas": len(del_mes), "entran": len(entran),
@@ -2622,6 +2633,7 @@ def _cargar_historial(datos: bytes, nombre: str, f) -> str:
 
     return render_template(
         "admin_roles_historial.html", archivo_b64=base64.b64encode(datos).decode(), archivo_nombre=nombre,
+        mensual=mensual,
         nuevos=nuevos, AREAS=AREAS,
         meses=meses, elegidos=elegidos, malas=malas, repetidos=repetidos,
         sin_encontrar=[p for p in lista if not p["trabajador_id"]],
