@@ -3,6 +3,8 @@
 {% block clase_hoja %}angosta{% endblock %}
 {% block barra_derecha %}{% include "_barra_yo.html" %}{% endblock %}
 {% block contenido %}
+{% import "_familia.html" as fm with context %}
+{{ fm.estilos() }}
 {% include "_pestanas_yo.html" %}
 
 <div class="bloque">
@@ -30,6 +32,22 @@
     </form>
   </div>
 </div>
+<div class="bloque" id="familia">
+  <div class="titulo"><h2>Su familia</h2><p>Su pareja y sus hijos, para las utilidades.</p></div>
+  {% if not fam.pareja and not fam.hijos %}<div class="fam-vacio">Todavía no cargó a nadie.</div>{% endif %}
+  {{ fm.lista(fam, False, url_for('yo_familia')) }}
+  <div class="nota">Mande la foto de la partida o la cédula de cada uno. Contabilidad la revisa.</div>
+</div>
+
+<div class="bloque" id="discapacidad">
+  <div class="titulo"><h2>¿Tiene usted alguna discapacidad?</h2>{% if fam.discapacidad is not none %}<p>{{ fm.resumen_discapacidad(t, fam) }}</p>{% endif %}</div>
+  {% if fam.discapacidad is none %}
+  <div class="relleno">{{ fm.form_discapacidad(t, fam, False, url_for('yo_familia')) }}</div>
+  {% else %}
+  <details><summary>Cambiar</summary><div class="relleno">{{ fm.form_discapacidad(t, fam, False, url_for('yo_familia')) }}</div></details>
+  {% endif %}
+</div>
+
 <div class="bloque">
   <div class="titulo"><h2>Su contraseña</h2><p>Correo: <b>{{ t.email }}</b></p></div>
   <details>
@@ -47,4 +65,5 @@
   </details>
   <div class="nota">Para cambiar el correo, pregunte en contabilidad.</div>
 </div>
+{{ fm.script() }}
 {% endblock %}

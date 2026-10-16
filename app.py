@@ -336,7 +336,8 @@ def _globales():
             "TIPOS_TRABAJADOR": store.TIPOS_TRABAJADOR, "n_avisos": avisos,
             "TURNOS": TURNOS, "TURNOS_ALMUERZO": TURNOS_ALMUERZO, "nombre_turno": nombre_turno,
             "TIPOS_AUSENCIA": store.TIPOS_AUSENCIA, "hoy": hoy(), "n_pendientes": pendientes,
-            "cod_rol": cod_rol}
+            "cod_rol": cod_rol, "TIPOS_DISCAPACIDAD": store.TIPOS_DISCAPACIDAD,
+            "RELACIONES_PAREJA": store.RELACIONES_PAREJA, "GENEROS": store.GENEROS, "MAX_HIJOS": store.MAX_HIJOS}
 
 
 def cod_rol(concepto: str, descuento: bool = False) -> str:
@@ -619,6 +620,144 @@ def yo_certificado():
     return redirect(url_for("yo_vacaciones"))
 
 
+# --------------------------------------------------------------------------
+# Discapacidad y cargas familiares (Tamara 16/10/2026)
+# Las carga el trabajador desde Perfil y contabilidad desde la ficha (pestaña
+# Familia). Sirven para el 5 % de utilidades por cargas: cónyuge o unión de
+# hecho, hijos menores de 18 e hijos con discapacidad de cualquier edad. El
+# archivo de respaldo se pide sólo cuando se llenan los datos.
+# --------------------------------------------------------------------------
+def edad(nacimiento: date | None, dia: date) -> int | None:
+    if not nacimiento:
+        return None
+    return dia.year - nacimiento.year - ((dia.month, dia.day) < (nacimiento.month, nacimiento.day))
+
+
+def cuenta_para_utilidades(c: dict, dia: date) -> bool:
+    if c["parentesco"] == "pareja":
+        return True
+    e = edad(c.get("fecha_nacimiento"), dia)
+    return bool(c.get("discapacidad")) or (e is not None and e < 18)
+
+
+def familia_de(t: dict) -> dict:
+    """Lo que muestran el Perfil y la ficha: la pareja, los hijos (cada uno con su
+    último respaldo), la discapacidad del trabajador y cuántas cargas cuentan."""
+    dia = hoy()
+    ultimo: dict[tuple, dict] = {}
+    for r in store.respaldos_de(t["id"]):
+        ultimo[(r["que"], r["carga_id"])] = r  # vienen en orden: queda el último
+    pareja, hijos = None, []
+    for c in store.cargas_de(t["id"]):
+        c["edad"] = edad(c.get("fecha_nacimiento"), dia)
+        c["respaldo"] = ultimo.get(("carga", c["id"]))
+        c["respaldo_disc"] = ultimo.get(("carga_discapacidad", c["id"]))
+        c["cuenta"] = cuenta_para_utilidades(c, dia)
+        c["falta"] = not c["respaldo"] or (c.get("discapacidad") and not c["respaldo_disc"])
+        if c["parentesco"] == "pareja" and pareja is None:
+            pareja = c
+        else:
+            hijos.append(c)
+    disc_resp = ultimo.get(("discapacidad", None))
+    cargas = ([pareja] if pareja else []) + hijos
+    return {"pareja": pareja, "hijos": hijos, "respaldo_disc": disc_resp, "discapacidad": t.get("discapacidad"),
+            "cargas_utilidades": sum(1 for c in cargas if c["cuenta"]),
+            "faltan": sum(1 for c in cargas if c["falta"]) + (1 if t.get("discapacidad") and not disc_resp else 0)}
+
+
+def _leer_carga(f, parentesco: str, t: dict, id_: int | None) -> dict:
+    nombre = " ".join((f.get("nombre") or "").split())[:120]
+    if not nombre:
+        raise ValueError("Escriba los nombres." if parentesco == "hijo" else "Escriba el nombre de su pareja.")
+    cedula = re.sub(r"\D", "", f.get("cedula") or "") or None
+    if cedula:
+        if not roles.cedula_valida(cedula):
+            raise ValueError(f"La cédula {cedula} no es válida. Revísela.")
+        if cedula == t.get("cedula"):
+            raise ValueError("Esa es su propia cédula.")
+        if any(c["cedula"] == cedula and c["id"] != id_ for c in store.cargas_de(t["id"])):
+            raise ValueError(f"La cédula {cedula} ya está cargada.")
+    datos = {"parentesco": parentesco, "nombre": nombre, "cedula": cedula, "relacion": None,
+             "fecha_nacimiento": None, "genero": None, "discapacidad": False}
+    if parentesco == "pareja":
+        if f.get("relacion") not in store.RELACIONES_PAREJA:
+            raise ValueError("Elija si es casado/a o unión de hecho.")
+        datos["relacion"] = f.get("relacion")
+    else:
+        if not (f.get("fecha_nacimiento") or "").strip():
+            raise ValueError("Escriba la fecha de nacimiento.")
+        nac = leer_fecha(f.get("fecha_nacimiento"))
+        if nac > hoy():
+            raise ValueError("La fecha de nacimiento no puede ser después de hoy.")
+        if f.get("genero") not in store.GENEROS:
+            raise ValueError("Elija el género.")
+        datos.update(fecha_nacimiento=nac, genero=f.get("genero"), discapacidad=f.get("discapacidad") == "si")
+    return datos
+
+
+def guardar_familia(t: dict, accion: str, f, archivos, quien: str) -> str:
+    """Hace lo pedido y devuelve el mensaje para la pantalla. Lo usan /yo/perfil y la ficha."""
+    if accion == "discapacidad":
+        resp = f.get("tiene")
+        if resp not in ("si", "no"):
+            raise ValueError("Elija Sí o No.")
+        tiene = resp == "si"
+        tipo = f.get("tipo") if tiene else None
+        if tiene and tipo not in store.TIPOS_DISCAPACIDAD:
+            raise ValueError("Elija el tipo de discapacidad.")
+        archivo = leer_certificado(archivos.get("respaldo")) if tiene else None
+        store.poner_discapacidad(t["id"], tiene, tipo)
+        if archivo:
+            store.guardar_respaldo(t["id"], "discapacidad", None, *archivo, quien)
+        return "Guardado."
+    if accion in ("pareja", "hijo"):
+        id_ = int(f.get("id", 0) or 0) or None
+        actual = store.carga(id_) if id_ else None
+        if id_ and (not actual or actual["trabajador_id"] != t["id"] or actual["parentesco"] != accion):
+            raise ValueError("Eso no está.")
+        cargas = store.cargas_de(t["id"])
+        if not id_ and accion == "pareja" and any(c["parentesco"] == "pareja" for c in cargas):
+            raise ValueError("Ya hay una pareja cargada. Corríjala en vez de agregar otra.")
+        if not id_ and accion == "hijo" and sum(1 for c in cargas if c["parentesco"] == "hijo") >= store.MAX_HIJOS:
+            raise ValueError(f"Se pueden cargar hasta {store.MAX_HIJOS} hijos. Si tiene más, avise en contabilidad.")
+        datos = _leer_carga(f, accion, t, id_)
+        archivo = leer_certificado(archivos.get("respaldo"))
+        archivo_disc = leer_certificado(archivos.get("respaldo_disc")) if datos["discapacidad"] else None
+        cid = store.guardar_carga(t["id"], datos, quien, id_)
+        if archivo:
+            store.guardar_respaldo(t["id"], "carga", cid, *archivo, quien)
+        if archivo_disc:
+            store.guardar_respaldo(t["id"], "carga_discapacidad", cid, *archivo_disc, quien)
+        return "Guardado." if id_ else f"Listo: {datos['nombre']} quedó cargado."
+    if accion == "carga_borrar":
+        c = store.carga(int(f.get("id", 0) or 0))
+        if not c or c["trabajador_id"] != t["id"]:
+            raise ValueError("Eso no está.")
+        store.borrar_carga(c["id"], quien)
+        return f"Se quitó a {c['nombre']}."
+    raise ValueError("No sé qué hacer con eso.")
+
+
+ACCIONES_FAMILIA = ("discapacidad", "pareja", "hijo", "carga_borrar")
+
+
+@app.route("/yo/familia", methods=["POST"])
+def yo_familia():
+    t = _mi_trabajador()
+    if not t:
+        return redirect(url_for("entrar"))
+    accion = request.form.get("accion", "")
+    try:
+        if accion not in ACCIONES_FAMILIA:
+            raise ValueError("No sé qué hacer con eso.")
+        flash(guardar_familia(t, accion, request.form, request.files, "trabajador"), "ok")
+        store.crear_aviso(t["id"], "Cargó o cambió sus datos de familia o discapacidad. Revise los respaldos en la pestaña Familia.",
+                          "trabajador", "familia")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("yo_perfil", _anchor="familia"))
+
+
 @app.route("/yo/perfil", methods=["GET", "POST"])
 def yo_perfil():
     t = _mi_trabajador()
@@ -645,7 +784,7 @@ def yo_perfil():
         except ValueError as exc:
             flash(str(exc), "error")
         return redirect(url_for("yo_perfil"))
-    return render_template("yo_perfil.html", t=t, v=_resumen(t))
+    return render_template("yo_perfil.html", t=t, v=_resumen(t), fam=familia_de(t))
 
 
 @app.route("/salir")
@@ -1058,18 +1197,42 @@ def admin_trabajador(id_):
     if not t:
         abort(404)
     if request.method == "POST":
+        accion = request.form.get("accion", "")
         try:
-            _accion_trabajador(t, request.form.get("accion", ""))
+            if accion in ACCIONES_FAMILIA:
+                flash(guardar_familia(t, accion, request.form, request.files, g.usuario["usuario"]), "ok")
+            else:
+                _accion_trabajador(t, accion)
         except ValueError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("admin_trabajador", id_=id_))
+        return redirect(url_for("admin_trabajador", id_=id_, _anchor=PESTANA_DE_ACCION.get(accion, "")))
     certs: dict[int, list] = {}
     for c in store.certificados_de(id_):
         if c["vacacion_id"]:
             certs.setdefault(c["vacacion_id"], []).append(c)
     return render_template("admin_trabajador.html", t=t, v=_resumen(t), avisos=store.avisos_de(id_),
                            vacaciones=store.vacaciones(id_), ajustes=store.ajustes(id_), certificados=certs,
-                           roles_pago=store.roles_de(id_), constancia_roles=store.constancia_de(id_))
+                           roles_pago=store.roles_de(id_), constancia_roles=store.constancia_de(id_),
+                           fam=familia_de(t))
+
+
+# Después de guardar, la ficha vuelve a la pestaña donde estaba.
+PESTANA_DE_ACCION = {**{a: "familia" for a in ACCIONES_FAMILIA},
+                     **{a: "vacaciones" for a in ("vacacion", "vacacion_editar", "vacacion_borrar", "certificado", "tipo")},
+                     **{a: "rol" for a in ("borrar_clave_rol",)},
+                     **{a: "mas" for a in ("ajuste", "ajuste_borrar", "invitados", "prueba", "reiniciar_prueba", "editar",
+                                           "saldo_inicial", "aviso", "pausar", "reanudar", "baja", "reactivar")}}
+
+
+@app.route("/admin/respaldo/<int:id_>")
+@requiere_admin
+def admin_respaldo(id_):
+    """El archivo que respalda una carga familiar o una discapacidad, sólo para contabilidad."""
+    r = store.respaldo(id_)
+    if not r:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(bytes(r["datos"])), mimetype=r["tipo_archivo"], download_name=r["nombre"])
 
 
 @app.route("/admin/trabajador/<int:id_>/imprimir")
@@ -1529,6 +1692,8 @@ def admin_historial():
                 store.reabrir_solicitud_cancelada(p["id"])
         elif que == "ajuste":
             store.recuperar_ajuste(id_)
+        elif que == "carga":
+            store.recuperar_carga(id_)
         flash("Recuperado: vuelve a contar en la ficha.", "ok")
         return redirect(url_for("admin_historial"))
     return render_template("admin_historial.html", filas=store.historial())

@@ -71,6 +71,14 @@ base.poner_configuracion("clave_comedor", "abc123")
 base.poner_puede_invitar(ids["Juan Pérez"], True)
 base.agregar_invitados(ids["Juan Pérez"], hoy, "almuerzo", 2, "técnicos de la máquina nueva", "tablet", "12:30")
 
+# familia de Juan: pareja con respaldo, un hijo sin respaldo, una hija con discapacidad
+_pid = base.guardar_carga(ids["Juan Pérez"], {"parentesco": "pareja", "relacion": "casado", "nombre": "Ana Toapanta Ruiz", "cedula": "1712345683"}, "trabajador")
+base.guardar_respaldo(ids["Juan Pérez"], "carga", _pid, b"x", "image/jpeg", "partida.jpg", "trabajador")
+base.guardar_carga(ids["Juan Pérez"], {"parentesco": "hijo", "nombre": "Luis Pérez Toapanta", "fecha_nacimiento": date(2016, 4, 2), "genero": "M", "discapacidad": False}, "trabajador")
+_hid = base.guardar_carga(ids["Juan Pérez"], {"parentesco": "hijo", "nombre": "Camila Pérez Toapanta", "fecha_nacimiento": date(2004, 9, 20), "genero": "F", "discapacidad": True, "cedula": "1750000008"}, "trabajador")
+base.guardar_respaldo(ids["Juan Pérez"], "carga", _hid, b"x", "image/jpeg", "partida.jpg", "trabajador")
+base.guardar_respaldo(ids["Juan Pérez"], "carga_discapacidad", _hid, b"x", "image/jpeg", "carnet.jpg", "trabajador")
+
 # un rol de pagos de mentira, firmado por Carlos y sin firmar para Juan
 def _rol(nombre, codigo, ing, des):
     ingresos = [{"concepto": c, "detalle": d, "valor": v} for c, d, v in ing]

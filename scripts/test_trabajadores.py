@@ -763,7 +763,7 @@ check("el comedor no baja el Excel", "/comedor/dia" in m2.get(f"/admin/comidas/e
 
 html = c.get(f"/admin/trabajador/{rosa}/imprimir").get_data(as_text=True)
 check("la hoja de saldo para imprimir abre con nombre, cédula, la tabla y las firmas", "SALDO DE VACACIONES" in html and "ROSAS VERA ANA MARÍA" in html and "1700000001" in html and "Le corresponden por año" in html and "Le quedan" in html and "Días tomados" in html and "Trabajador</span>" in html and "Contabilidad<br>" in html)
-check("y la ficha tiene el botón", "Hoja de saldo para imprimir" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
+check("y la ficha tiene el botón (en la pestaña Vacaciones)", "Hoja para imprimir" in c.get(f"/admin/trabajador/{rosa}").get_data(as_text=True))
 check("la hoja no es para el comedor ni sin sesión", m.get(f"/admin/trabajador/{rosa}/imprimir").status_code == 302 and A.app.test_client().get(f"/admin/trabajador/{rosa}/imprimir").status_code == 302)
 
 # el perfil que el trabajador corrige
@@ -1025,7 +1025,7 @@ check("apagarlo vuelve a la cédula sola", base.configuracion("entrar_con_clave"
 c.post("/admin/usuarios", data={"accion": "pedir_clave", "prender": "1"})
 check("y prenderlo la pide", A.pide_clave())
 html = c.get(f"/admin/trabajador/{_juan}").get_data(as_text=True)
-check("contabilidad ve en la ficha que tiene contraseña y a qué correo, y la puede borrar", "App y rol de pagos" in html and "✓ Creada" in html
+check("contabilidad ve en la ficha que tiene contraseña y a qué correo, y la puede borrar", "La app" in html and "Rol de pagos" in html and "✓ Creada" in html
       and "@" in html and "borrar_clave_rol" in html)
 _cl4 = A.app.test_client(); entrar_trab(_cl4, "1700000001")
 _h, _hen = base.trabajador(rosa)["clave_rol_hash"], base.trabajador(rosa)["clave_rol_en"]
@@ -1509,6 +1509,91 @@ _yo = next(u for u in base.usuarios() if u["usuario"] == "conta")
 c.post("/admin/usuarios", data={"accion": "renombrar", "id": _yo["id"], "usuario": "conta", "nombre": "Contabilidad Intela"})
 check("el propio: la barra muestra el nombre nuevo sin volver a entrar", "Contabilidad Intela" in c.get("/admin").get_data(as_text=True))
 c.post("/admin/usuarios", data={"accion": "renombrar", "id": _ofi["id"], "usuario": "oficina", "nombre": _ofi["nombre"]})
+
+# --- discapacidad y cargas familiares (Tamara 16/10/2026) ----------------------
+print("Familia:")
+import roles as _R  # noqa: E402
+def _foto_resp(ancho, alto):
+    b = BytesIO(); Image.new("RGB", (ancho, alto), (30, 90, 200)).save(b, "PNG"); b.seek(0)
+    return (b, "partida.png")
+def _ced(nueve):
+    """Una cédula válida (dígito verificador) a partir de 9 dígitos."""
+    for d in "0123456789":
+        if _R.cedula_valida(nueve + d):
+            return nueve + d
+_padre = base.crear_trabajador(_ced("172000000"), "Quispe Lema Mario", date(2018, 5, 1))
+fw = A.app.test_client(); entrar_trab(fw, base.trabajador(_padre)["cedula"])
+html = fw.get("/yo/perfil").get_data(as_text=True)
+check("el perfil pregunta por la familia y la discapacidad", "Su familia" in html and "Agregar cónyuge o pareja" in html
+      and "Agregar un hijo" in html and "alguna discapacidad" in html)
+check("el archivo arranca escondido: se pide recién al llenar los datos", "data-pide-archivo hidden" in html)
+r = fw.post("/yo/familia", data={"accion": "pareja", "relacion": "union", "nombre": "Ana  Toapanta", "cedula": "123"}, follow_redirects=True)
+check("una cédula mala de la pareja no entra", "no es válida" in r.get_data(as_text=True) and not base.cargas_de(_padre))
+r = fw.post("/yo/familia", data={"accion": "pareja", "relacion": "union", "nombre": "Ana  Toapanta", "cedula": _ced("172000001"),
+                                 "respaldo": _foto_resp(800, 600)}, content_type="multipart/form-data", follow_redirects=True)
+_cs = base.cargas_de(_padre)
+check("el trabajador carga su pareja con el respaldo", len(_cs) == 1 and _cs[0]["nombre"] == "Ana Toapanta" and _cs[0]["relacion"] == "union"
+      and any(x["que"] == "carga" and x["carga_id"] == _cs[0]["id"] for x in base.respaldos_de(_padre)))
+check("y le llega el aviso a contabilidad en la campanita", any(a["clave"] == "familia" for a in base.avisos_de(_padre)))
+r = fw.post("/yo/familia", data={"accion": "pareja", "relacion": "casado", "nombre": "Otra"}, follow_redirects=True)
+check("no se carga una segunda pareja", "Ya hay una pareja" in r.get_data(as_text=True) and len(base.cargas_de(_padre)) == 1)
+_hace = lambda anios: date(HOY.year - anios, 1, 15).strftime("%d/%m/%Y")
+fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Luis Quispe", "fecha_nacimiento": _hace(10), "genero": "M", "discapacidad": "no"})
+fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Rosa Quispe", "fecha_nacimiento": _hace(25), "genero": "F", "discapacidad": "no"})
+fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Pedro Quispe", "fecha_nacimiento": _hace(22), "genero": "M", "discapacidad": "si",
+                             "respaldo": _foto_resp(400, 300), "respaldo_disc": _foto_resp(400, 300)}, content_type="multipart/form-data")
+r = fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Sin Fecha", "genero": "M"}, follow_redirects=True)
+check("un hijo sin fecha de nacimiento no entra", "fecha de nacimiento" in r.get_data(as_text=True))
+r = fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Del Futuro", "fecha_nacimiento": "01/01/2099", "genero": "F"}, follow_redirects=True)
+check("ni uno que nace después de hoy", "después de hoy" in r.get_data(as_text=True))
+fam = A.familia_de(base.trabajador(_padre))
+check("cargas para utilidades: pareja + menor de 18 + hijo con discapacidad (la de 25 no)", fam["cargas_utilidades"] == 3 and len(fam["hijos"]) == 3)
+check("los hijos van del más grande al más chico", [h["nombre"] for h in fam["hijos"]] == ["Rosa Quispe", "Pedro Quispe", "Luis Quispe"])
+check("faltan los respaldos de los dos que no lo mandaron", fam["faltan"] == 2)
+html = fw.get("/yo/perfil").get_data(as_text=True)
+check("el trabajador ve «falta el respaldo» y «✓ respaldo enviado», sin link al archivo", "falta el respaldo" in html and "✓ respaldo enviado" in html
+      and "/admin/respaldo/" not in html and "Agregar otro hijo" in html)
+for i in range(3):
+    fw.post("/yo/familia", data={"accion": "hijo", "nombre": f"Hijo {i}", "fecha_nacimiento": _hace(2 + i), "genero": "F"})
+r = fw.post("/yo/familia", data={"accion": "hijo", "nombre": "Séptimo", "fecha_nacimiento": _hace(1), "genero": "F"}, follow_redirects=True)
+check("hasta 6 hijos; con 6 ya no aparece «Agregar otro hijo»", "hasta 6 hijos" in r.get_data(as_text=True)
+      and len(A.familia_de(base.trabajador(_padre))["hijos"]) == 6 and "Agregar otro hijo" not in r.get_data(as_text=True))
+r = fw.post("/yo/familia", data={"accion": "discapacidad", "tiene": "si"}, follow_redirects=True)
+check("discapacidad «Sí» pide el tipo", "tipo de discapacidad" in r.get_data(as_text=True))
+fw.post("/yo/familia", data={"accion": "discapacidad", "tiene": "si", "tipo": "auditiva", "respaldo": _foto_resp(300, 300)}, content_type="multipart/form-data")
+_tp = base.trabajador(_padre)
+check("discapacidad del trabajador: sí, tipo y carnet (sin porcentaje)", _tp["discapacidad"] is True and _tp["discapacidad_tipo"] == "auditiva"
+      and any(x["que"] == "discapacidad" for x in base.respaldos_de(_padre)))
+fw.post("/yo/familia", data={"accion": "discapacidad", "tiene": "no"})
+check("y contestar «No» borra el tipo", base.trabajador(_padre)["discapacidad"] is False and base.trabajador(_padre)["discapacidad_tipo"] is None)
+# nadie toca lo de otro
+_ajena = base.cargas_de(_padre)[0]["id"]
+otro_t = A.app.test_client(); entrar_trab(otro_t, "1712345678")
+r = otro_t.post("/yo/familia", data={"accion": "carga_borrar", "id": _ajena}, follow_redirects=True)
+check("otro trabajador no puede quitar una carga ajena", base.carga(_ajena) is not None and "no está" in r.get_data(as_text=True))
+r = otro_t.post("/yo/familia", data={"accion": "pareja", "id": _ajena, "relacion": "casado", "nombre": "Hackeo"}, follow_redirects=True)
+check("ni corregirla", base.carga(_ajena)["nombre"] == "Ana Toapanta")
+check("el trabajador no abre los archivos", otro_t.get(f"/admin/respaldo/{base.respaldos_de(_padre)[0]['id']}").status_code == 302)
+# contabilidad
+html = c.get(f"/admin/trabajador/{_padre}").get_data(as_text=True)
+check("la ficha tiene las pestañas Vacaciones · Rol de pagos · Familia · Más", all(f'data-pane="{x}"' in html for x in ("vacaciones", "rol", "familia", "mas")))
+check("la pestaña Familia muestra las cargas, el número y los links a los respaldos", "Cargas para utilidades" in html and "Ana Toapanta" in html
+      and "Unión de hecho" in html and "/admin/respaldo/" in html and "Dar de baja" in html)
+_rid = base.respaldos_de(_padre)[0]["id"]
+r = c.get(f"/admin/respaldo/{_rid}")
+check("contabilidad abre el respaldo (JPEG chico)", r.status_code == 200 and r.mimetype == "image/jpeg")
+r = c.post(f"/admin/trabajador/{_padre}", data={"accion": "pareja", "id": _ajena, "relacion": "casado", "nombre": "Ana Toapanta Ruiz"})
+check("contabilidad corrige y vuelve a la pestaña Familia", r.status_code == 302 and r.location.endswith("#familia")
+      and base.carga(_ajena)["relacion"] == "casado" and base.carga(_ajena)["nombre"] == "Ana Toapanta Ruiz")
+r = c.post(f"/admin/trabajador/{_padre}", data={"accion": "ajuste", "dias": "1", "motivo": "x"})
+check("un ajuste vuelve a la pestaña Más", r.location.endswith("#mas"))
+_n_av = len(base.avisos_de(_padre))
+c.post(f"/admin/trabajador/{_padre}", data={"accion": "carga_borrar", "id": _ajena})
+check("quitar una carga no la borra: va al Historial", base.carga(_ajena) is None and any(f["que"] == "carga" and f["id"] == _ajena for f in base.historial()))
+check("lo que hace contabilidad no manda aviso", len(base.avisos_de(_padre)) == _n_av)
+c.post("/admin/historial", data={"que": "carga", "id": _ajena})
+check("y desde Historial se recupera", base.carga(_ajena) is not None)
+check("Historial abre con una carga borrada", c.get("/admin/historial").status_code == 200)
 
 # --- 6. cada pantalla abre + templates -----------------------------------------
 print("Pantallas:")

@@ -490,6 +490,44 @@ ESQUEMA = """
     -- Vacía = la misma del padrón. El control del banco busca primero por ésta.
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS cedula_banco text;
     CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
+    -- Discapacidad y cargas familiares (Tamara 16/10/2026). Sirven para el 5 % de
+    -- utilidades por cargas (cónyuge o unión de hecho, hijos menores de 18 y
+    -- hijos con discapacidad de cualquier edad) y la rebaja de gastos personales.
+    -- discapacidad NULL = no contestó; el porcentaje NO se pide (está en el carnet).
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS discapacidad boolean;
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS discapacidad_tipo text;
+    CREATE TABLE IF NOT EXISTS trabajadores.carga_familiar (
+        id                 serial PRIMARY KEY,
+        trabajador_id      integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        parentesco         text NOT NULL,          -- 'pareja' | 'hijo'
+        relacion           text,                   -- pareja: 'casado' | 'union'
+        nombre             text NOT NULL,
+        cedula             text,
+        fecha_nacimiento   date,
+        genero             text,                   -- 'F' | 'M'
+        discapacidad       boolean NOT NULL DEFAULT false,
+        cargado_por        text NOT NULL,
+        cargado_en         timestamptz NOT NULL DEFAULT now(),
+        cambiado_en        timestamptz,
+        borrado_en         timestamptz,
+        borrado_por        text
+    );
+    CREATE INDEX IF NOT EXISTS carga_familiar_trab_idx ON trabajadores.carga_familiar (trabajador_id) WHERE borrado_en IS NULL;
+    -- El archivo que respalda: carnet de discapacidad, partida de matrimonio,
+    -- declaración de unión de hecho, partida de nacimiento. Foto → JPEG chico.
+    -- que: 'discapacidad' (la del trabajador) | 'carga' | 'carga_discapacidad'.
+    CREATE TABLE IF NOT EXISTS trabajadores.respaldo (
+        id             serial PRIMARY KEY,
+        trabajador_id  integer NOT NULL REFERENCES trabajadores.trabajador(id),
+        carga_id       integer REFERENCES trabajadores.carga_familiar(id),
+        que            text NOT NULL,
+        tipo_archivo   text NOT NULL,
+        nombre         text NOT NULL,
+        datos          bytea NOT NULL,
+        subido_por     text NOT NULL,
+        subido_en      timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS respaldo_trab_idx ON trabajadores.respaldo (trabajador_id);
 """
 
 TIPOS_TRABAJADOR = {"planta": "Planta", "temporal": "Temporal", "jubilado": "Jubilado"}
@@ -1095,7 +1133,7 @@ def recuperar_vacacion(id_: int) -> None:
 
 
 def historial(limite: int = 200) -> list[dict]:
-    """Períodos y ajustes borrados, los más recientes primero."""
+    """Períodos, ajustes y cargas familiares borrados, los más recientes primero."""
     return _todos("""
         SELECT 'periodo' AS que, v.id, v.trabajador_id, t.nombre, t.cedula, v.tipo, v.desde, v.hasta,
                v.dias, v.nota, v.cargado_por, v.creado_en, v.borrado_en, v.borrado_por
@@ -1106,6 +1144,11 @@ def historial(limite: int = 200) -> list[dict]:
                a.dias, a.motivo, a.cargado_por, a.creado_en, a.borrado_en, a.borrado_por
           FROM trabajadores.ajuste_vacacion a JOIN trabajadores.trabajador t ON t.id = a.trabajador_id
          WHERE a.borrado_en IS NOT NULL
+        UNION ALL
+        SELECT 'carga', c.id, c.trabajador_id, t.nombre, t.cedula, c.parentesco, NULL, NULL,
+               NULL, c.nombre, c.cargado_por, c.cargado_en, c.borrado_en, c.borrado_por
+          FROM trabajadores.carga_familiar c JOIN trabajadores.trabajador t ON t.id = c.trabajador_id
+         WHERE c.borrado_en IS NOT NULL
          ORDER BY borrado_en DESC LIMIT %s""", (limite,))
 
 
@@ -1248,6 +1291,72 @@ def certificados_por_solicitud() -> dict[int, list[dict]]:
     for f in filas:
         salida.setdefault(f["solicitud_id"], []).append(f)
     return salida
+
+
+# --------------------------------------------------------------------------
+# Discapacidad y cargas familiares
+# --------------------------------------------------------------------------
+TIPOS_DISCAPACIDAD = {"fisica": "Física", "intelectual": "Intelectual", "auditiva": "Auditiva",
+                      "visual": "Visual", "psicosocial": "Psicosocial", "lenguaje": "De lenguaje"}
+RELACIONES_PAREJA = {"casado": "Casado/a", "union": "Unión de hecho"}
+GENEROS = {"F": "Femenino", "M": "Masculino"}
+MAX_HIJOS = 6
+
+
+def poner_discapacidad(trabajador_id: int, tiene: bool | None, tipo: str | None) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET discapacidad=%s, discapacidad_tipo=%s WHERE id=%s",
+              (tiene, tipo if tiene else None, trabajador_id))
+
+
+def cargas_de(trabajador_id: int) -> list[dict]:
+    """La pareja primero, después los hijos del más grande al más chico."""
+    return _todos("SELECT * FROM trabajadores.carga_familiar WHERE trabajador_id=%s AND borrado_en IS NULL "
+                  "ORDER BY parentesco = 'hijo', fecha_nacimiento NULLS LAST, id", (trabajador_id,))
+
+
+def carga(id_: int) -> dict | None:
+    return _uno("SELECT * FROM trabajadores.carga_familiar WHERE id=%s AND borrado_en IS NULL", (id_,))
+
+
+def guardar_carga(trabajador_id: int, datos: dict, quien: str, id_: int | None = None) -> int:
+    """datos: parentesco, relacion, nombre, cedula, fecha_nacimiento, genero, discapacidad."""
+    campos = ("parentesco", "relacion", "nombre", "cedula", "fecha_nacimiento", "genero", "discapacidad")
+    valores = tuple(datos.get(c) for c in campos)
+    if id_:
+        _ejecutar("UPDATE trabajadores.carga_familiar SET " + ", ".join(f"{c}=%s" for c in campos)
+                  + ", cambiado_en=now() WHERE id=%s AND trabajador_id=%s", valores + (id_, trabajador_id))
+        return id_
+    fila = _ejecutar("INSERT INTO trabajadores.carga_familiar (trabajador_id, " + ", ".join(campos)
+                     + ", cargado_por) VALUES (%s" + ",%s" * len(campos) + ",%s) RETURNING id",
+                     (trabajador_id,) + valores + (quien,))
+    return fila["id"]
+
+
+def borrar_carga(id_: int, quien: str) -> None:
+    _ejecutar("UPDATE trabajadores.carga_familiar SET borrado_en=now(), borrado_por=%s "
+              "WHERE id=%s AND borrado_en IS NULL", (quien, id_))
+
+
+def recuperar_carga(id_: int) -> None:
+    _ejecutar("UPDATE trabajadores.carga_familiar SET borrado_en=NULL, borrado_por=NULL WHERE id=%s", (id_,))
+
+
+def guardar_respaldo(trabajador_id: int, que: str, carga_id: int | None, datos: bytes, tipo_archivo: str,
+                     nombre: str, subido_por: str) -> int:
+    fila = _ejecutar("INSERT INTO trabajadores.respaldo (trabajador_id, carga_id, que, tipo_archivo, nombre, datos, "
+                     "subido_por) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                     (trabajador_id, carga_id, que, tipo_archivo, nombre, datos, subido_por))
+    return fila["id"]
+
+
+def respaldos_de(trabajador_id: int) -> list[dict]:
+    """Sin los datos. El último de cada cosa es el que vale."""
+    return _todos("SELECT id, trabajador_id, carga_id, que, tipo_archivo, nombre, subido_por, subido_en "
+                  "FROM trabajadores.respaldo WHERE trabajador_id=%s ORDER BY subido_en, id", (trabajador_id,))
+
+
+def respaldo(id_: int) -> dict | None:
+    return _uno("SELECT * FROM trabajadores.respaldo WHERE id=%s", (id_,))
 
 
 def ligar_certificados_a_vacacion(solicitud_id: int, vacacion_id: int) -> None:

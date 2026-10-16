@@ -1,0 +1,145 @@
+{# Discapacidad y cargas familiares: lo usan el Perfil del trabajador y la ficha
+   (pestaña Familia). `admin` = es contabilidad (ve los archivos). `destino` =
+   adónde va el formulario ('' = la misma página). El archivo de respaldo se pide
+   recién cuando se llenan los datos (Tamara 16/10/2026). #}
+
+{% macro estilos() %}
+<style>
+  .fam-lista{list-style:none;margin:0;padding:0}
+  .fam-lista > li{border-bottom:1px solid #f2f5f8}
+  .fam-fila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 16px}
+  .fam-nombre{font-size:15px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+  .fam-nombre small{display:block;font-weight:400;color:var(--gris);font-size:13px;margin-top:2px}
+  .fam-nombre .resp{display:block;font-weight:400;font-size:13px;margin-top:3px}
+  .fam-acc{display:flex;gap:4px;align-items:center}
+  .fam-editar{padding:0 16px 12px}
+  .fam-vacio{padding:12px 16px;color:var(--gris);font-size:14px}
+  .fam-cuenta{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--borde)}
+  .fam-cuenta b{font-size:28px;font-variant-numeric:tabular-nums}
+  .fam-cuenta small{display:block;color:var(--gris);font-size:12.5px;margin-top:2px}
+  .si-no{display:flex;gap:8px}
+  .si-no label{flex:1;display:flex;gap:8px;align-items:center;justify-content:center;border:1px solid var(--borde);border-radius:10px;
+               padding:10px;font-weight:600;cursor:pointer;background:var(--papel)}
+  .si-no input{width:auto;height:auto;margin:0}
+  .si-no label:has(input:checked){border-color:var(--azul);background:#eef4fb}
+  .agregar > summary{color:var(--acento);font-weight:600}
+  .agregar > summary::before,.agregar[open] > summary::before{content:none}
+</style>
+{% endmacro %}
+
+{% macro respaldo(r, admin, texto_falta='falta el respaldo', ver='Ver respaldo') %}
+  {% if r and admin %}<span class="resp"><a href="{{ url_for('admin_respaldo', id_=r.id) }}" target="_blank" rel="noopener">{{ ver }}</a> <span class="tenue">· {{ r.subido_por }} {{ r.subido_en|fecha }}</span></span>
+  {% elif r %}<span class="resp tenue">✓ {{ 'carnet enviado' if 'carnet' in ver else 'respaldo enviado' }}</span>
+  {% else %}<span class="resp negativo">{{ texto_falta }}</span>{% endif %}
+{% endmacro %}
+
+{% macro detalle(c) -%}
+  {% if c.parentesco == 'pareja' %}{{ RELACIONES_PAREJA.get(c.relacion, 'Pareja') }}
+  {%- else %}{{ 'Hija' if c.genero == 'F' else 'Hijo' }}{% if c.edad is not none %} · {{ c.edad }} {{ 'año' if c.edad == 1 else 'años' }}{% endif %}
+    {%- if c.fecha_nacimiento %} · nació el {{ c.fecha_nacimiento|fecha }}{% endif %}{% if c.discapacidad %} · con discapacidad{% endif %}{% endif %}
+  {%- if c.cedula %} · C.I. {{ c.cedula }}{% endif %}
+{%- endmacro %}
+
+{% macro form_carga(parentesco, c=None, destino='') %}
+<form method="POST" {% if destino %}action="{{ destino }}"{% endif %} class="formulario fam-form" enctype="multipart/form-data">
+  <input type="hidden" name="accion" value="{{ parentesco }}">
+  {% if c %}<input type="hidden" name="id" value="{{ c.id }}">{% endif %}
+  {% if parentesco == 'pareja' %}
+  <div class="ancho"><label class="campo">Es</label>
+    <select name="relacion" required><option value="">Elija…</option>{% for k, n in RELACIONES_PAREJA.items() %}<option value="{{ k }}" {% if c and c.relacion == k %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div class="ancho"><label class="campo">Nombre completo</label><input name="nombre" value="{{ c.nombre if c else '' }}" required maxlength="120" autocomplete="off"></div>
+  <div class="ancho"><label class="campo">Cédula</label><input name="cedula" value="{{ c.cedula or '' if c else '' }}" inputmode="numeric" maxlength="10" autocomplete="off"></div>
+  {% else %}
+  <div class="ancho"><label class="campo">Nombres</label><input name="nombre" value="{{ c.nombre if c else '' }}" required maxlength="120" autocomplete="off"></div>
+  <div><label class="campo">Cédula</label><input name="cedula" value="{{ c.cedula or '' if c else '' }}" inputmode="numeric" maxlength="10" autocomplete="off"></div>
+  <div><label class="campo">Fecha de nacimiento</label><input name="fecha_nacimiento" value="{{ c.fecha_nacimiento|fecha if c and c.fecha_nacimiento else '' }}" placeholder="25/03/2015" required inputmode="numeric" autocomplete="off"></div>
+  <div><label class="campo">Género</label>
+    <select name="genero" required><option value="">Elija…</option>{% for k, n in GENEROS.items() %}<option value="{{ k }}" {% if c and c.genero == k %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div><label class="campo">¿Tiene discapacidad?</label>
+    <select name="discapacidad" data-disc><option value="no">No</option><option value="si" {% if c and c.discapacidad %}selected{% endif %}>Sí</option></select></div>
+  {% endif %}
+  <div class="ancho" data-pide-archivo {% if not c %}hidden{% endif %}>
+    <label class="campo">{% if c and c.respaldo %}Cambiar el respaldo (si hace falta){% elif parentesco == 'pareja' %}Partida de matrimonio o declaración de unión de hecho{% else %}Partida de nacimiento o cédula{% endif %} · foto o PDF</label>
+    <input type="file" name="respaldo" accept="image/*,.pdf"></div>
+  {% if parentesco == 'hijo' %}
+  <div class="ancho" data-pide-disc {% if not (c and c.discapacidad) %}hidden{% endif %}>
+    <label class="campo">{% if c and c.respaldo_disc %}Cambiar el carnet de discapacidad (si hace falta){% else %}Carnet de discapacidad{% endif %} · foto o PDF</label>
+    <input type="file" name="respaldo_disc" accept="image/*,.pdf"></div>
+  {% endif %}
+  <div class="ancho"><button class="btn" type="submit">{{ 'Guardar' if c else 'Agregar' }}</button></div>
+</form>
+{% endmacro %}
+
+{% macro lista(fam, admin=False, destino='') %}
+<ul class="fam-lista">
+  {% for c in ([fam.pareja] if fam.pareja else []) + fam.hijos %}
+  <li>
+    <div class="fam-fila">
+      <span class="fam-nombre">{{ c.nombre }}<small>{{ detalle(c) }}</small>
+        {{ respaldo(c.respaldo, admin, 'falta el respaldo', 'Ver partida' if c.parentesco == 'hijo' else 'Ver respaldo') }}
+        {% if c.discapacidad %}{{ respaldo(c.respaldo_disc, admin, 'falta el carnet de discapacidad', 'Ver carnet de discapacidad') }}{% endif %}
+      </span>
+      <span class="fam-acc t-acciones">
+        <button class="borrar-fila" type="button" title="Corregir" onclick="var e=document.getElementById('fe{{ c.id }}');e.hidden=!e.hidden">✎</button>
+        <form method="POST" {% if destino %}action="{{ destino }}"{% endif %} class="enlinea"><input type="hidden" name="accion" value="carga_borrar"><input type="hidden" name="id" value="{{ c.id }}">
+          <button class="borrar-fila" title="Quitar" onclick="return confirm('¿Quitar a {{ c.nombre }}?')">×</button></form>
+      </span>
+    </div>
+    <div class="fam-editar" id="fe{{ c.id }}" hidden>{{ form_carga(c.parentesco, c, destino) }}</div>
+  </li>
+  {% endfor %}
+</ul>
+{% if not fam.pareja %}
+<details class="agregar"><summary>＋ Agregar cónyuge o pareja</summary><div class="relleno">{{ form_carga('pareja', None, destino) }}</div></details>
+{% endif %}
+{% if fam.hijos|length < MAX_HIJOS %}
+<details class="agregar"><summary>＋ Agregar {{ 'otro hijo' if fam.hijos else 'un hijo' }}</summary><div class="relleno">{{ form_carga('hijo', None, destino) }}</div></details>
+{% endif %}
+{% endmacro %}
+
+{% macro form_discapacidad(t, fam, admin=False, destino='') %}
+<form method="POST" {% if destino %}action="{{ destino }}"{% endif %} class="formulario" enctype="multipart/form-data" data-form-disc>
+  <input type="hidden" name="accion" value="discapacidad">
+  <div class="ancho si-no">
+    <label><input type="radio" name="tiene" value="no" required {% if fam.discapacidad == false %}checked{% endif %}> No</label>
+    <label><input type="radio" name="tiene" value="si" {% if fam.discapacidad %}checked{% endif %}> Sí</label>
+  </div>
+  <div class="ancho" data-si {% if not fam.discapacidad %}hidden{% endif %}><label class="campo">Tipo</label>
+    <select name="tipo"><option value="">Elija…</option>{% for k, n in TIPOS_DISCAPACIDAD.items() %}<option value="{{ k }}" {% if t.discapacidad_tipo == k %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div class="ancho" data-si {% if not fam.discapacidad %}hidden{% endif %}>
+    <label class="campo">{% if fam.respaldo_disc %}Cambiar el carnet (si hace falta){% else %}Carnet de discapacidad o cédula que lo diga{% endif %} · foto o PDF</label>
+    <input type="file" name="respaldo" accept="image/*,.pdf"></div>
+  <div class="ancho"><button class="btn" type="submit">Guardar</button></div>
+</form>
+{% endmacro %}
+
+{% macro resumen_discapacidad(t, fam, admin=False) %}
+  {% if fam.discapacidad is none %}<span class="tenue">Sin contestar</span>
+  {% elif not fam.discapacidad %}No
+  {% else %}Sí · {{ TIPOS_DISCAPACIDAD.get(t.discapacidad_tipo, '') }}{{ respaldo(fam.respaldo_disc, admin, 'falta el carnet', 'Ver carnet') }}{% endif %}
+{% endmacro %}
+
+{% macro script() %}
+<script>
+(function () {
+  // El archivo se pide recién cuando se escribe el nombre; el carnet, cuando dice «Sí».
+  document.querySelectorAll('.fam-form').forEach(function (f) {
+    var nombre = f.querySelector('[name=nombre]'), arch = f.querySelector('[data-pide-archivo]');
+    var disc = f.querySelector('[data-disc]'), carnet = f.querySelector('[data-pide-disc]');
+    function ver() {
+      if (arch) arch.hidden = !nombre.value.trim();
+      if (carnet) carnet.hidden = !(disc && disc.value === 'si');
+    }
+    nombre.addEventListener('input', ver);
+    if (disc) disc.addEventListener('change', ver);
+  });
+  document.querySelectorAll('[data-form-disc]').forEach(function (f) {
+    function ver() {
+      var si = f.querySelector('[name=tiene][value=si]').checked;
+      f.querySelectorAll('[data-si]').forEach(function (x) { x.hidden = !si; });
+    }
+    f.querySelectorAll('[name=tiene]').forEach(function (r) { r.addEventListener('change', ver); });
+  });
+})();
+</script>
+{% endmacro %}

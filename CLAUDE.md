@@ -297,3 +297,24 @@ las funciones de `store` una por una, no el módulo entero.
   escriben encima y «Guardar» (`store.renombrar_usuario`; minúsculas, sin repetir). La clave
   no cambia. Si es el propio, se actualiza la sesión. Lo ya cargado («cargado por …») queda
   con el usuario viejo.
+
+**Discapacidad y cargas familiares (Tamara 16/10/2026).** Para el 5 % de utilidades por
+cargas (Código del Trabajo: cónyuge o conviviente en unión de hecho, hijos menores de 18
+e hijos con discapacidad de cualquier edad, acreditados ante el empleador) y la rebaja de
+gastos personales del SRI. Lo cargan **el trabajador** (Perfil, `/yo/familia`, manda aviso
+`familia` a la campanita) y **contabilidad** (ficha, pestaña Familia; sin aviso).
+- `trabajador.discapacidad` (NULL = no contestó) + `discapacidad_tipo` (`store.TIPOS_DISCAPACIDAD`).
+  **Sin porcentaje** («para no marearlos»; está en el carnet).
+- `carga_familiar` (pareja: casado/unión de hecho, nombre, cédula; hijo: nombres, cédula,
+  nacimiento, género, ¿discapacidad?). Una pareja, hasta `MAX_HIJOS` = 6. Cédula opcional
+  pero si se escribe, válida. Quitar = `borrado_en` → Historial con Recuperar.
+- `respaldo` (bytea, foto → JPEG chico con `leer_certificado`): `que` = discapacidad /
+  carga / carga_discapacidad; vale el último. **El archivo se pide recién al llenar los
+  datos** (el campo aparece al escribir el nombre o al decir «Sí»). Sólo contabilidad lo
+  abre (`/admin/respaldo/N`). Sin respaldo → «falta el respaldo» en rojo y globo en la pestaña.
+- `app.familia_de(t)`: «Cargas para utilidades» = pareja + hijos <18 + hijos con discapacidad.
+
+**La ficha va en pestañas** (Tamara 16/10: «está muy cargado»): Vacaciones (resumen, días
+tomados, hoja para imprimir) · Rol de pagos (la app | los meses) · Familia · Más («Dar de
+baja» aparte, en rojo). Después de un POST vuelve a la misma pestaña (`PESTANA_DE_ACCION`,
+redirect con `#`). El globo de Rol de pagos cuenta sólo los publicados sin firmar.

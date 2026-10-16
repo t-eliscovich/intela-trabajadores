@@ -61,6 +61,8 @@ class BaseFalsa:
         self.cod: dict[int, dict] = {}
         self.cban: dict[int, dict] = {}
         self.avi: dict[int, dict] = {}
+        self.carg: dict[int, dict] = {}
+        self.resp: dict[int, dict] = {}
         self.alm_hora: dict[tuple, datetime] = {}
         self.alm_turno: dict[tuple, str | None] = {}
         self.alm_quien: dict[tuple, str] = {}
@@ -480,6 +482,13 @@ class BaseFalsa:
                 t = self.trab[a["trabajador_id"]]
                 filas.append({"que": "ajuste", **a, "tipo": None, "desde": None, "hasta": None,
                               "nota": a["motivo"], "nombre": t["nombre"], "cedula": t["cedula"]})
+        for k in self.carg.values():
+            if k["borrado_en"]:
+                t = self.trab[k["trabajador_id"]]
+                filas.append({"que": "carga", "id": k["id"], "trabajador_id": k["trabajador_id"], "tipo": k["parentesco"],
+                              "desde": None, "hasta": None, "dias": None, "nota": k["nombre"], "cargado_por": k["cargado_por"],
+                              "creado_en": k["cargado_en"], "borrado_en": k["borrado_en"], "borrado_por": k["borrado_por"],
+                              "nombre": t["nombre"], "cedula": t["cedula"]})
         return sorted(filas, key=lambda f: f["borrado_en"], reverse=True)[:limite]
 
     # --- pedidos ---
@@ -589,6 +598,59 @@ class BaseFalsa:
         for c in self.cert.values():
             if c["solicitud_id"] == solicitud_id:
                 c["vacacion_id"] = vacacion_id
+
+    # --- discapacidad y cargas familiares ---
+    TIPOS_DISCAPACIDAD = {"fisica": "Física", "intelectual": "Intelectual", "auditiva": "Auditiva",
+                          "visual": "Visual", "psicosocial": "Psicosocial", "lenguaje": "De lenguaje"}
+    RELACIONES_PAREJA = {"casado": "Casado/a", "union": "Unión de hecho"}
+    GENEROS = {"F": "Femenino", "M": "Masculino"}
+    MAX_HIJOS = 6
+
+    def poner_discapacidad(self, trabajador_id, tiene, tipo):
+        self.trab[trabajador_id].update(discapacidad=tiene, discapacidad_tipo=tipo if tiene else None)
+
+    def cargas_de(self, trabajador_id):
+        filas = [dict(c) for c in self.carg.values() if c["trabajador_id"] == trabajador_id and not c["borrado_en"]]
+        return sorted(filas, key=lambda c: (c["parentesco"] == "hijo", c["fecha_nacimiento"] or date.max, c["id"]))
+
+    def carga(self, id_):
+        c = self.carg.get(id_)
+        return dict(c) if c and not c["borrado_en"] else None
+
+    def guardar_carga(self, trabajador_id, datos, quien, id_=None):
+        campos = ("parentesco", "relacion", "nombre", "cedula", "fecha_nacimiento", "genero", "discapacidad")
+        if id_:
+            c = self.carg[id_]
+            if c["trabajador_id"] == trabajador_id:
+                c.update({k: datos.get(k) for k in campos}, cambiado_en=datetime.now())
+            return id_
+        id_ = self._id()
+        self.carg[id_] = {"id": id_, "trabajador_id": trabajador_id, **{k: datos.get(k) for k in campos},
+                          "cargado_por": quien, "cargado_en": datetime.now(), "cambiado_en": None,
+                          "borrado_en": None, "borrado_por": None}
+        return id_
+
+    def borrar_carga(self, id_, quien):
+        if id_ in self.carg and not self.carg[id_]["borrado_en"]:
+            self.carg[id_].update(borrado_en=datetime.now(), borrado_por=quien)
+
+    def recuperar_carga(self, id_):
+        self.carg[id_].update(borrado_en=None, borrado_por=None)
+
+    def guardar_respaldo(self, trabajador_id, que, carga_id, datos, tipo_archivo, nombre, subido_por):
+        id_ = self._id()
+        self.resp[id_] = {"id": id_, "trabajador_id": trabajador_id, "carga_id": carga_id, "que": que,
+                          "tipo_archivo": tipo_archivo, "nombre": nombre, "datos": datos,
+                          "subido_por": subido_por, "subido_en": datetime.now()}
+        return id_
+
+    def respaldos_de(self, trabajador_id):
+        return [{k: v for k, v in r.items() if k != "datos"} for r in sorted(self.resp.values(), key=lambda r: r["id"])
+                if r["trabajador_id"] == trabajador_id]
+
+    def respaldo(self, id_):
+        r = self.resp.get(id_)
+        return dict(r) if r else None
 
     # --- comidas ---
     def comidas_del_mes(self, trabajador_id, anio, mes):
@@ -844,4 +906,6 @@ def enchufar(store_modulo, base: BaseFalsa | None = None) -> BaseFalsa:
     store_modulo.ROLES = base.ROLES
     store_modulo.TIPOS_AUSENCIA = base.TIPOS_AUSENCIA
     store_modulo.TIPOS_QUE_DESCUENTAN = base.TIPOS_QUE_DESCUENTAN
+    for _c in ("TIPOS_DISCAPACIDAD", "RELACIONES_PAREJA", "GENEROS", "MAX_HIJOS"):
+        setattr(store_modulo, _c, getattr(base, _c))
     return base

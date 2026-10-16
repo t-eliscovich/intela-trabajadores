@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block contenido %}
+{% import "_familia.html" as fm with context %}
+{{ fm.estilos() }}
 <style>
   .ficha-cab{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px}
   .ficha-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
@@ -15,6 +17,19 @@
   .app-dato small{display:block;color:var(--gris);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .roles-ficha td{padding-top:8px;padding-bottom:8px}
   .roles-ficha .chico{display:inline;margin-left:6px}
+  /* Las pestañas de la ficha (Tamara 16/10/2026: «está muy cargado»): una cosa a la vez. */
+  .ficha-pestanas{display:flex;gap:2px;border-bottom:1px solid var(--borde);margin:4px 0 14px;overflow-x:auto;scrollbar-width:none}
+  .ficha-pestanas a{padding:10px 14px;font-size:14.5px;font-weight:600;color:var(--gris);text-decoration:none;white-space:nowrap;
+                    border-bottom:3px solid transparent;margin-bottom:-1px}
+  .ficha-pestanas a:hover{color:var(--tinta,#0f172a)}
+  .ficha-pestanas a.activa{color:var(--azul);border-bottom-color:var(--azul)}
+  .ficha-pestanas .cuenta{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:999px;background:#eef2f6;color:var(--gris);
+                          font-size:11.5px;text-align:center;font-variant-numeric:tabular-nums}
+  .ficha-pestanas .cuenta.rojo{background:#fdeaea;color:var(--rojo)}
+  .js .pane{display:none}
+  .js .pane.activa{display:block}
+  .mas-col{max-width:760px}
+  .zona-baja > summary{color:var(--rojo)}
   .ver-mas{display:block;width:100%;padding:10px;border:0;border-top:1px solid #f2f5f8;background:none;color:var(--acento);font:inherit;font-size:14px;cursor:pointer}
 </style>
 <div class="ficha-cab">
@@ -31,7 +46,6 @@
       {% if t.pausado_en %}<span class="etiqueta pendiente" title="{{ t.motivo_pausa or '' }}">pausado</span>{% endif %}
     </div>
   </div>
-  <a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a>
 </div>
 
 {% if t.pausado_en %}
@@ -44,6 +58,15 @@
 </div>
 {% endfor %}
 
+{% set ns = namespace(n=0) %}{% for r in roles_pago %}{% if r.pide_firma and not r.firmado_en and not (r.necesita_aprobacion and not r.aprobado_en) %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}{% set sin_firmar_app = ns.n %}
+<nav class="ficha-pestanas" aria-label="Partes de la ficha">
+  <a href="#vacaciones" data-pane="vacaciones">Vacaciones</a>
+  <a href="#rol" data-pane="rol">Rol de pagos{% if sin_firmar_app %}<span class="cuenta rojo" title="Sin firmar en la app">{{ sin_firmar_app }}</span>{% endif %}</a>
+  <a href="#familia" data-pane="familia">Familia{% if fam.faltan %}<span class="cuenta rojo" title="Falta el respaldo">{{ fam.faltan }}</span>{% elif fam.cargas_utilidades %}<span class="cuenta" title="Cargas para utilidades">{{ fam.cargas_utilidades }}</span>{% endif %}</a>
+  <a href="#mas" data-pane="mas">Más{% if ajustes %}<span class="cuenta" title="Ajustes">{{ ajustes|length }}</span>{% endif %}</a>
+</nav>
+
+<section class="pane" id="p-vacaciones">
 <div class="ficha">
 <div>
   {% if (t.tipo or 'planta') != 'planta' %}
@@ -60,7 +83,7 @@
   </div>
   {% else %}
   <div class="bloque">
-    <div class="titulo"><h2>Vacaciones</h2></div>
+    <div class="titulo"><h2>Vacaciones</h2><a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja para imprimir</a></div>
     <ul class="vac-resumen">
       <li><span class="vac-que">En Intela desde</span><span class="vac-cuanto">{{ t.fecha_ingreso|fecha }}<small>{{ v.anios }} {{ 'año' if v.anios == 1 else 'años' }}</small></span></li>
       {% if v.primer_anio %}
@@ -76,7 +99,8 @@
     <div class="nota">El {{ v.proxima_carga|fecha }}{% if v.proxima_tipo == 'aniversario' %} (cumple el año){% endif %} se acreditan {{ v.proxima_cantidad|num }} más.</div>
   </div>
   {% endif %}
-
+</div>
+<div>
   <div class="bloque">
     <div class="titulo"><h2>Días tomados</h2><p>Toque el lápiz para corregir uno.</p></div>
     {% if vacaciones %}
@@ -126,15 +150,15 @@
       </div>
     </details>
   </div>
-
 </div>
+</div>
+</section>
 
+<section class="pane" id="p-rol">
+<div class="ficha">
 <div>
-  {# La app y el rol de pagos en UNA tarjeta (Tamara 16/10/2026: «esta pantalla no está muy linda») #}
   <div class="bloque">
-    <div class="titulo"><h2>App y rol de pagos</h2>
-      {% set piden = roles_pago|selectattr('pide_firma')|list %}
-      {% if piden %}<p>{{ piden|selectattr('firmado_en')|list|length }} de {{ piden|length }} firmados en la app</p>{% endif %}</div>
+    <div class="titulo"><h2>La app</h2><p>Para entrar y ver el rol</p></div>
     <ul class="app-lista">
       <li>
         <span class="app-que">Contraseña</span>
@@ -166,6 +190,13 @@
         {% endif %}
       </li>
     </ul>
+  </div>
+</div>
+<div>
+  <div class="bloque">
+    <div class="titulo"><h2>Rol de pagos</h2>
+      {% set piden = roles_pago|selectattr('pide_firma')|list %}
+      {% if piden %}<p>{{ piden|selectattr('firmado_en')|list|length }} de {{ piden|length }} firmados en la app</p>{% endif %}</div>
     {% if roles_pago %}
     <table class="roles-ficha"><tbody>
     {% for r in roles_pago %}
@@ -184,8 +215,33 @@
     <div class="nota">Todavía no tiene roles de pago cargados.</div>
     {% endif %}
   </div>
+</div>
+</div>
+</section>
+
+<section class="pane" id="p-familia">
+<div class="ficha">
+<div>
   <div class="bloque">
-    <div class="titulo"><h2>Más</h2></div>
+    <div class="fam-cuenta"><span><b style="font-size:15px">Cargas para utilidades</b><small>Pareja, hijos menores de 18 e hijos con discapacidad</small></span><b>{{ fam.cargas_utilidades }}</b></div>
+    {% if not fam.pareja and not fam.hijos %}<div class="fam-vacio">Todavía no tiene cargas familiares.</div>{% endif %}
+    {{ fm.lista(fam, True) }}
+  </div>
+</div>
+<div>
+  <div class="bloque">
+    <div class="titulo"><h2>Discapacidad del trabajador</h2></div>
+    <div class="fam-fila"><span class="fam-nombre" style="font-weight:400">{{ fm.resumen_discapacidad(t, fam, True) }}</span></div>
+    <details><summary>{{ 'Cargar' if fam.discapacidad is none else 'Cambiar' }}</summary><div class="relleno">{{ fm.form_discapacidad(t, fam, True) }}</div></details>
+  </div>
+  <p class="ayuda" style="margin:0 4px">El trabajador también lo puede cargar desde su celular (Perfil). Cuando cambia algo, llega un aviso a la campanita.</p>
+</div>
+</div>
+</section>
+
+<section class="pane" id="p-mas">
+<div class="mas-col">
+  <div class="bloque">
     <details>
       <summary>Ajustes{% if ajustes %} ({{ ajustes|length }}){% endif %}</summary>
       <div class="relleno">
@@ -296,7 +352,9 @@
       </div>
     </details>
     {% endif %}
-    <details>
+  </div>
+  <div class="bloque">
+    <details class="{{ 'zona-baja' if t.activo }}">
       <summary>{{ 'Volver a activar' if not t.activo else 'Dar de baja' }}</summary>
       <div class="relleno">
         {% if t.activo %}
@@ -313,5 +371,24 @@
     </details>
   </div>
 </div>
-</div>
+</section>
+{{ fm.script() }}
+<script>
+(function () {
+  // Pestañas: la del link (#familia) o la que se tocó; después de guardar, la
+  // ficha vuelve a la misma (el server redirige con el #).
+  document.documentElement.classList.add('js');
+  var tabs = document.querySelectorAll('.ficha-pestanas a');
+  function abrir(nombre, empujar) {
+    if (!document.getElementById('p-' + nombre)) nombre = '{{ 'rol' if t.tipo == 'jubilado' else 'vacaciones' }}';
+    tabs.forEach(function (a) { a.classList.toggle('activa', a.dataset.pane === nombre); });
+    document.querySelectorAll('.pane').forEach(function (p) { p.classList.toggle('activa', p.id === 'p-' + nombre); });
+    if (empujar) history.replaceState(null, '', '#' + nombre);
+  }
+  tabs.forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); abrir(a.dataset.pane, true); }); });
+  var h = location.hash.slice(1);
+  if (h === 'pausa') { abrir('mas'); } else { abrir(h); }
+  window.addEventListener('hashchange', function () { abrir(location.hash.slice(1)); });
+})();
+</script>
 {% endblock %}
