@@ -79,7 +79,8 @@
           <span class="cb ok">✓ {{ cb.ok }} coinciden</span>
           {% if cb.monto %}<span class="cb mal">✗ {{ cb.monto }} con otro monto</span>{% endif %}
           {% if cb.cuenta %}<span class="cb mal">✗ {{ cb.cuenta }} con otra cuenta</span>{% endif %}
-          {% if cb.cedula %}<span class="cb mal">✗ {{ cb.cedula }} con otra cédula en el banco</span>{% endif %}
+          {% if cb.cedula %}<span class="cb mal">✗ {{ cb.cedula }} con otra cédula en el banco</span>
+            <button class="btn suave chico" type="submit" form="ced-banco-todos">Guardar la cédula del banco a los {{ cb.cedula }}</button>{% endif %}
           {% if cb.falta %}<span class="cb mal">✗ {{ cb.falta }} sin pago en el banco</span>{% endif %}
           {% if banco.sobran %}<span class="cb mal">✗ {{ banco.sobran|length }} en el banco y no en el rol</span>{% endif %}
         </div>
@@ -116,6 +117,11 @@
   </select>
 </div>
 
+{% if banco %}
+<form method="POST" action="{{ url_for('admin_roles_cedula_banco') }}" id="ced-banco"><input type="hidden" name="mes" value="{{ '%d-%02d'|format(anio, mes) }}"></form>
+<form method="POST" action="{{ url_for('admin_roles_cedula_banco') }}" id="ced-banco-todos"><input type="hidden" name="mes" value="{{ '%d-%02d'|format(anio, mes) }}">
+  {% for r in filas if r.banco and r.banco.estado == 'cedula' %}<input type="hidden" name="par" value="{{ r.trabajador_id }}:{{ r.banco.banco.identificacion }}">{% endfor %}</form>
+{% endif %}
 <form method="POST" id="form-revision" autocomplete="off">
 <input type="hidden" name="mes" value="{{ '%d-%02d'|format(anio, mes) }}">
 {% if rev and (yo.revisa_roles or yo.firma_roles) %}
@@ -158,7 +164,8 @@
         <td class="der"><b>{{ r.liquido|dinero }}</b></td>
         {% if banco %}
         <td>{% set bx = r.banco %}{% if bx and bx.estado == 'ok' %}<span class="etiqueta ok" title="{{ bx.texto }}">✓ Banco</span>
-            {% elif bx %}<span class="etiqueta baja">✗ {{ {'monto': 'Monto', 'cuenta': 'Cuenta', 'cedula': 'Cédula', 'falta': 'Falta'}[bx.estado] }}</span><span class="chico">{{ bx.texto }}</span>{% endif %}</td>
+            {% elif bx %}<span class="etiqueta baja">✗ {{ {'monto': 'Monto', 'cuenta': 'Cuenta', 'cedula': 'Cédula', 'falta': 'Falta'}[bx.estado] }}</span><span class="chico">{{ bx.texto }}</span>
+              {% if bx.estado == 'cedula' %}<button class="btn suave chico" type="submit" form="ced-banco" name="par" value="{{ r.trabajador_id }}:{{ bx.banco.identificacion }}" style="margin-top:4px">Cobra con esa cédula</button>{% endif %}{% endif %}</td>
         {% endif %}
         {% if rev %}
         <td>{% if r.revisado_en %}<span class="etiqueta ok" style="white-space:nowrap" title="{{ r.revisado_por }}">✓ {{ r.revisado_por.split()[0] }}</span><span class="chico oculta-chico">{{ r.revisado_en|fecha_hora }}</span>{% elif r.en_revision %}<span class="etiqueta pendiente" style="white-space:nowrap">Falta revisar</span>{% endif %}</td>

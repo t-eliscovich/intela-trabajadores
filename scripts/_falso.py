@@ -111,7 +111,7 @@ class BaseFalsa:
     # --- rol de pagos ---
     def _rol_con_trab(self, r):
         t = self.trab[r["trabajador_id"]]
-        r = dict(r, nombre=t["nombre"], cedula=t["cedula"], area=t.get("area"), celular=t.get("celular"),
+        r = dict(r, nombre=t["nombre"], cedula=t["cedula"], cedula_banco=t.get("cedula_banco"), area=t.get("area"), celular=t.get("celular"),
                  fecha_ingreso=t.get("fecha_ingreso"), fecha_salida=t.get("fecha_salida"))
         r.pop("firma", None)
         r.pop("firma_empresa", None)
@@ -820,6 +820,10 @@ class _ClaveRol:
                 r.update(firma=None, firmado_en=None, firmado_desde=None, firma_huella=None)
                 n_f += 1
         return {"constancias": n_c, "firmas": n_f}
+
+
+    def poner_cedula_banco(self, trabajador_id, cedula):
+        self.trab[trabajador_id]["cedula_banco"] = cedula or None
 
 
 for _n in dir(_ClaveRol):

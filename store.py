@@ -485,6 +485,10 @@ ESQUEMA = """
         archivado_en    timestamptz NOT NULL DEFAULT now(),
         motivo          text NOT NULL
     );
+    -- La cédula con la que COBRA en el banco (Tamara 16/10/2026: «pongamos otro field que sea
+    -- cédula con la que cobra»): en septiembre 10 cobraban con otra cédula que la del padrón.
+    -- Vacía = la misma del padrón. El control del banco busca primero por ésta.
+    ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS cedula_banco text;
     CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
 """
 
@@ -497,7 +501,7 @@ TIPOS_TRABAJADOR = {"planta": "Planta", "temporal": "Temporal", "jubilado": "Jub
 _ROL = """SELECT r.id, r.trabajador_id, r.anio, r.mes, r.codigo, r.nombre_rol, r.sueldo, r.dias,
                  r.horas_25, r.horas_50, r.horas_100, r.atrasos, r.otros, r.ingresos, r.descuentos,
                  r.total_ingresos, r.total_descuentos, r.liquido, r.cargado_por, r.cargado_en,
-                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma,
+                 r.firmado_en, r.firmado_desde, r.firma_huella, r.pide_firma, t.cedula_banco,
                  r.necesita_aprobacion, r.revisado_por_id, r.revisado_por, r.revisado_en,
                  r.aprobado_por_id, r.aprobado_por, r.aprobado_en, t.nombre, t.cedula, t.area, t.celular,
                  t.fecha_ingreso, t.fecha_salida
@@ -1594,3 +1598,7 @@ def reiniciar_prueba(trabajador_id: int, quien: str) -> dict:
             con.rollback()
             raise
     return {"constancias": constancias, "firmas": firmas}
+
+
+def poner_cedula_banco(trabajador_id: int, cedula: str | None) -> None:
+    _ejecutar("UPDATE trabajadores.trabajador SET cedula_banco = %s WHERE id = %s", (cedula or None, trabajador_id))

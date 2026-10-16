@@ -23,6 +23,7 @@
     <div class="ficha-chips">
       {% if t.cedula %}<span class="chip">C.I. {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida</span>{% endif %}</span>{% else %}<span class="etiqueta baja">sin cédula</span>{% endif %}
       {% if t.area %}<span class="chip">{{ t.area }}{% if t.area in NOMBRES_AREA %} · {{ NOMBRES_AREA[t.area] }}{% endif %}</span>{% endif %}
+      {% if t.cedula_banco %}<span class="chip" title="Cédula con la que cobra en el banco">cobra con {{ t.cedula_banco }}</span>{% endif %}
       {% if t.celular %}<span class="chip">📱 {{ t.celular }}</span>{% endif %}
       {% if (t.tipo or 'planta') != 'planta' %}<span class="etiqueta">{{ TIPOS_TRABAJADOR[t.tipo] }}</span>{% endif %}
       {% if t.es_prueba %}<span class="etiqueta pendiente">de prueba</span>{% endif %}
@@ -145,6 +146,15 @@
         {% else %}
         <span class="app-dato tenue">Todavía no la creó{% if t.email %}<small>último correo: {{ t.email }}</small>{% endif %}</span>
         {% endif %}
+      </li>
+      <li>
+        <span class="app-que">Cobra con</span>
+        <form method="POST" style="display:contents">
+          <input type="hidden" name="accion" value="cedula_banco">
+          <span class="app-dato"><input name="cedula_banco" value="{{ t.cedula_banco or '' }}" inputmode="numeric" placeholder="la misma C.I. {{ t.cedula or '' }}"
+                 style="height:32px;font-size:14px;max-width:190px"><small>cédula con la que cobra en el banco</small></span>
+          <button class="btn suave chico" type="submit">Guardar</button>
+        </form>
       </li>
       <li>
         <span class="app-que">Constancia</span>

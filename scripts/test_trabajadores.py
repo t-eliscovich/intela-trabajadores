@@ -997,7 +997,8 @@ check("no se firma dos veces", "No se firmó ninguno" in r.get_data(as_text=True
 check("la firma de contabilidad no la ve nadie sin sesión", A.app.test_client().get(f"/admin/roles/{_ids4[0]}/firma-empresa.png").status_code == 302
       and c.get(f"/admin/roles/{_ids4[0]}/firma-empresa.png").mimetype == "image/png")
 html = c.get("/admin/usuarios").get_data(as_text=True)
-check("en Usuarios: quién revisa y quién firma, y si registró la firma", "quién revisa y quién firma" in html and "registrada" in html)
+check("en Usuarios: quién revisa y quién firma, y la firma registrada (miniatura)", "quién revisa y quién firma" in html and f"/admin/usuarios/{_ang}/firma.png" in html
+      and c.get(f"/admin/usuarios/{_ang}/firma.png").mimetype == "image/png" and A.app.test_client().get(f"/admin/usuarios/{_ang}/firma.png").status_code == 302)
 c.post("/admin/usuarios", data={"accion": "permisos_roles", "id": _jes, "revisa": "1", "firma": "1"})
 check("y se cambian desde ahí", base.usuario(_jes)["firma_roles"] is True)
 base.poner_permisos_roles(_jes, True, False)
@@ -1312,6 +1313,10 @@ _otra = R.comparar_con_banco([{"trabajador_id": 1, "nombre": "Mejia Mendieta Lev
                               [{"monto": 168.0, "cuenta": "2215581798", "tipo_id": "C", "identificacion": "1728170570", "nombre": "MEJIA LEVIS"}], {})
 check("el que en el banco figura con OTRA cédula se encuentra por el nombre y se avisa (septiembre: 10 así)",
       _otra["por_trabajador"][1]["estado"] == "cedula" and "1728170570" in _otra["por_trabajador"][1]["texto"] and not _otra["sobran"])
+_otra2 = R.comparar_con_banco([{"trabajador_id": 1, "nombre": "Mejia Mendieta Levis Herver", "cedula": "1712612074", "cedula_banco": "1728170570",
+                                "liquido": 168.0}], [{"monto": 168.0, "cuenta": "2215581798", "tipo_id": "C", "identificacion": "1728170570",
+                                                      "nombre": "MEJIA LEVIS"}], {})
+check("con la «cédula con la que cobra» cargada, coincide sin aviso", _otra2["por_trabajador"][1]["estado"] == "ok")
 check("y las cuentas: si no es la de su constancia, avisa", _cmp["por_trabajador"][rosa]["estado"] == "ok"
       and R.comparar_con_banco(base.roles_del_mes(2025, 11), base.control_banco(2025, 11)["filas"], {rosa: "999"})["por_trabajador"][rosa]["estado"] == "cuenta"
       and _cmp["por_trabajador"][_ped]["estado"] == "ok" and _cmp["por_trabajador"][maria]["estado"] == "falta")
@@ -1319,6 +1324,17 @@ html = cj.get("/admin/roles?mes=2025-11").get_data(as_text=True)
 check("Jessica tiene «Elegir los que coinciden con el banco» y el filtro de diferencias", "Elegir los que coinciden con el banco" in html
       and "No coinciden con el banco" in html)
 check("el control no carga nada: el rol sigue igual", len(base.roles_del_mes(2025, 11)) == len(_sep))
+# --- «cédula con la que cobra» (Tamara 16/10/2026) ---
+_mar_ced = base.trabajador(maria)["cedula"]
+c.post(f"/admin/trabajador/{maria}", data={"accion": "cedula_banco", "cedula_banco": "1728170570"})
+html = c.get(f"/admin/trabajador/{maria}").get_data(as_text=True)
+check("en la ficha: «Cobra con» se guarda y se ve arriba", base.trabajador(maria)["cedula_banco"] == "1728170570" and "cobra con 1728170570" in html)
+c.post(f"/admin/trabajador/{maria}", data={"accion": "cedula_banco", "cedula_banco": _mar_ced})
+check("si ponen la misma del padrón, queda vacía", base.trabajador(maria).get("cedula_banco") is None)
+r = c.post("/admin/roles/cedula-banco", data={"mes": "2025-11", "par": [f"{maria}:1728170570", f"{juan}:0400080883"]}, follow_redirects=True)
+check("desde el control del banco se guardan de una vez", "2 trabajadores cobran" in r.get_data(as_text=True)
+      and base.trabajador(maria)["cedula_banco"] == "1728170570" and base.trabajador(juan)["cedula_banco"] == "0400080883")
+base.poner_cedula_banco(maria, None); base.poner_cedula_banco(juan, None)
 # --- sin revisión no se firma, y se dice por qué (Tamara 16/10/2026) ---
 _ids_nov = [x["id"] for x in base.roles_del_mes(2025, 11)]
 html = ca.get("/admin/roles?mes=2025-11").get_data(as_text=True)

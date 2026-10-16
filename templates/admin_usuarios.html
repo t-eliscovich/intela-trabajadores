@@ -58,7 +58,7 @@
         <td><b>{{ u.nombre }}</b><span class="chico">{{ u.usuario }}</span></td>
         <td><input form="per{{ u.id }}" type="checkbox" name="revisa" value="1" {{ 'checked' if u.revisa_roles }} style="width:18px;height:18px" aria-label="Revisa roles"></td>
         <td><input form="per{{ u.id }}" type="checkbox" name="firma" value="1" {{ 'checked' if u.firma_roles }} style="width:18px;height:18px" aria-label="Firma roles"></td>
-        <td class="tenue">{% if u.tiene_firma %}registrada {{ u.firma_en|fecha }}{% elif u.firma_roles %}<span style="color:var(--ambar)">falta registrarla</span>{% else %}—{% endif %}</td>
+        <td class="tenue">{% if u.tiene_firma %}<span style="display:flex;gap:8px;align-items:center"><img src="{{ url_for('admin_usuario_firma_png', id_=u.id) }}?v={{ u.firma_en.timestamp()|int if u.firma_en else 0 }}" alt="Firma de {{ u.nombre }}" style="height:34px;max-width:120px;object-fit:contain;border-bottom:1px solid var(--borde)"><span>{{ u.firma_en|fecha_hora }}</span></span>{% elif u.firma_roles %}<span style="color:var(--ambar)">falta registrarla</span>{% else %}—{% endif %}</td>
         <td class="der"><form method="POST" id="per{{ u.id }}" class="enlinea"><input type="hidden" name="accion" value="permisos_roles"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn suave chico" type="submit">Guardar</button></form></td>
       </tr>
     {% endfor %}

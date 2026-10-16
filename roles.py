@@ -503,10 +503,13 @@ def comparar_con_banco(recibos: list[dict], banco: list[dict], cuentas: dict[int
     usados: set = set()
     elegido: dict = {}
     for r in recibos:
-        cands = [b for b in por_ced.get(r.get("cedula") or "", []) if id(b) not in usados]
-        if len(cands) == 1:
-            elegido[r["trabajador_id"]] = (cands[0], False)
-            usados.add(id(cands[0]))
+        # primero la cédula con la que cobra (si se cargó), después la del padrón
+        for ced in (r.get("cedula_banco"), r.get("cedula")):
+            cands = [b for b in por_ced.get(ced or "", []) if id(b) not in usados]
+            if ced and len(cands) == 1:
+                elegido[r["trabajador_id"]] = (cands[0], False)
+                usados.add(id(cands[0]))
+                break
     for r in recibos:
         if r["trabajador_id"] in elegido:
             continue

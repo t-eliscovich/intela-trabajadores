@@ -1112,6 +1112,13 @@ def _accion_trabajador(t: dict, accion: str) -> None:
               + (f", y {n['firmas']} {'rol sin firmar' if n['firmas'] == 1 else 'roles sin firmar'}" if n["firmas"] else "")
               + ". Sus recibos, vacaciones y comidas siguen igual.", "ok")
         return
+    if accion == "cedula_banco":
+        ced = limpiar_cedula(f.get("cedula_banco", "")) if (f.get("cedula_banco") or "").strip() else None
+        if ced and ced == t.get("cedula"):
+            ced = None  # la misma del padrón: no hace falta
+        store.poner_cedula_banco(t["id"], ced)
+        flash(f"Listo: cobra con la cédula {ced}." if ced else "Listo: cobra con la misma cédula del padrón.", "ok")
+        return
     if accion == "borrar_clave_rol":
         store.borrar_clave_rol(t["id"])
         flash("Listo: se borró la contraseña. La vuelve a crear la próxima vez que entre.", "ok")
@@ -1987,6 +1994,21 @@ def admin_roles_banco():
     return redirect(url_for("admin_roles", mes=mes_txt))
 
 
+@app.route("/admin/roles/cedula-banco", methods=["POST"])
+@requiere_admin
+def admin_roles_cedula_banco():
+    """Desde el control del banco: «cobra con esta cédula» para uno o para todos los que
+    en el banco figuran con otra (pares trabajador_id:cédula)."""
+    n = 0
+    for par in request.form.getlist("par"):
+        tid, _, ced = par.partition(":")
+        if tid.isdigit() and store.trabajador(int(tid)):
+            store.poner_cedula_banco(int(tid), limpiar_cedula(ced))
+            n += 1
+    flash(f"Listo: {n} {'trabajador cobra' if n == 1 else 'trabajadores cobran'} con la cédula del banco. Quedó guardada en su ficha.", "ok")
+    return redirect(url_for("admin_roles", mes=request.form.get("mes") or None))
+
+
 @app.route("/admin/roles/firmar", methods=["POST"])
 @requiere_admin
 def admin_roles_firmar():
@@ -2061,6 +2083,18 @@ def _volver_seguro(destino: str | None) -> str:
     if destino and destino.startswith("/") and not destino.startswith("//") and "\\" not in destino:
         return destino
     return url_for("admin_roles")
+
+
+@app.route("/admin/usuarios/<int:id_>/firma.png")
+@requiere_admin
+def admin_usuario_firma_png(id_):
+    """La firma guardada de un usuario, para verla en Usuarios (es la misma que va en
+    todos los recibos que firma, así que contabilidad ya la ve)."""
+    png = store.firma_de_usuario(id_)
+    if not png:
+        abort(404)
+    from io import BytesIO
+    return send_file(BytesIO(png), mimetype="image/png", max_age=0)
 
 
 @app.route("/admin/mi-firma.png")
