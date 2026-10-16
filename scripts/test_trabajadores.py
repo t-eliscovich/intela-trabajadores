@@ -1024,8 +1024,8 @@ check("apagarlo vuelve a la cédula sola", base.configuracion("entrar_con_clave"
 c.post("/admin/usuarios", data={"accion": "pedir_clave", "prender": "1"})
 check("y prenderlo la pide", A.pide_clave())
 html = c.get(f"/admin/trabajador/{_juan}").get_data(as_text=True)
-check("contabilidad ve en la ficha que tiene contraseña y a qué correo, y la puede borrar", "Contraseña para entrar" in html
-      and "@" in html and "Borrar contraseña" in html)
+check("contabilidad ve en la ficha que tiene contraseña y a qué correo, y la puede borrar", "App y rol de pagos" in html and "✓ Creada" in html
+      and "@" in html and "borrar_clave_rol" in html)
 _cl4 = A.app.test_client(); entrar_trab(_cl4, "1700000001")
 _h, _hen = base.trabajador(rosa)["clave_rol_hash"], base.trabajador(rosa)["clave_rol_en"]
 c.post(f"/admin/trabajador/{rosa}", data={"accion": "borrar_clave_rol"})
@@ -1308,6 +1308,10 @@ check("persona por persona: coincide, otro monto (+10), el pasaporte encontrado 
       and "El banco paga" in html and "+10,00" in html and "No está en el archivo del banco" in html and "✗ 1 en el banco y no en el rol" in html
       and "NADIE CONOCIDO" in html)
 _cmp = R.comparar_con_banco(base.roles_del_mes(2025, 11), base.control_banco(2025, 11)["filas"], {rosa: _cons_rosa})
+_otra = R.comparar_con_banco([{"trabajador_id": 1, "nombre": "Mejia Mendieta Levis Herver", "cedula": "1712612074", "liquido": 168.0}],
+                              [{"monto": 168.0, "cuenta": "2215581798", "tipo_id": "C", "identificacion": "1728170570", "nombre": "MEJIA LEVIS"}], {})
+check("el que en el banco figura con OTRA cédula se encuentra por el nombre y se avisa (septiembre: 10 así)",
+      _otra["por_trabajador"][1]["estado"] == "cedula" and "1728170570" in _otra["por_trabajador"][1]["texto"] and not _otra["sobran"])
 check("y las cuentas: si no es la de su constancia, avisa", _cmp["por_trabajador"][rosa]["estado"] == "ok"
       and R.comparar_con_banco(base.roles_del_mes(2025, 11), base.control_banco(2025, 11)["filas"], {rosa: "999"})["por_trabajador"][rosa]["estado"] == "cuenta"
       and _cmp["por_trabajador"][_ped]["estado"] == "ok" and _cmp["por_trabajador"][maria]["estado"] == "falta")
@@ -1315,6 +1319,31 @@ html = cj.get("/admin/roles?mes=2025-11").get_data(as_text=True)
 check("Jessica tiene «Elegir los que coinciden con el banco» y el filtro de diferencias", "Elegir los que coinciden con el banco" in html
       and "No coinciden con el banco" in html)
 check("el control no carga nada: el rol sigue igual", len(base.roles_del_mes(2025, 11)) == len(_sep))
+# --- sin revisión no se firma, y se dice por qué (Tamara 16/10/2026) ---
+_ids_nov = [x["id"] for x in base.roles_del_mes(2025, 11)]
+html = ca.get("/admin/roles?mes=2025-11").get_data(as_text=True)
+check("Ángel ve «Falta revisar», los casilleros de esos deshabilitados y el aviso", "Falta revisar" in html
+      and 'title="Todavía no está revisado: no se puede firmar"' in html and "esos no se pueden firmar todavía" in html)
+r = ca.post("/admin/roles/firmar", data={"mes": "2025-11", "ids": _ids_nov, "clave": "clave-ang"}, follow_redirects=True)
+check("si igual lo intenta: no firma y dice que no están revisados", "No se firmó ninguno" in r.get_data(as_text=True)
+      and "todavía no están revisados" in r.get_data(as_text=True) and not any(base.rol_pago(i)["aprobado_en"] for i in _ids_nov))
+cj.post("/admin/roles/revisar", data={"mes": "2025-11", "ids": _ids_nov[:2]})
+r = ca.post("/admin/roles/firmar", data={"mes": "2025-11", "ids": _ids_nov, "clave": "clave-ang"}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("con 2 revisados: firma esos 2 y dice que los otros 2 faltan revisar", "firmó 2 recibos" in html and "2 no se firmaron porque todavía no están revisados" in html
+      and [bool(base.rol_pago(i)["aprobado_en"]) for i in _ids_nov] == [True, True, False, False])
+# --- el mes entero a «firmado en papel», sacando las firmas de la app (Tamara 16/10/2026) ---
+base.rol[_ids_nov[0]].update(firma=b"png", firmado_en=datetime.now(), firmado_desde="iPhone", firma_huella="h")
+html = c.get("/admin/roles?mes=2025-11").get_data(as_text=True)
+check("el mes con firmas ofrece «Sacar también las firmas hechas en la app»", "Sacar también las firmas hechas en la app" in html)
+r = c.post("/admin/roles/papel", data={"mes": "2025-11", "confirmo": "1", "sacar_firmas": "1"}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("todo el mes queda firmado en papel, sin firmas de la app, y las firmas quedan guardadas aparte",
+      "queda firmado en papel (4 recibos)" in html and "2 de contabilidad y 1 de trabajadores" in html
+      and all(not base.rol_pago(i)["pide_firma"] and not base.rol_pago(i)["aprobado_en"] and not base.rol_pago(i)["firmado_en"]
+              and not base.rol_pago(i)["revisado_en"] for i in _ids_nov)
+      and len([a for a in base.archivo_firmas if a["rol_pago_id"] in _ids_nov]) == 2)
+check("y la lista dice «En papel», sin revisión ni casilleros", "En papel" in html and 'name="ids"' not in html)
 # --- «ya lo firmaron en papel» (Tamara 13/10: hasta septiembre todo firmado; en la app desde octubre) ---
 html = c.get("/admin/roles?mes=2026-09").get_data(as_text=True)
 check("el mes que pide firma ofrece «Marcar como firmado en papel»", "Marcar como firmado en papel" in html)

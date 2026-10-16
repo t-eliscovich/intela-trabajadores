@@ -1,13 +1,37 @@
 {% extends "base.html" %}
 {% block titulo %}{{ t.nombre }}{% endblock %}
 {% block contenido %}
-<h1>{{ t.nombre }}
-  <small>{% if t.cedula %}cédula {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida, revísela</span>{% endif %}{% else %}<span class="etiqueta baja">sin cédula</span>{% endif %}{% if t.area %} · {{ t.area }}{% if t.area in NOMBRES_AREA %} {{ NOMBRES_AREA[t.area] }}{% endif %}{% endif %}{% if t.celular %} · {{ t.celular }}{% endif %}</small>
-  {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
-  {% if t.pausado_en %}<span class="etiqueta pendiente" title="{{ t.motivo_pausa or '' }}">pausado</span>{% endif %}
-  {% if (t.tipo or 'planta') != 'planta' %}<span class="etiqueta">{{ TIPOS_TRABAJADOR[t.tipo] }}</span>{% endif %}
-  <span style="margin-left:auto"><a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a></span>
-</h1>
+<style>
+  .ficha-cab{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px}
+  .ficha-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:13px;font-weight:600;color:var(--gris);background:var(--papel);border:1px solid var(--borde);border-radius:999px;padding:2px 10px;
+        font-variant-numeric:tabular-nums}
+  .ficha{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+  @media(max-width:880px){.ficha{grid-template-columns:minmax(0,1fr)}}
+  .app-lista{list-style:none;margin:0;padding:0}
+  .app-lista li{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid #f2f5f8}
+  .app-que{color:var(--gris);font-size:14px}
+  .app-dato{font-size:14px;min-width:0}
+  .app-dato small{display:block;color:var(--gris);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .roles-ficha td{padding-top:8px;padding-bottom:8px}
+  .roles-ficha .chico{display:inline;margin-left:6px}
+  .ver-mas{display:block;width:100%;padding:10px;border:0;border-top:1px solid #f2f5f8;background:none;color:var(--acento);font:inherit;font-size:14px;cursor:pointer}
+</style>
+<div class="ficha-cab">
+  <div>
+    <h1 style="margin:0">{{ t.nombre }}</h1>
+    <div class="ficha-chips">
+      {% if t.cedula %}<span class="chip">C.I. {{ t.cedula }}{% if not cedula_valida(t.cedula) %} <span class="etiqueta baja" title="No pasa el dígito verificador">no válida</span>{% endif %}</span>{% else %}<span class="etiqueta baja">sin cédula</span>{% endif %}
+      {% if t.area %}<span class="chip">{{ t.area }}{% if t.area in NOMBRES_AREA %} · {{ NOMBRES_AREA[t.area] }}{% endif %}</span>{% endif %}
+      {% if t.celular %}<span class="chip">📱 {{ t.celular }}</span>{% endif %}
+      {% if (t.tipo or 'planta') != 'planta' %}<span class="etiqueta">{{ TIPOS_TRABAJADOR[t.tipo] }}</span>{% endif %}
+      {% if t.es_prueba %}<span class="etiqueta pendiente">de prueba</span>{% endif %}
+      {% if not t.activo %}<span class="etiqueta baja">baja {{ t.fecha_salida|fecha }}</span>{% endif %}
+      {% if t.pausado_en %}<span class="etiqueta pendiente" title="{{ t.motivo_pausa or '' }}">pausado</span>{% endif %}
+    </div>
+  </div>
+  <a class="btn suave chico" href="{{ url_for('admin_trabajador_imprimir', id_=t.id) }}">Hoja de saldo para imprimir</a>
+</div>
 
 {% if t.pausado_en %}
 <div class="aviso">Pausado desde el {{ t.pausado_en|fecha }} por {{ t.pausado_por }}{% if t.motivo_pausa %}: {{ t.motivo_pausa }}{% endif %}. No puede entrar ni registrarse en el comedor. <a href="#pausa">Reanudar</a></div>
@@ -19,7 +43,7 @@
 </div>
 {% endfor %}
 
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">
+<div class="ficha">
 <div>
   {% if (t.tipo or 'planta') != 'planta' %}
   <div class="bloque">
@@ -102,51 +126,56 @@
     </details>
   </div>
 
-  <div class="bloque">
-    <div class="titulo"><h2>Contraseña para entrar</h2></div>
-    {% if t.clave_rol_hash %}
-    <div class="relleno" style="font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span><span class="etiqueta ok">✓ Creada</span> el {{ t.clave_rol_en|fecha_hora }} · correo <b>{{ t.email }}</b></span>
-      <form method="POST" class="enlinea" style="margin-left:auto"><input type="hidden" name="accion" value="borrar_clave_rol">
-        <button class="btn suave chico" type="submit" onclick="return confirm('¿Borrar la contraseña? Lo sacamos de la app en su celular y la próxima vez que entre la vuelve a crear con su correo.')">Borrar contraseña</button></form>
-    </div>
-    <div class="nota">Si cambió de correo, la olvidó sin acceso a su correo, o alguien la creó por él, bórrela: la vuelve a crear la próxima vez que entre.</div>
-    {% else %}
-    <div class="nota" style="border-top:0">Todavía no la creó. Se la pide la primera vez que entra con su cédula{% if t.email %} (último correo: {{ t.email }}){% endif %}.</div>
-    {% endif %}
-  </div>
-
-  <div class="bloque">
-    <div class="titulo"><h2>Constancia de roles de pago</h2></div>
-    {% if constancia_roles %}
-    <div class="relleno" style="font-size:14px">
-      <span class="etiqueta ok">✓ Firmada</span> el {{ constancia_roles.firmado_en|fecha_hora }}<br>
-      Cuenta para el pago: <b>{{ constancia_roles.banco }}</b> · No. <b style="font-variant-numeric:tabular-nums">{{ constancia_roles.cuenta }}</b><br>
-      <a href="{{ url_for('admin_constancia', id_=constancia_roles.id) }}">Ver la constancia</a>
-    </div>
-    {% else %}
-    <div class="nota" style="border-top:0">Todavía no la firmó. Le aparece la primera vez que entra a «Rol de pagos».</div>
-    {% endif %}
-  </div>
-
-  <div class="bloque">
-    <div class="titulo"><h2>Roles de pago</h2>{% if roles_pago %}<p>{{ roles_pago|selectattr('firmado_en')|list|length }} de {{ roles_pago|length }} firmados</p>{% endif %}</div>
-    {% if roles_pago %}
-    <table><tbody>
-    {% for r in roles_pago %}
-      <tr><td><a href="{{ url_rol(r) }}">{{ nombre_mes(r.anio, r.mes) }}</a></td>
-          <td class="der">$ {{ r.liquido|dinero }}</td>
-          <td class="der">{% if r.firmado_en %}<span class="etiqueta ok">Firmado</span><span class="chico">{{ r.firmado_en|fecha_hora }}</span>{% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td></tr>
-    {% endfor %}
-    </tbody></table>
-    {% else %}
-    <div class="nota" style="border-top:0">Todavía no tiene roles de pago cargados.</div>
-    {% endif %}
-  </div>
 </div>
 
 <div>
+  {# La app y el rol de pagos en UNA tarjeta (Tamara 16/10/2026: «esta pantalla no está muy linda») #}
   <div class="bloque">
+    <div class="titulo"><h2>App y rol de pagos</h2>
+      {% set piden = roles_pago|selectattr('pide_firma')|list %}
+      {% if piden %}<p>{{ piden|selectattr('firmado_en')|list|length }} de {{ piden|length }} firmados en la app</p>{% endif %}</div>
+    <ul class="app-lista">
+      <li>
+        <span class="app-que">Contraseña</span>
+        {% if t.clave_rol_hash %}
+        <span class="app-dato"><span class="etiqueta ok">✓ Creada</span> {{ t.clave_rol_en|fecha }}<small>{{ t.email }}</small></span>
+        <form method="POST" class="enlinea"><input type="hidden" name="accion" value="borrar_clave_rol">
+          <button class="btn suave chico" type="submit" title="Si cambió de correo, la olvidó o alguien la creó por él: la vuelve a crear la próxima vez que entre"
+            onclick="return confirm('¿Borrar la contraseña? Lo sacamos de la app en su celular y la próxima vez que entre la vuelve a crear con su correo.')">Borrar</button></form>
+        {% else %}
+        <span class="app-dato tenue">Todavía no la creó{% if t.email %}<small>último correo: {{ t.email }}</small>{% endif %}</span>
+        {% endif %}
+      </li>
+      <li>
+        <span class="app-que">Constancia</span>
+        {% if constancia_roles %}
+        <span class="app-dato"><span class="etiqueta ok">✓ Firmada</span> {{ constancia_roles.firmado_en|fecha }}<small>{{ constancia_roles.banco }} · cuenta {{ constancia_roles.cuenta }}</small></span>
+        <a class="btn suave chico" href="{{ url_for('admin_constancia', id_=constancia_roles.id) }}">Ver</a>
+        {% else %}
+        <span class="app-dato tenue">Todavía no la firmó<small>se la pide la primera vez que entra a «Rol de pagos»</small></span>
+        {% endif %}
+      </li>
+    </ul>
+    {% if roles_pago %}
+    <table class="roles-ficha"><tbody>
+    {% for r in roles_pago %}
+      <tr {% if loop.index > 4 %}class="mas-roles" hidden{% endif %}>
+        <td><a href="{{ url_rol(r) }}">{{ nombre_mes(r.anio, r.mes) }}</a></td>
+        <td class="der" style="font-variant-numeric:tabular-nums">$ {{ r.liquido|dinero }}</td>
+        <td class="der">{% if r.firmado_en %}<span class="etiqueta ok">✓ Firmado</span><span class="chico">{{ r.firmado_en|fecha }}</span>
+            {% elif not r.pide_firma %}<span class="etiqueta">En papel</span>
+            {% elif r.necesita_aprobacion and not r.aprobado_en %}<span class="etiqueta">Todavía no lo ve</span>
+            {% else %}<span class="etiqueta pendiente">Sin firmar</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+    {% if roles_pago|length > 4 %}<button type="button" class="ver-mas" onclick="document.querySelectorAll('.mas-roles').forEach(function(x){x.hidden=false});this.remove()">Ver los {{ roles_pago|length - 4 }} meses anteriores</button>{% endif %}
+    {% else %}
+    <div class="nota">Todavía no tiene roles de pago cargados.</div>
+    {% endif %}
+  </div>
+  <div class="bloque">
+    <div class="titulo"><h2>Más</h2></div>
     <details>
       <summary>Ajustes{% if ajustes %} ({{ ajustes|length }}){% endif %}</summary>
       <div class="relleno">

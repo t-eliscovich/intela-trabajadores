@@ -237,6 +237,31 @@ class BaseFalsa:
         vivos = [c for c in self.cban.values() if c["anio"] == anio and c["mes"] == mes and not c["borrado_en"]]
         return dict(max(vivos, key=lambda c: c["id"])) if vivos else None
 
+    def mes_en_papel(self, anio, mes, quien):
+        self.__dict__.setdefault("archivo_firmas", [])
+        out = {"recibos": 0, "archivados": 0, "firmas_trabajador": 0, "firmas_empresa": 0}
+        for r in self.rol.values():
+            if r["borrado_en"] or r["anio"] != anio or r["mes"] != mes:
+                continue
+            out["recibos"] += 1
+            if r["firmado_en"] or r.get("revisado_en") or r.get("aprobado_en"):
+                self.archivo_firmas.append({"rol_pago_id": r["id"], "firma": r.get("firma"), "firmado_en": r["firmado_en"],
+                                            "aprobado_por": r.get("aprobado_por"), "firma_empresa": r.get("firma_empresa"),
+                                            "archivado_por": quien})
+                out["archivados"] += 1
+            out["firmas_trabajador"] += 1 if r["firmado_en"] else 0
+            out["firmas_empresa"] += 1 if r.get("aprobado_en") else 0
+            r.update(firma=None, firmado_en=None, firmado_desde=None, firma_huella=None, **ROL_SIN_REVISAR,
+                     pide_firma=False, necesita_aprobacion=False)
+        return out
+
+    def estado_para_firmar(self, ids, usuario_id):
+        rs = [self._rol_con_trab(self.rol[i]) | {"_r": self.rol[i]} for i in ids if i in self.rol and not self.rol[i]["borrado_en"]]
+        return {"sin_revisar": [r["nombre"] for r in rs if not r.get("revisado_en") and not r.get("aprobado_en")],
+                "ya_firmados": [r["nombre"] for r in rs if r.get("aprobado_en")],
+                "revisados_por_el": [r["nombre"] for r in rs if r.get("revisado_en") and not r.get("aprobado_en")
+                                     and r.get("revisado_por_id") == usuario_id]}
+
     def firmado_en_papel(self, anio, mes):
         n = 0
         for r in self.rol.values():

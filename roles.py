@@ -485,38 +485,57 @@ def misma_cuenta(a: str | None, b: str | None) -> bool:
     return bool(a) and a == b
 
 
+def _fmt(v: float) -> str:
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def comparar_con_banco(recibos: list[dict], banco: list[dict], cuentas: dict[int, str]) -> dict:
     """Recibo por recibo contra el archivo del banco. `cuentas`: trabajador_id → la cuenta
-    que firmó en su constancia. Por cédula; el pasaporte, por el nombre del banco dentro del
-    nombre del padrón (si es uno solo)."""
-    por_ced = {}
+    que firmó en su constancia.
+
+    Primero por cédula. Después, a los que no se encontraron, por NOMBRE: el nombre corto
+    del banco («MEJIA LEVIS») tiene que estar entero dentro del nombre del padrón y ser uno
+    solo. Así se encuentra al que en el banco figura con otra cédula o con pasaporte, y se
+    avisa (en septiembre fueron 10: el monto coincidía, la cédula no)."""
+    por_ced: dict[str, list] = {}
     for b in banco:
         por_ced.setdefault(b["identificacion"], []).append(b)
-    usados, por_trab = set(), {}
+    usados: set = set()
+    elegido: dict = {}
     for r in recibos:
-        cands = por_ced.get(r.get("cedula") or "", [])
-        if not cands:
-            # pasaporte u otra identificación: por nombre, sólo si hay uno solo que encaje
-            pal = set(normalizar(r["nombre"]).split())
-            cands = [b for b in banco if b["tipo_id"] != "C" and set(normalizar(b["nombre"]).split()) <= pal]
-        if len(cands) != 1 or id(cands[0]) in usados:
+        cands = [b for b in por_ced.get(r.get("cedula") or "", []) if id(b) not in usados]
+        if len(cands) == 1:
+            elegido[r["trabajador_id"]] = (cands[0], False)
+            usados.add(id(cands[0]))
+    for r in recibos:
+        if r["trabajador_id"] in elegido:
+            continue
+        pal = set(normalizar(r["nombre"]).split())
+        cands = [b for b in banco if id(b) not in usados and len(normalizar(b["nombre"]).split()) >= 2
+                 and set(normalizar(b["nombre"]).split()) <= pal]
+        if len(cands) == 1:
+            elegido[r["trabajador_id"]] = (cands[0], cands[0]["tipo_id"] == "C")
+            usados.add(id(cands[0]))
+    por_trab = {}
+    for r in recibos:
+        if r["trabajador_id"] not in elegido:
             por_trab[r["trabajador_id"]] = {"estado": "falta", "texto": "No está en el archivo del banco"}
             continue
-        b = cands[0]
-        usados.add(id(b))
+        b, otra_cedula = elegido[r["trabajador_id"]]
         dif = round(b["monto"] - float(r["liquido"]), 2)
         firmada = cuentas.get(r["trabajador_id"])
         res = {"banco": b, "diferencia": dif}
         if abs(dif) >= 0.005:
-            res.update(estado="monto", texto=f"El banco paga {b['monto']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                       + f" ({'+' if dif > 0 else ''}{dif:,.2f})".replace(",", "X").replace(".", ",").replace("X", "."))
+            res.update(estado="monto", texto=f"El banco paga {_fmt(b['monto'])} ({'+' if dif > 0 else ''}{_fmt(dif)})")
         elif firmada and not misma_cuenta(firmada, b["cuenta"]):
             res.update(estado="cuenta", texto=f"La cuenta del banco ({b['cuenta']}) no es la de su constancia ({firmada})")
+        elif otra_cedula:
+            res.update(estado="cedula", texto=f"El monto coincide, pero en el banco figura con otra cédula ({b['identificacion']})")
         else:
             res.update(estado="ok", texto="Coincide con el banco" + ("" if firmada else " (sin constancia para comparar la cuenta)"))
         por_trab[r["trabajador_id"]] = res
     sobran = [b for b in banco if id(b) not in usados]
-    cuenta = {k: sum(1 for x in por_trab.values() if x["estado"] == k) for k in ("ok", "monto", "cuenta", "falta")}
+    cuenta = {k: sum(1 for x in por_trab.values() if x["estado"] == k) for k in ("ok", "monto", "cuenta", "cedula", "falta")}
     return {"por_trabajador": por_trab, "sobran": sobran, "cuenta": cuenta,
             "total_banco": round(sum(b["monto"] for b in banco), 2),
             "total_rol": round(sum(float(r["liquido"]) for r in recibos), 2)}

@@ -467,6 +467,24 @@ ESQUEMA = """
     -- El trabajador DE PRUEBA (Tamara 15/10/2026: «de vuelta usé ese trabajador para probar,
     -- reinicialo»): se marca en la ficha y sólo a ése se le puede «Reiniciar para probar».
     ALTER TABLE trabajadores.trabajador ADD COLUMN IF NOT EXISTS es_prueba boolean NOT NULL DEFAULT false;
+    -- Las firmas que se sacan al pasar un mes a «firmado en papel» (Tamara 16/10/2026: «lo
+    -- firmado en septiembre eliminar y decir firmado en papel»): se guardan acá, nunca se pierden.
+    CREATE TABLE IF NOT EXISTS trabajadores.rol_firma_archivo (
+        id              serial PRIMARY KEY,
+        rol_pago_id     integer NOT NULL REFERENCES trabajadores.rol_pago(id),
+        firma           bytea,
+        firmado_en      timestamptz,
+        firmado_desde   text,
+        firma_huella    text,
+        revisado_por    text,
+        revisado_en     timestamptz,
+        aprobado_por    text,
+        aprobado_en     timestamptz,
+        firma_empresa   bytea,
+        archivado_por   text NOT NULL,
+        archivado_en    timestamptz NOT NULL DEFAULT now(),
+        motivo          text NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS codigo_correo_trab_idx ON trabajadores.codigo_correo (trabajador_id, creado_en DESC);
 """
 
@@ -678,6 +696,52 @@ def aprobar_roles(ids: list[int], usuario_id: int, nombre: str, firma: bytes) ->
 def firma_empresa_del_rol(id_: int) -> bytes | None:
     r = _uno("SELECT firma_empresa FROM trabajadores.rol_pago WHERE id = %s AND borrado_en IS NULL", (id_,))
     return bytes(r["firma_empresa"]) if r and r["firma_empresa"] else None
+
+
+def mes_en_papel(anio: int, mes: int, quien: str) -> dict:
+    """TODO el mes pasa a «firmado en papel»: se sacan las firmas hechas en la app (la del
+    trabajador, la revisión y la firma de contabilidad), que quedan guardadas en
+    rol_firma_archivo, y el mes deja de pedir firma y revisión."""
+    with _conn() as con, con.cursor() as cur:
+        try:
+            cur.execute("""INSERT INTO trabajadores.rol_firma_archivo
+                             (rol_pago_id, firma, firmado_en, firmado_desde, firma_huella, revisado_por, revisado_en,
+                              aprobado_por, aprobado_en, firma_empresa, archivado_por, motivo)
+                           SELECT id, firma, firmado_en, firmado_desde, firma_huella, revisado_por, revisado_en,
+                                  aprobado_por, aprobado_en, firma_empresa, %s, 'mes firmado en papel'
+                             FROM trabajadores.rol_pago
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL
+                              AND (firmado_en IS NOT NULL OR revisado_en IS NOT NULL OR aprobado_en IS NOT NULL)""",
+                        (quien, anio, mes))
+            archivados = cur.rowcount
+            cur.execute("""SELECT count(*) FILTER (WHERE firmado_en IS NOT NULL),
+                                  count(*) FILTER (WHERE aprobado_en IS NOT NULL)
+                             FROM trabajadores.rol_pago WHERE anio = %s AND mes = %s AND borrado_en IS NULL""",
+                        (anio, mes))
+            trab, empresa = cur.fetchone()
+            cur.execute("""UPDATE trabajadores.rol_pago
+                              SET firma = NULL, firmado_en = NULL, firmado_desde = NULL, firma_huella = NULL,
+                                  revisado_por_id = NULL, revisado_por = NULL, revisado_en = NULL,
+                                  aprobado_por_id = NULL, aprobado_por = NULL, aprobado_en = NULL, firma_empresa = NULL,
+                                  pide_firma = false, necesita_aprobacion = false
+                            WHERE anio = %s AND mes = %s AND borrado_en IS NULL""", (anio, mes))
+            total = cur.rowcount
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    return {"recibos": total, "archivados": archivados, "firmas_trabajador": trab, "firmas_empresa": empresa}
+
+
+def estado_para_firmar(ids: list[int], usuario_id: int) -> dict:
+    """Por qué no se puede firmar cada uno (para decírselo a quien firma)."""
+    filas = _todos("""SELECT r.id, t.nombre, r.revisado_en IS NOT NULL AS revisado, r.aprobado_en IS NOT NULL AS firmado,
+                             r.revisado_por_id = %s AS lo_reviso_el
+                        FROM trabajadores.rol_pago r JOIN trabajadores.trabajador t ON t.id = r.trabajador_id
+                       WHERE r.id = ANY(%s) AND r.borrado_en IS NULL""", (usuario_id, list(ids)))
+    return {"sin_revisar": [f["nombre"] for f in filas if not f["revisado"] and not f["firmado"]],
+            "ya_firmados": [f["nombre"] for f in filas if f["firmado"]],
+            "revisados_por_el": [f["nombre"] for f in filas if f["revisado"] and not f["firmado"] and f["lo_reviso_el"]]}
 
 
 def firmado_en_papel(anio: int, mes: int) -> int:

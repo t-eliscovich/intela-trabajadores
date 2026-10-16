@@ -2006,12 +2006,29 @@ def admin_roles_firmar():
         ids = _ids_del_form()
         if not ids:
             raise ValueError("Marque los recibos que va a firmar.")
+        # Sin revisión no se firma, y se dice por qué (Tamara 16/10/2026: «que Ángel no pueda
+        # firmar si no está aprobado, pero que avise que no puede por eso»).
+        motivo = store.estado_para_firmar(ids, u["id"])
         n = store.aprobar_roles(ids, u["id"], u["nombre"], firma)
+
+        def _quienes(nombres):
+            return ", ".join(nombres[:4]) + (f" y {len(nombres) - 4} más" if len(nombres) > 4 else "")
+        por_que = []
+        if motivo["sin_revisar"]:
+            k = len(motivo["sin_revisar"])
+            por_que.append(f"{k} {'no se firmó porque todavía no está revisado' if k == 1 else 'no se firmaron porque todavía no están revisados'}"
+                           f" ({_quienes(motivo['sin_revisar'])}). Primero los tiene que revisar quien revisa los roles.")
+        if motivo["revisados_por_el"]:
+            k = len(motivo["revisados_por_el"])
+            por_que.append(f"{k} no se {'firmó' if k == 1 else 'firmaron'} porque los revisó usted: los tiene que firmar otra persona"
+                           f" ({_quienes(motivo['revisados_por_el'])}).")
+        if motivo["ya_firmados"]:
+            k = len(motivo["ya_firmados"])
+            por_que.append(f"{k} ya {'estaba firmado' if k == 1 else 'estaban firmados'}.")
         if not n:
-            raise ValueError("No se firmó ninguno: tienen que estar revisados, y no por usted.")
-        sobran = len(ids) - n
+            raise ValueError("No se firmó ninguno. " + " ".join(por_que))
         flash(f"Listo: firmó {n} {'recibo' if n == 1 else 'recibos'}. Los trabajadores ya los ven en su celular."
-              + (f" {sobran} no se firmaron (sin revisar, ya firmados o revisados por usted)." if sobran else ""), "ok")
+              + (" " + " ".join(por_que) if por_que else ""), "ok")
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("admin_roles", mes=mes))
@@ -2117,6 +2134,15 @@ def admin_roles_papel():
     anio, mes = leer_mes(request.form.get("mes"))
     if request.form.get("confirmo") != "1":
         flash("Marque «Confirmo que todos firmaron en papel» para seguir.", "error")
+    elif request.form.get("sacar_firmas") == "1":
+        n = store.mes_en_papel(anio, mes, g.usuario["usuario"])
+        partes = []
+        if n["firmas_empresa"]:
+            partes.append(f"{n['firmas_empresa']} de contabilidad")
+        if n["firmas_trabajador"]:
+            partes.append(f"{n['firmas_trabajador']} de trabajadores")
+        flash(f"Listo: {nombre_mes(anio, mes).lower()} queda firmado en papel ({n['recibos']} recibos)."
+              + (f" Se sacaron las firmas hechas en la app ({' y '.join(partes)}); quedan guardadas aparte." if partes else ""), "ok")
     else:
         n = store.firmado_en_papel(anio, mes)
         flash(f"Listo: {nombre_mes(anio, mes).lower()} queda firmado en papel. "
