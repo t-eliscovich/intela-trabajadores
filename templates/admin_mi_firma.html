@@ -50,7 +50,7 @@
       </div>
     </form>
 
-    <form method="POST" enctype="multipart/form-data" data-panel="foto" hidden autocomplete="off">
+    <form method="POST" enctype="multipart/form-data" data-panel="foto" hidden autocomplete="off" id="form-foto">
       <input type="hidden" name="volver" value="{{ volver }}">
       <label class="subir">
         <b>Elegir la foto de su firma</b>
@@ -60,7 +60,7 @@
       </label>
       <label class="campo" style="margin-top:10px">Su clave</label>
       <input type="password" name="clave" required placeholder="La misma con la que entra">
-      <button class="btn verde" type="submit" style="width:100%;margin-top:10px">Guardar mi firma</button>
+      <button class="btn verde" type="submit" style="width:100%;margin-top:10px" id="guardar-foto">Guardar mi firma</button>
     </form>
   </div>
 </div>
@@ -73,9 +73,31 @@
     document.querySelectorAll('[data-panel]').forEach(function(p){ p.hidden = p.dataset.panel !== b.dataset.ver; });
     if(b.dataset.ver==='dibujar') window.dispatchEvent(new Event('resize'));
   }; });
+  // La foto del celular pesa varios MB: se achica AQUÍ (1600 px, JPEG) antes de subirla,
+  // así se guarda en un segundo (Tamara 16/10: «puse foto y tarda en guardar»).
+  var chica = null;
   document.getElementById('foto').onchange=function(){
-    var f=this.files[0], img=document.getElementById('vista-foto'); if(!f) return;
-    img.src=URL.createObjectURL(f); img.style.display='block';
+    var f=this.files[0], img=document.getElementById('vista-foto'); chica=null; if(!f) return;
+    var url=URL.createObjectURL(f); img.src=url; img.style.display='block';
+    var tmp=new Image();
+    tmp.onload=function(){
+      var k=Math.min(1, 1600/Math.max(tmp.naturalWidth, tmp.naturalHeight));
+      var c=document.createElement('canvas'); c.width=Math.round(tmp.naturalWidth*k); c.height=Math.round(tmp.naturalHeight*k);
+      c.getContext('2d').drawImage(tmp, 0, 0, c.width, c.height);
+      c.toBlob(function(b){ chica=b; }, 'image/jpeg', 0.85);
+    };
+    tmp.src=url;
   };
+  document.getElementById('form-foto').addEventListener('submit', function(ev){
+    var btn=document.getElementById('guardar-foto');
+    btn.disabled=true; btn.textContent='Guardando…';
+    if(!chica || !window.fetch || !window.FormData) return;  // sin achicar, se manda como está
+    ev.preventDefault();
+    var fd=new FormData(this); fd.set('foto', chica, 'firma.jpg');
+    fetch(location.href, {method:'POST', body:fd, credentials:'same-origin'})
+      .then(function(r){ location.href = r.url || location.href; })
+      .catch(function(){ btn.disabled=false; btn.textContent='Guardar mi firma'; alert('No se pudo guardar. Intente de nuevo.'); });
+  });
+
 </script>
 {% endblock %}

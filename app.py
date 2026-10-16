@@ -2067,8 +2067,9 @@ def leer_foto_firma(datos: bytes) -> bytes:
         img = Image.open(BytesIO(datos))
         if img.width * img.height > 40_000_000:
             raise ValueError("demasiado grande")
+        img.draft("RGB", (1600, 1600))  # un JPEG grande se decodifica ya achicado (mucho más rápido)
         img = ImageOps.exif_transpose(img)
-        img.load()
+        img.thumbnail((1600, 1600))
     except Exception:  # noqa: BLE001
         raise ValueError("No se pudo leer la foto. Suba una foto JPG o PNG de la firma.") from None
     gris = ImageOps.autocontrast(img.convert("L"), cutoff=2)
